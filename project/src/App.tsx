@@ -1,0 +1,81 @@
+import { useEffect, useState } from "react";
+import { Layout, type PageKey } from "@/components/Layout";
+import { ToastProvider } from "@/components/ui/Toast";
+import { Dashboard } from "@/pages/Dashboard";
+import { Inventory } from "@/pages/Inventory";
+import { AddVehicle } from "@/pages/AddVehicle";
+import { VehicleDetail } from "@/pages/VehicleDetail";
+import { Passport } from "@/pages/Passport";
+import { Partners } from "@/pages/Partners";
+import { Parties } from "@/pages/Parties";
+import { Finance } from "@/pages/Finance";
+import { Alerts } from "@/pages/Alerts";
+import { Reports } from "@/pages/Reports";
+import { fetchAlerts } from "@/lib/queries";
+
+export default function App() {
+  const [page, setPage] = useState<PageKey>("dashboard");
+  const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [previousPage, setPreviousPage] = useState<PageKey>("inventory");
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    fetchAlerts()
+      .then((a) => setAlertCount(a.filter((x) => x.status === "Open").length))
+      .catch(() => undefined);
+  }, [page]);
+
+  const handleNavigate = (next: PageKey, params?: { vehicleId?: string }) => {
+    if (params?.vehicleId) {
+      setPreviousPage(page === "vehicle" || page === "passport" ? previousPage : page);
+      setVehicleId(params.vehicleId);
+    }
+    setPage(next);
+  };
+
+  const handleBack = () => {
+    setPage(previousPage);
+    setVehicleId(null);
+  };
+
+  const renderPage = () => {
+    switch (page) {
+      case "dashboard":
+        return <Dashboard onNavigate={handleNavigate} />;
+      case "inventory":
+        return <Inventory onNavigate={handleNavigate} />;
+      case "add-vehicle":
+        return <AddVehicle onNavigate={handleNavigate} />;
+      case "vehicle":
+        return vehicleId ? <VehicleDetail vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} /> : <Inventory onNavigate={handleNavigate} />;
+      case "passport":
+        return vehicleId ? <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} /> : <Inventory onNavigate={handleNavigate} />;
+      case "partners":
+        return <Partners onNavigate={handleNavigate} />;
+      case "parties":
+        return <Parties onNavigate={handleNavigate} />;
+      case "finance":
+        return <Finance onNavigate={handleNavigate} />;
+      case "alerts":
+        return <Alerts onNavigate={handleNavigate} />;
+      case "reports":
+        return <Reports onNavigate={handleNavigate} />;
+      default:
+        return <Dashboard onNavigate={handleNavigate} />;
+    }
+  };
+
+  const isPassport = page === "passport";
+
+  return (
+    <ToastProvider>
+      {isPassport && vehicleId ? (
+        <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} />
+      ) : (
+        <Layout current={page} onNavigate={handleNavigate} alertCount={alertCount}>
+          {renderPage()}
+        </Layout>
+      )}
+    </ToastProvider>
+  );
+}
