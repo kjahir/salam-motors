@@ -132,16 +132,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   // Placeholder to satisfy unused var; partnerCapital computed but unused in MVP
   void stats;
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <PageHeader title="Dashboard" description="Business overview and key metrics" />
-        <div className="flex items-center justify-center py-20">
-          <Spinner size={32} />
-        </div>
-      </div>
-    );
-  }
+  //if (loading) {
+  //  return (
+  //    <div className="p-6">
+  //      <PageHeader title="Dashboard" description="Business overview and key metrics" />
+  //      <div className="flex items-center justify-center py-20">
+  //        <Spinner size={32} />
+  //      </div>
+  //    </div>
+  //  );
+  //}
 
   if (error) {
     return (

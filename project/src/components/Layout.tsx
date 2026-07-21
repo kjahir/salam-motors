@@ -11,7 +11,10 @@ import {
   Menu,
   X,
   ShieldCheck,
+  LogOut,
+  ChevronDown,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 export type PageKey =
   | "dashboard"
@@ -34,11 +37,11 @@ interface LayoutProps {
 
 const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
   //{ key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-  { key: "add-vehicle", label: "Onboard Vehicle", icon: <PlusCircle size={18} /> },
+  { key: "add-vehicle", label: "Add Vehicle", icon: <PlusCircle size={18} /> },
   { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },  
   { key: "parties", label: "Parties", icon: <UserCircle size={18} /> },
   { key: "partners", label: "Partners", icon: <Users size={18} /> },
-  { key: "finance", label: "Finance", icon: <Wallet size={18} /> },
+  //{ key: "finance", label: "Finance", icon: <Wallet size={18} /> },
   { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
   { key: "reports", label: "Reports", icon: <FileBarChart size={18} /> },
 ];
@@ -92,13 +95,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
       </nav>
 
       <div className="px-3 py-4 border-t border-slate-800">
-        <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-slate-800/50">
-          <ShieldCheck size={16} className="text-emerald-400" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-white truncate">Single-tenant demo</p>
-            <p className="text-[10px] text-slate-400 truncate">Full operational access</p>
-          </div>
-        </div>
+        <UserMenu />
       </div>
     </div>
   );
@@ -142,6 +139,47 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         >
           <X size={20} />
         </button>
+      )}
+    </div>
+  );
+}
+
+function UserMenu() {
+  const { user, signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const email = user?.email ?? "";
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors"
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold shrink-0">
+          {email.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-xs font-medium text-white truncate">{email || "User"}</p>
+          <p className="text-[10px] text-slate-400 truncate">Signed in</p>
+        </div>
+        <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full left-0 right-0 mb-2 rounded-lg bg-white shadow-lg border border-slate-200 py-1 z-20">
+            <button
+              onClick={() => {
+                setOpen(false);
+                signOut();
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <LogOut size={14} />
+              Sign Out
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

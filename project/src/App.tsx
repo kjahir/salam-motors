@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Layout, type PageKey } from "@/components/Layout";
 import { ToastProvider } from "@/components/ui/Toast";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthPage } from "@/pages/AuthPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { Inventory } from "@/pages/Inventory";
 import { AddVehicle } from "@/pages/AddVehicle";
@@ -13,17 +15,19 @@ import { Alerts } from "@/pages/Alerts";
 import { Reports } from "@/pages/Reports";
 import { fetchAlerts } from "@/lib/queries";
 
-export default function App() {
+function AppContent() {
+  const { session, loading } = useAuth();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [previousPage, setPreviousPage] = useState<PageKey>("inventory");
   const [alertCount, setAlertCount] = useState(0);
 
   useEffect(() => {
+    if (!session) return;
     fetchAlerts()
       .then((a) => setAlertCount(a.filter((x) => x.status === "Open").length))
       .catch(() => undefined);
-  }, [page]);
+  }, [page, session]);
 
   const handleNavigate = (next: PageKey, params?: { vehicleId?: string }) => {
     if (params?.vehicleId) {
@@ -65,10 +69,22 @@ export default function App() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-pulse text-slate-400 text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthPage />;
+  }
+
   const isPassport = page === "passport";
 
   return (
-    <ToastProvider>
+    <>
       {isPassport && vehicleId ? (
         <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} />
       ) : (
@@ -76,6 +92,16 @@ export default function App() {
           {renderPage()}
         </Layout>
       )}
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ToastProvider>
   );
 }
