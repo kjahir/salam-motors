@@ -32,6 +32,8 @@ export const PAYMENT_METHODS = ["Cash", "Bank transfer", "UPI", "Cheque", "Card"
 
 export const PAYMENT_STATUSES = ["Not paid", "Partially paid", "Paid", "Refunded", "Disputed"];
 
+export const DELIVERY_STATUSES = ["Pending", "Delivered"];
+
 export const DOCUMENT_TYPES = [
   "RC book",
   "Insurance",

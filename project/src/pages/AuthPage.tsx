@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Bike, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import { useToast } from "@/components/ui/Toast";
+import { useAuth } from "@/lib/useAuth";
+import { useToast } from "@/components/ui/useToast";
 
 export function AuthPage() {
   const { signIn } = useAuth();

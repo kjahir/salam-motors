@@ -6,7 +6,7 @@ import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/useToast";
 import { formatDate, initials } from "@/lib/format";
 import { fetchParties, fetchPartyVehicles } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -205,10 +205,22 @@ export function Parties({ onNavigate }: PartiesProps) {
   };
 
   const handleDelete = async (party: Party) => {
-    if (!confirm(`Delete ${party.full_name}? Related vehicle records will remain but become unlinked.`)) return;
+    if (partyVehicles.length > 0) {
+      toast(
+        `${party.full_name} is linked to ${partyVehicles.length} vehicle${partyVehicles.length === 1 ? "" : "s"} and cannot be deleted. Remove or reassign those purchase/sale records first.`,
+        "error",
+      );
+      return;
+    }
+    if (!confirm(`Delete ${party.full_name}? This cannot be undone.`)) return;
     try {
       const { error } = await supabase.from("parties").delete().eq("id", party.id);
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23503") {
+          throw new Error(`${party.full_name} is linked to existing purchase or sale records and cannot be deleted.`);
+        }
+        throw error;
+      }
       toast("Party removed", "success");
       setDetailParty(null);
       reload();
@@ -429,7 +441,11 @@ export function Parties({ onNavigate }: PartiesProps) {
                 <button onClick={() => { openEdit(detailParty); setDetailParty(null); }} className="btn-secondary flex-1">
                   <Pencil size={15} /> Edit
                 </button>
-                <button onClick={() => handleDelete(detailParty)} className="btn-secondary text-red-600 hover:bg-red-50 flex-1">
+                <button
+                  onClick={() => handleDelete(detailParty)}
+                  disabled={vehiclesLoading}
+                  className="btn-secondary text-red-600 hover:bg-red-50 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <Trash2 size={15} /> Delete
                 </button>
               </div>

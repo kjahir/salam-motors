@@ -191,6 +191,7 @@ export interface Investment {
   reference: string | null;
   status: string;
   notes: string | null;
+  proof_url: string | null;
   created_at: string;
 }
 
@@ -204,6 +205,45 @@ export interface Listing {
   description: string | null;
   public_slug: string;
   created_at: string;
+}
+
+export interface PublicPassportItem {
+  category: string;
+  score: number | null;
+  condition_level: string | null;
+  recommended_action: string | null;
+  weight: number;
+}
+
+export interface PublicPassportDocument {
+  document_type: string;
+  verification_status: string;
+}
+
+export interface PublicPassport {
+  public_slug: string;
+  asking_price: number;
+  description: string | null;
+  stock_number: string;
+  category: string;
+  manufacturer: string;
+  model: string;
+  variant: string | null;
+  fuel_type: string;
+  colour: string | null;
+  manufacture_year: number | null;
+  registration_number: string | null;
+  odometer: number | null;
+  owner_count: number;
+  registration_city: string | null;
+  registration_state: string | null;
+  inspection_date: string | null;
+  inspection_type: string | null;
+  accident_status: string | null;
+  summary: string | null;
+  inspector_name: string | null;
+  inspection_items: PublicPassportItem[];
+  documents: PublicPassportDocument[];
 }
 
 export interface Enquiry {
@@ -268,6 +308,18 @@ export interface ProfitDistribution {
   amount_paid: number;
   balance_payable: number;
   status: string;
+  created_at: string;
+}
+
+export interface ProfitSettlementPayment {
+  id: string;
+  distribution_id: string;
+  amount: number;
+  payment_method: string;
+  reference: string | null;
+  proof_url: string | null;
+  notes: string | null;
+  paid_at: string;
   created_at: string;
 }
 

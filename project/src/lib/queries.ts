@@ -16,13 +16,25 @@ import type {
   SalePayment,
   ProfitShareAllocation,
   ProfitDistribution,
+  ProfitSettlementPayment,
   Alert,
   AuditLog,
   VehicleStatusHistory,
   VehicleWithRelations,
   VehicleFinancialSummary,
   MechanicInspectionFeedback,
+  PublicPassport,
 } from "./types";
+
+export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
+  const { data, error } = await supabase
+    .from("vehicle_passport_public")
+    .select("*")
+    .eq("public_slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PublicPassport | null;
+}
 
 export async function fetchFinancialSummaries(): Promise<VehicleFinancialSummary[]> {
   const { data, error } = await supabase.from("vehicle_financial_summary").select("*");
@@ -222,6 +234,15 @@ export async function fetchAlerts(): Promise<(Alert & { vehicle?: Vehicle | null
   return data ?? [];
 }
 
+export async function fetchAllStatusHistory(): Promise<(VehicleStatusHistory & { vehicle: Vehicle | null })[]> {
+  const { data, error } = await supabase
+    .from("vehicle_status_history")
+    .select("*, vehicle:vehicles(*)")
+    .order("changed_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function fetchInvestments(): Promise<(Investment & { partner: Partner | null; vehicle: Vehicle | null })[]> {
   const { data, error } = await supabase
     .from("investments")
@@ -240,15 +261,33 @@ export async function fetchAllExpenses(): Promise<(Expense & { vehicle?: Vehicle
   return data ?? [];
 }
 
+export async function fetchAllPurchases(): Promise<(Purchase & { vehicle: Vehicle | null; seller: Party | null })[]> {
+  const { data, error } = await supabase
+    .from("purchases")
+    .select("*, vehicle:vehicles(*), seller:parties(*)")
+    .order("purchase_date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAllSales(): Promise<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]> {
+  const { data, error } = await supabase
+    .from("sales")
+    .select("*, vehicle:vehicles(*), buyer:parties(*)")
+    .order("sale_date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function fetchProfitDistributions(): Promise<
-  (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null })[]
+  (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] })[]
 > {
   const { data, error } = await supabase
     .from("profit_distributions")
-    .select("*, partner:partners(*), vehicle:vehicles(*)")
+    .select("*, partner:partners(*), vehicle:vehicles(*), payments:profit_settlement_payments(*)")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] })[];
 }
 
 export async function fetchAuditLogs(): Promise<AuditLog[]> {
@@ -285,12 +324,16 @@ export async function checkRegistrationUnique(
   registrationNumber: string,
   excludeVehicleId?: string,
 ): Promise<boolean> {
-  let q = supabase
-    .from("vehicles")
-    .select("id")
-    .eq("registration_number", registrationNumber);
-  if (excludeVehicleId) q = q.neq("id", excludeVehicleId);
-  const { data, error } = await q.maybeSingle();
+  const { data, error } = await supabase.rpc("check_registration_available", {
+    reg_number: registrationNumber,
+    exclude_vehicle_id: excludeVehicleId ?? null,
+  });
   if (error) throw error;
-  return data === null;
+  return data as boolean;
+}
+
+export async function nextStockNumber(): Promise<string> {
+  const { data, error } = await supabase.rpc("next_stock_number");
+  if (error) throw error;
+  return data as string;
 }

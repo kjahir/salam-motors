@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { PageHeader, Tabs, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
-import { Badge, StatusBadge, AgeingBadge } from "@/components/ui/Badge";
+import { StatusBadge, AgeingBadge } from "@/components/ui/Badge";
 import { formatINR, formatDate, daysSince, formatPercent } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
 import { fetchVehicles, fetchFinancialSummaries, fetchProfitDistributions, fetchInvestments, fetchPartners } from "@/lib/queries";

@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { Wallet, IndianRupee, Receipt, TrendingUp, Download, AlertTriangle } from "lucide-react";
+import { Wallet, IndianRupee, Receipt, TrendingUp, Download, AlertTriangle, ShoppingCart, Banknote } from "lucide-react";
 import { PageHeader, Tabs, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { useToast } from "@/components/ui/Toast";
-import { formatINR, formatDate } from "@/lib/format";
+import { SettlementModal } from "@/components/SettlementModal";
+import { viewProof } from "@/lib/proofStorage";
+import { formatINR, formatDate, formatPercent } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
-import { fetchInvestments, fetchAllExpenses, fetchProfitDistributions } from "@/lib/queries";
-import { supabase } from "@/lib/supabase";
-import type { Investment, Expense, ProfitDistribution } from "@/lib/types";
+import {
+  fetchInvestments,
+  fetchAllExpenses,
+  fetchProfitDistributions,
+  fetchAllPurchases,
+  fetchAllSales,
+  fetchFinancialSummaries,
+} from "@/lib/queries";
+import type { Investment, Expense, ProfitDistribution, ProfitSettlementPayment, Purchase, Sale, Vehicle, Partner, Party, VehicleFinancialSummary } from "@/lib/types";
 import type { PageKey } from "@/components/Layout";
+
+type DistributionRow = ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] };
 
 interface FinanceProps {
   onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
@@ -17,27 +26,46 @@ interface FinanceProps {
 
 export function Finance({ onNavigate }: FinanceProps) {
   const [tab, setTab] = useState("investments");
-  const [investments, setInvestments] = useState<(Investment & { partner: { name: string } | null; vehicle: { id: string; stock_number: string; manufacturer: string; model: string } | null })[]>([]);
+  const [investments, setInvestments] = useState<(Investment & { partner: Partner | null; vehicle: { id: string; stock_number: string; manufacturer: string; model: string } | null })[]>([]);
   const [expenses, setExpenses] = useState<(Expense & { vehicle?: { id: string; stock_number: string; manufacturer: string; model: string } | null; partner?: { name: string } | null })[]>([]);
-  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: { name: string } | null; vehicle: { id: string; stock_number: string; manufacturer: string; model: string } | null })[]>([]);
+  const [distributions, setDistributions] = useState<DistributionRow[]>([]);
+  const [purchases, setPurchases] = useState<(Purchase & { vehicle: Vehicle | null; seller: Party | null })[]>([]);
+  const [sales, setSales] = useState<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]>([]);
+  const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [settlingDistribution, setSettlingDistribution] = useState<DistributionRow | null>(null);
+
+  const reload = async () => {
+    try {
+      const [i, e, d, p, s, f] = await Promise.all([
+        fetchInvestments(),
+        fetchAllExpenses(),
+        fetchProfitDistributions(),
+        fetchAllPurchases(),
+        fetchAllSales(),
+        fetchFinancialSummaries(),
+      ]);
+      setInvestments(i);
+      setExpenses(e);
+      setDistributions(d);
+      setPurchases(p);
+      setSales(s);
+      setSummaries(f);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [i, e, d] = await Promise.all([fetchInvestments(), fetchAllExpenses(), fetchProfitDistributions()]);
-        setInvestments(i);
-        setExpenses(e);
-        setDistributions(d);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    reload();
   }, []);
+
+  const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
+
+  const soldSales = useMemo(() => sales.filter((s) => s.status === "Completed"), [sales]);
 
   const totals = useMemo(() => {
     const totalInvested = investments
@@ -50,21 +78,6 @@ export function Finance({ onNavigate }: FinanceProps) {
     const totalPayable = distributions.reduce((s, d) => s + d.balance_payable, 0);
     return { totalInvested, totalExpenses, pendingExpenses, totalProfit, totalSettled, totalPayable };
   }, [investments, expenses, distributions]);
-
-  const handleSettle = async (id: string, amount: number) => {
-    try {
-      const { error } = await supabase.from("profit_distributions").update({
-        amount_paid: amount,
-        balance_payable: 0,
-        status: "Paid",
-      }).eq("id", id);
-      if (error) throw error;
-      toast("Settlement marked as paid", "success");
-      setDistributions((prev) => prev.map((d) => d.id === id ? { ...d, amount_paid: amount, balance_payable: 0, status: "Paid" } : d));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed", "error");
-    }
-  };
 
   if (loading) {
     return (
@@ -98,7 +111,9 @@ export function Finance({ onNavigate }: FinanceProps) {
       <Tabs
         tabs={[
           { key: "investments", label: "Investments", badge: <Badge color="slate">{investments.length}</Badge> },
+          { key: "purchases", label: "Purchase", badge: <Badge color="slate">{purchases.length}</Badge> },
           { key: "expenses", label: "Expenses", badge: <Badge color="slate">{expenses.length}</Badge> },
+          { key: "saleprofit", label: "Sale and Profit", badge: <Badge color="slate">{soldSales.length}</Badge> },
           { key: "settlements", label: "Settlements", badge: <Badge color="slate">{distributions.length}</Badge> },
         ]}
         active={tab}
@@ -130,17 +145,68 @@ export function Finance({ onNavigate }: FinanceProps) {
             ) : (
               <TableWrapper>
                 <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                  <Th>Partner</Th><Th>Vehicle</Th><Th className="text-right">Amount</Th><Th>Date</Th><Th>Purpose</Th><Th>Status</Th>
+                  <Th>Partner</Th><Th>Vehicle</Th><Th className="text-right">Amount</Th><Th>Date</Th><Th>Purpose</Th><Th>Status</Th><Th></Th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {investments.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>
-                      <td className="px-4 py-3 font-medium text-slate-900">{inv.partner?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm">{inv.vehicle?.stock_number} · {inv.vehicle?.manufacturer} {inv.vehicle?.model}</td>
+                    <tr key={inv.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-900 cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.partner?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.vehicle ? `${inv.vehicle.stock_number} · ${inv.vehicle.manufacturer} ${inv.vehicle.model}` : "General capital"}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(inv.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(inv.investment_date, { withTime: true })}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{inv.purpose ?? "—"}</td>
                       <td className="px-4 py-3"><Badge color={inv.status === "Fully used" ? "emerald" : inv.status === "Received" ? "blue" : "amber"}>{inv.status}</Badge></td>
+                      <td className="px-4 py-3 text-right">
+                        {inv.proof_url && (
+                          <button onClick={() => viewProof("finance-proofs", inv.proof_url!)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">Proof</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableWrapper>
+            )}
+          </Card>
+        )}
+
+        {tab === "purchases" && (
+          <Card className="overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-900">All Purchases</h3>
+              <button
+                onClick={() => downloadCSV("purchases.csv", purchases.map((p) => ({
+                  Vehicle: p.vehicle ? `${p.vehicle.manufacturer} ${p.vehicle.model}` : "",
+                  "Stock #": p.vehicle?.stock_number ?? "",
+                  Seller: p.seller?.full_name ?? "",
+                  "Agreed Price": p.agreed_price,
+                  "Broker Commission": p.broker_commission,
+                  "Other Fees": p.other_fee,
+                  Total: p.agreed_price + p.broker_commission + p.other_fee,
+                  "Payment Status": p.payment_status,
+                  Date: formatDate(p.purchase_date, { withTime: true }),
+                })))}
+                className="btn-ghost btn-sm"
+              >
+                <Download size={14} /> Export
+              </button>
+            </div>
+            {purchases.length === 0 ? (
+              <EmptyState icon={<ShoppingCart size={20} />} title="No purchases" />
+            ) : (
+              <TableWrapper>
+                <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+                  <Th>Vehicle</Th><Th>Seller</Th><Th className="text-right">Agreed Price</Th><Th className="text-right">Fees</Th><Th className="text-right">Total</Th><Th>Payment</Th><Th>Date</Th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {purchases.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: p.vehicle_id })}>
+                      <td className="px-4 py-3 text-sm">{p.vehicle?.stock_number} · {p.vehicle?.manufacturer} {p.vehicle?.model}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{p.seller?.full_name ?? "—"}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatINR(p.agreed_price)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{formatINR(p.broker_commission + p.other_fee)}</td>
+                      <td className="px-4 py-3 text-right font-bold">{formatINR(p.agreed_price + p.broker_commission + p.other_fee)}</td>
+                      <td className="px-4 py-3"><Badge color={p.payment_status === "Paid" ? "emerald" : p.payment_status === "Partially paid" ? "amber" : "slate"}>{p.payment_status}</Badge></td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{formatDate(p.purchase_date, { withTime: true })}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -195,6 +261,65 @@ export function Finance({ onNavigate }: FinanceProps) {
           </Card>
         )}
 
+        {tab === "saleprofit" && (
+          <Card className="overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-900">Sale and Profit</h3>
+              <button
+                onClick={() => downloadCSV("sale-and-profit.csv", soldSales.map((s) => {
+                  const summary = summaryMap.get(s.vehicle_id);
+                  const netRevenue = s.sale_price + s.buyer_charges - s.discount;
+                  return {
+                    Vehicle: s.vehicle ? `${s.vehicle.manufacturer} ${s.vehicle.model}` : "",
+                    "Stock #": s.vehicle?.stock_number ?? "",
+                    Buyer: s.buyer?.full_name ?? "",
+                    "Sale Price": s.sale_price,
+                    "Total Cost": summary?.total_vehicle_cost ?? 0,
+                    "Net Revenue": netRevenue,
+                    "Gross Profit": summary?.gross_profit ?? 0,
+                    "Payment Status": s.payment_status,
+                    "Delivery Status": s.delivery_status,
+                    Date: formatDate(s.sale_date, { withTime: true }),
+                  };
+                }))}
+                className="btn-ghost btn-sm"
+              >
+                <Download size={14} /> Export
+              </button>
+            </div>
+            {soldSales.length === 0 ? (
+              <EmptyState icon={<Banknote size={20} />} title="No sales" description="Completed sales and their profit appear here." />
+            ) : (
+              <TableWrapper>
+                <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+                  <Th>Vehicle</Th><Th>Buyer</Th><Th className="text-right">Sale Price</Th><Th className="text-right">Total Cost</Th><Th className="text-right">Gross Profit</Th><Th className="text-right">Margin</Th><Th>Payment</Th><Th>Delivery</Th><Th>Date</Th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {soldSales.map((s) => {
+                    const summary = summaryMap.get(s.vehicle_id);
+                    const grossProfit = summary?.gross_profit ?? 0;
+                    const netRevenue = summary?.net_sale_revenue ?? (s.sale_price + s.buyer_charges - s.discount);
+                    const marginPct = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0;
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: s.vehicle_id })}>
+                        <td className="px-4 py-3 text-sm">{s.vehicle?.stock_number} · {s.vehicle?.manufacturer} {s.vehicle?.model}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900">{s.buyer?.full_name ?? "—"}</td>
+                        <td className="px-4 py-3 text-right font-medium">{formatINR(s.sale_price)}</td>
+                        <td className="px-4 py-3 text-right">{formatINR(summary?.total_vehicle_cost ?? 0)}</td>
+                        <td className={`px-4 py-3 text-right font-bold ${grossProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatINR(grossProfit)}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">{formatPercent(marginPct)}</td>
+                        <td className="px-4 py-3"><Badge color={s.payment_status === "Paid" ? "emerald" : s.payment_status === "Partially paid" ? "amber" : "slate"}>{s.payment_status}</Badge></td>
+                        <td className="px-4 py-3"><Badge color={s.delivery_status === "Delivered" ? "emerald" : "amber"}>{s.delivery_status}</Badge></td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{formatDate(s.sale_date, { withTime: true })}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TableWrapper>
+            )}
+          </Card>
+        )}
+
         {tab === "settlements" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
@@ -234,7 +359,9 @@ export function Finance({ onNavigate }: FinanceProps) {
                       <td className="px-4 py-3 text-right">{formatINR(d.amount_paid)}</td>
                       <td className="px-4 py-3"><Badge color={d.status === "Paid" ? "emerald" : d.status === "Calculated" ? "amber" : "slate"}>{d.status}</Badge></td>
                       <td className="px-4 py-3 text-right">
-                        {d.status !== "Paid" && <button onClick={() => handleSettle(d.id, d.total_entitlement)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">Mark Paid</button>}
+                        <button onClick={() => setSettlingDistribution(d)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">
+                          {d.status === "Paid" ? "View" : "Settle"}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -244,6 +371,15 @@ export function Finance({ onNavigate }: FinanceProps) {
           </Card>
         )}
       </div>
+
+      {settlingDistribution && (
+        <SettlementModal
+          distribution={settlingDistribution}
+          open={Boolean(settlingDistribution)}
+          onClose={() => setSettlingDistribution(null)}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }

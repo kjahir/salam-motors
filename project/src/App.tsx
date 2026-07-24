@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Layout, type PageKey } from "@/components/Layout";
 import { ToastProvider } from "@/components/ui/Toast";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthProvider } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 import { AuthPage } from "@/pages/AuthPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { Inventory } from "@/pages/Inventory";
@@ -13,12 +14,14 @@ import { Parties } from "@/pages/Parties";
 import { Finance } from "@/pages/Finance";
 import { Alerts } from "@/pages/Alerts";
 import { Reports } from "@/pages/Reports";
+import { History } from "@/pages/History";
 import { fetchAlerts } from "@/lib/queries";
 
 function AppContent() {
   const { session, loading } = useAuth();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
   const [previousPage, setPreviousPage] = useState<PageKey>("inventory");
   const [alertCount, setAlertCount] = useState(0);
 
@@ -29,10 +32,13 @@ function AppContent() {
       .catch(() => undefined);
   }, [page, session]);
 
-  const handleNavigate = (next: PageKey, params?: { vehicleId?: string }) => {
+  const handleNavigate = (next: PageKey, params?: { vehicleId?: string; historyVehicleId?: string }) => {
     if (params?.vehicleId) {
       setPreviousPage(page === "vehicle" || page === "passport" ? previousPage : page);
       setVehicleId(params.vehicleId);
+    }
+    if (next === "history") {
+      setHistoryVehicleId(params?.historyVehicleId ?? null);
     }
     setPage(next);
   };
@@ -64,6 +70,8 @@ function AppContent() {
         return <Alerts onNavigate={handleNavigate} />;
       case "reports":
         return <Reports onNavigate={handleNavigate} />;
+      case "history":
+        return <History vehicleFilter={historyVehicleId} />;
       default:
         return <Dashboard onNavigate={handleNavigate} />;
     }

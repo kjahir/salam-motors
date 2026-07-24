@@ -10,11 +10,11 @@ import {
   PlusCircle,
   Menu,
   X,
-  ShieldCheck,
   LogOut,
   ChevronDown,
+  History,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 
 export type PageKey =
   | "dashboard"
@@ -26,7 +26,8 @@ export type PageKey =
   | "finance"
   | "alerts"
   | "reports"
-  | "passport";
+  | "passport"
+  | "history";
 
 interface LayoutProps {
   current: PageKey;
@@ -36,14 +37,15 @@ interface LayoutProps {
 }
 
 const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
-  //{ key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
+  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
   { key: "add-vehicle", label: "Add Vehicle", icon: <PlusCircle size={18} /> },
-  { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },  
+  { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },
   { key: "parties", label: "Parties", icon: <UserCircle size={18} /> },
   { key: "partners", label: "Partners", icon: <Users size={18} /> },
-  //{ key: "finance", label: "Finance", icon: <Wallet size={18} /> },
+  { key: "finance", label: "Finance", icon: <Wallet size={18} /> },
   { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
   { key: "reports", label: "Reports", icon: <FileBarChart size={18} /> },
+  { key: "history", label: "History", icon: <History size={18} /> },
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
@@ -117,7 +119,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile top bar */}
         <div className="lg:hidden flex items-center justify-between h-14 px-4 bg-white border-b border-slate-200">
-          <button onClick={() => setMobileOpen(true)} className="btn-ghost btn-sm">
+          <button onClick={() => setMobileOpen(true)} className="btn-ghost btn-sm" aria-label="Open menu">
             <Menu size={20} />
           </button>
           <div className="flex items-center gap-2">

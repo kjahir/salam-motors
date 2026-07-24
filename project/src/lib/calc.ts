@@ -68,7 +68,7 @@ export function computeProfit(sale: Sale | null | undefined, cost: CostBreakdown
   return { netSaleRevenue, totalVehicleCost: cost.totalVehicleCost, grossProfit, profitMarginPct, returnOnCostPct };
 }
 
-export function computeOverallScore(items: InspectionItem[]): number | null {
+export function computeOverallScore(items: Pick<InspectionItem, "category" | "score" | "weight">[]): number | null {
   if (items.length === 0) return null;
   let weightedSum = 0;
   let totalWeight = 0;
@@ -145,17 +145,6 @@ export function documentCompleteness(documents: { verification_status: string }[
   if (total === 0) return { pct: 0, verified: 0, total: 0 };
   const verified = documents.filter((d) => d.verification_status === "Verified").length;
   return { pct: Math.round((verified / total) * 100), verified, total };
-}
-
-export function generateStockNumber(existing: string[]): string {
-  const year = new Date().getFullYear();
-  const prefix = `BIKE-${year}-`;
-  const nums = existing
-    .filter((s) => s.startsWith(prefix))
-    .map((s) => parseInt(s.slice(prefix.length), 10))
-    .filter((n) => !Number.isNaN(n));
-  const next = (nums.length > 0 ? Math.max(...nums) : 0) + 1;
-  return `${prefix}${String(next).padStart(6, "0")}`;
 }
 
 export function generateSlug(base: string): string {

@@ -16,8 +16,8 @@ import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge, StatusBadge, AgeingBadge } from "@/components/ui/Badge";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchPartners } from "@/lib/queries";
-import type { Vehicle, VehicleFinancialSummary, Alert, Partner } from "@/lib/types";
+import { fetchVehicles, fetchFinancialSummaries, fetchAlerts } from "@/lib/queries";
+import type { Vehicle, VehicleFinancialSummary, Alert } from "@/lib/types";
 import type { PageKey } from "@/components/Layout";
 
 interface DashboardProps {
@@ -28,7 +28,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,17 +35,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     let cancelled = false;
     (async () => {
       try {
-        const [v, s, a, p] = await Promise.all([
+        const [v, s, a] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
-          fetchPartners(),
         ]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
         setAlerts(a);
-        setPartners(p);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
       } finally {
@@ -98,15 +95,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const readyForSale = inStock.filter((v) => v.current_status === "READY_FOR_SALE").length;
 
     const openAlerts = alerts.filter((a) => a.status === "Open");
-    const partnerCapital = partners.map((p) => {
-      const invested = summaries
-        .filter((s) => s.current_status !== "SOLD" && s.current_status !== "DELIVERED")
-        .reduce((sum, s) => {
-          // Approximate — precise partner split is in finance page
-          return sum;
-        }, 0);
-      return { partner: p, invested };
-    });
 
     return {
       inStockCount: inStock.length,
@@ -127,21 +115,18 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       summaryMap,
       openAlertList: openAlerts.slice(0, 5),
     };
-  }, [vehicles, summaries, alerts, partners]);
+  }, [vehicles, summaries, alerts]);
 
-  // Placeholder to satisfy unused var; partnerCapital computed but unused in MVP
-  void stats;
-
-  //if (loading) {
-  //  return (
-  //    <div className="p-6">
-  //      <PageHeader title="Dashboard" description="Business overview and key metrics" />
-  //      <div className="flex items-center justify-center py-20">
-  //        <Spinner size={32} />
-  //      </div>
-  //    </div>
-  //  );
-  //}
+  if (loading) {
+    return (
+      <div className="p-6">
+        <PageHeader title="Dashboard" description="Business overview and key metrics" />
+        <div className="flex items-center justify-center py-20">
+          <Spinner size={32} />
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (

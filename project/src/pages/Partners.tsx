@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2 } from "lucide-react";
-import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
+import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2, Banknote } from "lucide-react";
+import { PageHeader, Field, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/useToast";
 import { formatINR, formatDate, formatPercent, initials } from "@/lib/format";
-import { fetchPartners, fetchInvestments, fetchProfitDistributions, fetchFinancialSummaries } from "@/lib/queries";
+import { fetchPartners, fetchInvestments, fetchProfitDistributions } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
-import type { Partner, Investment, ProfitDistribution, VehicleFinancialSummary } from "@/lib/types";
+import { AddInvestmentModal } from "@/components/AddInvestmentModal";
+import { SettlementModal } from "@/components/SettlementModal";
+import { viewProof } from "@/lib/proofStorage";
+import type { Partner, Investment, ProfitDistribution, ProfitSettlementPayment, Vehicle } from "@/lib/types";
 import type { PageKey } from "@/components/Layout";
+
+type DistributionRow = ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] };
 
 interface PartnersProps {
   onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
@@ -18,22 +23,22 @@ interface PartnersProps {
 export function Partners({ onNavigate }: PartnersProps) {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [investments, setInvestments] = useState<(Investment & { partner: Partner | null; vehicle: { id: string; stock_number: string; manufacturer: string; model: string } | null })[]>([]);
-  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null; vehicle: { id: string; stock_number: string } | null })[]>([]);
-  const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
+  const [distributions, setDistributions] = useState<DistributionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", mobile: "", email: "", default_profit_share_pct: "50" });
   const [submitting, setSubmitting] = useState(false);
+  const [investingPartner, setInvestingPartner] = useState<Partner | null>(null);
+  const [settlingDistribution, setSettlingDistribution] = useState<DistributionRow | null>(null);
   const { toast } = useToast();
 
   const reload = async () => {
     try {
-      const [p, i, d, s] = await Promise.all([fetchPartners(), fetchInvestments(), fetchProfitDistributions(), fetchFinancialSummaries()]);
+      const [p, i, d] = await Promise.all([fetchPartners(), fetchInvestments(), fetchProfitDistributions()]);
       setPartners(p);
       setInvestments(i);
       setDistributions(d);
-      setSummaries(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -152,6 +157,7 @@ export function Partners({ onNavigate }: PartnersProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge color={p.status === "active" ? "emerald" : "slate"}>{p.status}</Badge>
+                  <button onClick={() => setInvestingPartner(p)} className="btn-secondary btn-sm"><Plus size={13} /> Investment</button>
                   <button onClick={() => handleDelete(p.id)} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
                 </div>
               </div>
@@ -187,20 +193,61 @@ export function Partners({ onNavigate }: PartnersProps) {
               <div className="pt-4 border-t border-slate-100">
                 <p className="text-xs font-medium text-slate-500 mb-2">Recent Investments ({investmentCount})</p>
                 {investments.filter((i) => i.partner_id === p.id).slice(0, 3).map((inv) => (
-                  <button
-                    key={inv.id}
-                    onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}
-                    className="flex items-center justify-between w-full p-2 rounded hover:bg-slate-50 text-left text-sm"
-                  >
-                    <div>
-                      <span className="text-slate-700">{inv.vehicle?.manufacturer} {inv.vehicle?.model}</span>
-                      <span className="text-xs text-slate-400 ml-1.5">{inv.vehicle?.stock_number}</span>
+                  <div key={inv.id} className="flex items-center justify-between w-full p-2 rounded hover:bg-slate-50 text-sm">
+                    <button
+                      onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}
+                      className="text-left flex-1 min-w-0"
+                      disabled={!inv.vehicle_id}
+                    >
+                      <span className="text-slate-700">{inv.vehicle ? `${inv.vehicle.manufacturer} ${inv.vehicle.model}` : "General capital"}</span>
+                      {inv.vehicle && <span className="text-xs text-slate-400 ml-1.5">{inv.vehicle.stock_number}</span>}
+                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-medium text-slate-900">{formatINR(inv.amount)}</span>
+                      {inv.proof_url && (
+                        <button onClick={() => viewProof("finance-proofs", inv.proof_url!)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
+                          Proof
+                        </button>
+                      )}
                     </div>
-                    <span className="font-medium text-slate-900">{formatINR(inv.amount)}</span>
-                  </button>
+                  </div>
                 ))}
                 {investmentCount === 0 && <p className="text-xs text-slate-400">No investments yet.</p>}
               </div>
+
+              {/* Pending settlements */}
+              {(() => {
+                const partnerDistributions = distributions.filter((d) => d.partner_id === p.id);
+                const pending = partnerDistributions.filter((d) => d.status !== "Paid");
+                const settledCount = partnerDistributions.length - pending.length;
+                return (
+                  <div className="pt-4 mt-4 border-t border-slate-100">
+                    <p className="text-xs font-medium text-slate-500 mb-2">
+                      Pending Settlements ({pending.length}){settledCount > 0 && <span className="text-slate-400"> · {settledCount} settled</span>}
+                    </p>
+                    {pending.length === 0 ? (
+                      <p className="text-xs text-slate-400">Nothing pending.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {pending.map((d) => (
+                          <div key={d.id} className="flex items-center justify-between p-2 rounded-lg border border-slate-100 text-sm">
+                            <button
+                              onClick={() => d.vehicle_id && onNavigate("vehicle", { vehicleId: d.vehicle_id })}
+                              className="text-left flex-1 min-w-0"
+                            >
+                              <span className="text-slate-700">{d.vehicle?.stock_number ?? "—"}</span>
+                              <span className="text-xs text-slate-400 ml-1.5">{formatINR(d.balance_payable)} due of {formatINR(d.total_entitlement)}</span>
+                            </button>
+                            <button onClick={() => setSettlingDistribution(d)} className="btn-primary btn-sm shrink-0">
+                              <Banknote size={13} /> Settle
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </Card>
           ))}
         </div>
@@ -231,6 +278,23 @@ export function Partners({ onNavigate }: PartnersProps) {
           <Field label="Default Profit Share %" hint="Sum of all partner percentages should equal 100%"><input className="input" type="number" value={form.default_profit_share_pct} onChange={(e) => setForm((f) => ({ ...f, default_profit_share_pct: e.target.value }))} /></Field>
         </div>
       </Modal>
+
+      {investingPartner && (
+        <AddInvestmentModal
+          partner={investingPartner}
+          open={Boolean(investingPartner)}
+          onClose={() => setInvestingPartner(null)}
+          onSaved={reload}
+        />
+      )}
+      {settlingDistribution && (
+        <SettlementModal
+          distribution={settlingDistribution}
+          open={Boolean(settlingDistribution)}
+          onClose={() => setSettlingDistribution(null)}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }

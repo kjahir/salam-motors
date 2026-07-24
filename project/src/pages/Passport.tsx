@@ -14,12 +14,13 @@ import {
   ChevronLeft,
   Wrench,
   Share2,
-  QrCode,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge, VerificationBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
+import { useToast } from "@/components/ui/useToast";
+import { supabase } from "@/lib/supabase";
 import { formatDate } from "@/lib/format";
 import { computeOverallScore } from "@/lib/calc";
 import { fetchVehicleFull } from "@/lib/queries";
@@ -35,6 +36,17 @@ interface PassportProps {
 export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState(false);
+  const { toast } = useToast();
+
+  const reload = async () => {
+    try {
+      const v = await fetchVehicleFull(vehicleId);
+      setVehicle(v);
+    } catch {
+      setVehicle(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +67,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
 
   const latestInspection = (vehicle?.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
   const insp = latestInspection;
-  const items: InspectionItem[] = insp?.items ?? [];
+  const items: InspectionItem[] = useMemo(() => insp?.items ?? [], [insp]);
   const overallScore = useMemo(() => computeOverallScore(items), [items]);
 
   if (loading) {
@@ -73,6 +85,23 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
   const listing = vehicle.listing;
   const verifiedDocs = vehicle.documents?.filter((d) => d.verification_status === "Verified") ?? [];
   const passportUrl = listing ? `${window.location.origin}/passport/${listing.public_slug}` : "";
+  const soldOut = vehicle.current_status === "SOLD" || vehicle.current_status === "DELIVERED" || vehicle.current_status === "CANCELLED";
+
+  const togglePublish = async () => {
+    if (!listing) return;
+    const nextStatus = listing.status === "Active" ? "Draft" : "Active";
+    setPublishing(true);
+    try {
+      const { error } = await supabase.from("listings").update({ status: nextStatus }).eq("id", listing.id);
+      if (error) throw error;
+      toast(nextStatus === "Active" ? "Passport published — the link is now public" : "Passport unpublished", "success");
+      await reload();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to update listing", "error");
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
@@ -203,7 +232,12 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
             </Card>
 
             <Card className="p-5">
-              <h2 className="font-semibold text-slate-900 mb-3 flex items-center gap-2"><Share2 size={16} /> Share Passport</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-slate-900 flex items-center gap-2"><Share2 size={16} /> Share Passport</h2>
+                {listing && (
+                  <Badge color={listing.status === "Active" ? "emerald" : listing.status === "Sold" ? "blue" : "amber"}>{listing.status}</Badge>
+                )}
+              </div>
               {listing ? (
                 <>
                   <div className="flex items-center justify-center mb-3">
@@ -213,14 +247,24 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
                   </div>
                   <p className="text-xs text-slate-500 text-center break-all font-mono">{passportUrl}</p>
                   <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(passportUrl);
-                      }}
-                      className="btn-secondary btn-sm flex-1"
-                    >
-                      Copy Link
-                    </button>
+                    {listing.status === "Active" && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(passportUrl);
+                          toast("Link copied", "success");
+                        }}
+                        className="btn-secondary btn-sm flex-1"
+                      >
+                        Copy Link
+                      </button>
+                    )}
+                    {soldOut ? (
+                      <p className="text-xs text-slate-500 flex-1 text-center self-center">This vehicle is {vehicle.current_status.toLowerCase()} and can no longer be published.</p>
+                    ) : (
+                      <button onClick={togglePublish} disabled={publishing} className={listing.status === "Active" ? "btn-secondary btn-sm flex-1" : "btn-primary btn-sm flex-1"}>
+                        {publishing ? <Spinner size={14} /> : null} {listing.status === "Active" ? "Unpublish" : "Publish"}
+                      </button>
+                    )}
                   </div>
                 </>
               ) : (
@@ -232,7 +276,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
               <div className="flex items-start gap-3">
                 <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-900">Verified by WheelsJV</p>
+                  <p className="text-sm font-medium text-emerald-900">Verified by Salam Motors</p>
                   <p className="text-xs text-emerald-700 mt-1">
                     This passport is generated from the dealer's verified inspection records. Financial details are excluded for buyer privacy.
                   </p>

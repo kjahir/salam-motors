@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Filter, Bike, PlusCircle, AlertTriangle, Download, X } from "lucide-react";
+import { Search, Bike, PlusCircle, AlertTriangle, Download, X, Pencil, Trash2, Bell, Share2 } from "lucide-react";
 import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
-import { Badge, StatusBadge, AgeingBadge, ScoreBadge } from "@/components/ui/Badge";
+import { StatusBadge, AgeingBadge } from "@/components/ui/Badge";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
-import { fetchVehicles, fetchFinancialSummaries, fetchPartners } from "@/lib/queries";
+import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts } from "@/lib/queries";
 import { VEHICLE_STATUSES, VEHICLE_CATEGORIES } from "@/lib/constants";
+import { EditVehicleModal } from "@/components/EditVehicleModal";
+import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
 import type { Vehicle, VehicleFinancialSummary, Partner } from "@/lib/types";
 import type { PageKey } from "@/components/Layout";
 
@@ -20,6 +22,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [openAlertCounts, setOpenAlertCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,25 +31,29 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [ageingFilter, setAgeingFilter] = useState<AgeingFilter>("all");
   const [showSold, setShowSold] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
+
+  const reload = async () => {
+    try {
+      const [v, s, p, a] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchPartners(), fetchAlerts()]);
+      setVehicles(v);
+      setSummaries(s);
+      setPartners(p);
+      const counts = new Map<string, number>();
+      for (const alert of a) {
+        if (alert.status === "Open") counts.set(alert.vehicle_id, (counts.get(alert.vehicle_id) ?? 0) + 1);
+      }
+      setOpenAlertCounts(counts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load inventory");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [v, s, p] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchPartners()]);
-        if (cancelled) return;
-        setVehicles(v);
-        setSummaries(s);
-        setPartners(p);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load inventory");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    reload();
   }, []);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
@@ -239,6 +246,8 @@ export function Inventory({ onNavigate }: InventoryProps) {
                   <th className="px-4 py-3 font-medium text-right">Est. Profit</th>
                   <th className="px-4 py-3 font-medium text-right">Invested</th>
                   <th className="px-4 py-3 font-medium">Onboarded</th>
+                  <th className="px-4 py-3 font-medium text-right">View</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -270,6 +279,31 @@ export function Inventory({ onNavigate }: InventoryProps) {
                       <td className={`px-4 py-3 text-right font-semibold ${profitColor}`}>{formatINR(estProfit)}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{formatINR(s?.total_invested ?? 0)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(v.onboarded_at)}</td>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => onNavigate("alerts")} className="relative text-slate-400 hover:text-amber-600 p-1.5" title="View alerts">
+                            <Bell size={14} />
+                            {(openAlertCounts.get(v.id) ?? 0) > 0 && (
+                              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-semibold text-white">
+                                {openAlertCounts.get(v.id)}
+                              </span>
+                            )}
+                          </button>
+                          <button onClick={() => onNavigate("passport", { vehicleId: v.id })} className="text-slate-400 hover:text-brand-600 p-1.5" title="View passport">
+                            <Share2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => setEditingVehicle(v)} className="text-slate-400 hover:text-brand-600 p-1.5" title="Edit vehicle">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => setDeletingVehicle(v)} className="text-slate-400 hover:text-red-600 p-1.5" title="Delete vehicle">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -283,6 +317,23 @@ export function Inventory({ onNavigate }: InventoryProps) {
         <p className="text-xs text-slate-400 mt-4 text-center">
           {partners.length} partner{partners.length !== 1 ? "s" : ""} configured · Click any vehicle to view full details
         </p>
+      )}
+
+      {editingVehicle && (
+        <EditVehicleModal
+          vehicle={editingVehicle}
+          open={Boolean(editingVehicle)}
+          onClose={() => setEditingVehicle(null)}
+          onSaved={reload}
+        />
+      )}
+      {deletingVehicle && (
+        <DeleteVehicleModal
+          vehicle={deletingVehicle}
+          open={Boolean(deletingVehicle)}
+          onClose={() => setDeletingVehicle(null)}
+          onDeleted={reload}
+        />
       )}
     </div>
   );
