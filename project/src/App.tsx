@@ -3,6 +3,8 @@ import { Layout, type PageKey } from "@/components/Layout";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
+import { MobileApp } from "@/mobile/MobileApp";
 import { AuthPage } from "@/pages/AuthPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { Inventory } from "@/pages/Inventory";
@@ -19,6 +21,7 @@ import { fetchAlerts } from "@/lib/queries";
 
 function AppContent() {
   const { session, loading } = useAuth();
+  const isMobile = useIsMobileViewport();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
@@ -87,6 +90,10 @@ function AppContent() {
 
   if (!session) {
     return <AuthPage />;
+  }
+
+  if (isMobile) {
+    return <MobileApp />;
   }
 
   const isPassport = page === "passport";
