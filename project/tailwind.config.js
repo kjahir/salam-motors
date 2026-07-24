@@ -6,8 +6,30 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        poppins: ['Poppins', 'system-ui', '-apple-system', 'sans-serif'],
+        roboto: ['Roboto', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
+        mobile: {
+          primary: '#D84E55',
+          'primary-hover': '#C23E45',
+          'primary-active': '#9E2F35',
+          secondary: '#FFCB66',
+          'secondary-hover': '#F0AD2E',
+          navy: '#162B4E',
+          success: '#1A9C5C',
+          'success-bg': '#E2F6EC',
+          error: '#C23E45',
+          'error-bg': '#FDF1F1',
+          warning: '#F0AD2E',
+          'warning-bg': '#FFF5DF',
+          text: '#0B1626',
+          'text-secondary': '#4B5563',
+          'text-muted': '#6B7280',
+          bg: '#F7F8FA',
+          card: '#FFFFFF',
+          border: '#E2E5EA',
+        },
         brand: {
           50: '#eef4ff',
           100: '#d9e6ff',
@@ -37,6 +59,12 @@ export default {
       boxShadow: {
         card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)',
         'card-hover': '0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.06)',
+        'mobile-sm': '0 1px 2px 0 rgb(11 22 38 / 0.05)',
+        'mobile-md': '0 2px 8px -2px rgb(11 22 38 / 0.08)',
+        'mobile-lg': '0 8px 24px -4px rgb(11 22 38 / 0.12)',
+      },
+      borderRadius: {
+        pill: '999px',
       },
       keyframes: {
         'fade-in': {

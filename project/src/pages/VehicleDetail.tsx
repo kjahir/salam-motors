@@ -37,8 +37,10 @@ import {
   computePartnerFunding,
   documentCompleteness,
 } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners, fetchParties, fetchMechanics } from "@/lib/queries";
+import { fetchVehicleFull, fetchPartners, fetchMechanics } from "@/lib/queries";
+import { completeSale } from "@/lib/sale";
 import { supabase } from "@/lib/supabase";
+import { PartyPickerField } from "@/components/PartyPickerField";
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -1300,9 +1302,6 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
   onChanged: () => void;
 }) {
   const [showBuyers, setShowBuyers] = useState(false);
-  const [buyers, setBuyers] = useState<Party[]>([]);
-  const [addBuyerMode, setAddBuyerMode] = useState(false);
-  const [newBuyer, setNewBuyer] = useState({ full_name: "", mobile: "", city: "", party_subtype: "individual" });
   const [form, setForm] = useState({
     buyer_party_id: "",
     sale_price: "",
@@ -1322,171 +1321,30 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
   const distributions = vehicle.profit_distributions ?? [];
 
   const handleRecordSale = async () => {
-    if (!form.buyer_party_id || !form.sale_price || Number(form.sale_price) <= 0) {
-      toast("Select buyer and enter sale price", "error");
-      return;
-    }
-    // Loss check: if sale price (net) is below total cost, notes are mandatory
-    const salePrice = Number(form.sale_price);
-    const discount = Number(form.discount) || 0;
-    const buyerCharges = Number(form.buyer_charges) || 0;
-    const netRevenue = salePrice + buyerCharges - discount;
-    if (netRevenue < cost.totalVehicleCost && !form.notes.trim()) {
-      toast("This sale is at a loss. Please enter a reason in the Notes field explaining why the vehicle is being sold below cost.", "error");
-      return;
-    }
     setSubmitting(true);
-
-    let saleId: string | null = null;
-    let statusHistoryId: string | null = null;
-    let vehicleUpdated = false;
-    let listingUpdated = false;
-    const previousListingStatus = vehicle.listing?.status ?? null;
-    const distributionIds: string[] = [];
-    const allocationIds: string[] = [];
-
-    const rollback = async () => {
-      try {
-        for (const id of distributionIds) {
-          await supabase.from("profit_distributions").delete().eq("id", id);
-        }
-        for (const id of allocationIds) {
-          await supabase.from("vehicle_profit_share_allocations").delete().eq("id", id);
-        }
-        if (statusHistoryId) {
-          await supabase.from("vehicle_status_history").delete().eq("id", statusHistoryId);
-        }
-        if (listingUpdated && vehicle.listing) {
-          await supabase.from("listings").update({ status: previousListingStatus }).eq("id", vehicle.listing.id);
-        }
-        if (vehicleUpdated) {
-          await supabase.from("vehicles").update({
-            current_status: vehicle.current_status,
-            sold_at: vehicle.sold_at ?? null,
-          }).eq("id", vehicle.id);
-        }
-        if (saleId) {
-          await supabase.from("sale_payments").delete().eq("sale_id", saleId);
-          await supabase.from("sales").delete().eq("id", saleId);
-        }
-      } catch {
-        // best-effort cleanup; the original error is what gets surfaced to the user
-      }
-    };
-
     try {
-      const grossProfit = netRevenue - cost.totalVehicleCost;
-      const isDelivered = form.delivery_status === "Delivered";
-
-      // Create sale
-      const { data: saleRec, error: saleErr } = await supabase.from("sales").insert({
-        vehicle_id: vehicle.id,
-        buyer_party_id: form.buyer_party_id,
-        sale_date: new Date().toISOString(),
-        sale_price: salePrice,
-        discount,
-        buyer_charges: buyerCharges,
-        payment_status: form.payment_status,
-        delivery_status: form.delivery_status,
-        delivered_at: isDelivered ? new Date().toISOString() : null,
-        delivery_location: form.delivery_location || null,
-        notes: form.notes || null,
-        status: "Completed",
-      }).select().single();
-      if (saleErr) throw saleErr;
-      saleId = saleRec.id;
-
-      // Create sale payment
-      const { error: payErr } = await supabase.from("sale_payments").insert({
-        sale_id: saleRec.id,
-        amount: netRevenue,
-        payment_method: form.payment_method,
-        paid_at: new Date().toISOString(),
-      });
-      if (payErr) throw payErr;
-
-      // Update vehicle status
-      const { error: vehUpdErr } = await supabase.from("vehicles").update({
-        current_status: "SOLD",
-        sold_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("id", vehicle.id);
-      if (vehUpdErr) throw vehUpdErr;
-      vehicleUpdated = true;
-
-      if (vehicle.listing) {
-        const { error: listErr } = await supabase.from("listings").update({ status: "Sold" }).eq("id", vehicle.listing.id);
-        if (listErr) throw listErr;
-        listingUpdated = true;
-      }
-
-      const { data: historyRec, error: histErr } = await supabase.from("vehicle_status_history").insert({
-        vehicle_id: vehicle.id,
-        previous_status: vehicle.current_status,
-        new_status: "SOLD",
-        reason: `Sale completed at ${formatINR(salePrice)}`,
-      }).select().single();
-      if (histErr) throw histErr;
-      statusHistoryId = historyRec.id;
-
-      // Profit-share allocations: a vehicle only gets these set up explicitly in rare
-      // cases, so if none exist yet, apply every partner's default profit-share % now,
-      // at the point of sale, rather than leaving the profit unassigned to anyone.
-      let allocations: { partner_id: string; percentage: number }[] = vehicle.profit_share_allocations ?? [];
-      if (allocations.length === 0 && partners.length > 0) {
-        for (const p of partners) {
-          const { data: allocRec, error: allocErr } = await supabase.from("vehicle_profit_share_allocations").insert({
-            vehicle_id: vehicle.id,
-            partner_id: p.id,
-            percentage: p.default_profit_share_pct,
-          }).select().single();
-          if (allocErr) throw allocErr;
-          allocationIds.push(allocRec.id);
-        }
-        allocations = partners.map((p) => ({ partner_id: p.id, percentage: p.default_profit_share_pct }));
-      }
-
-      // Calculate profit distributions
-      const isLoss = grossProfit < 0;
-      const absProfit = Math.abs(grossProfit);
-
-      for (const alloc of allocations) {
-        const fund = funding.find((f) => f.partnerId === alloc.partner_id);
-        const principalReturn = fund?.totalInvested ?? 0;
-        const profitShare = isLoss ? 0 : (absProfit * alloc.percentage) / 100;
-        const lossShare = isLoss ? (absProfit * alloc.percentage) / 100 : 0;
-        const totalEntitlement = principalReturn + profitShare - lossShare;
-
-        const { data: distRec, error: distErr } = await supabase.from("profit_distributions").insert({
-          vehicle_id: vehicle.id,
-          sale_id: saleRec.id,
-          partner_id: alloc.partner_id,
-          principal_return: principalReturn,
-          profit_share: profitShare,
-          loss_share: lossShare,
-          total_entitlement: totalEntitlement,
-          amount_paid: 0,
-          balance_payable: totalEntitlement,
-          status: "Calculated",
-        }).select().single();
-        if (distErr) throw distErr;
-        distributionIds.push(distRec.id);
-      }
-
-      const { error: auditErr } = await supabase.from("audit_logs").insert({
-        entity_type: "vehicle",
-        entity_id: vehicle.id,
-        action: "sold",
-        performed_by: user?.email ?? "Unknown",
-        reason: `Sale completed at ${formatINR(salePrice)}, profit ${formatINR(grossProfit)}`,
-      });
-      if (auditErr) throw auditErr;
-
+      await completeSale(
+        vehicle,
+        cost,
+        funding,
+        partners,
+        {
+          buyer_party_id: form.buyer_party_id,
+          sale_price: Number(form.sale_price) || 0,
+          discount: Number(form.discount) || 0,
+          buyer_charges: Number(form.buyer_charges) || 0,
+          payment_method: form.payment_method,
+          payment_status: form.payment_status,
+          delivery_status: form.delivery_status,
+          delivery_location: form.delivery_location,
+          notes: form.notes,
+        },
+        user?.email ?? "Unknown",
+      );
       toast("Sale recorded and profit calculated", "success");
       setShowBuyers(false);
       onChanged();
     } catch (e) {
-      await rollback();
       toast(
         e instanceof Error
           ? `${e.message} — the sale was not completed and any partial changes were rolled back.`
@@ -1495,42 +1353,6 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
       );
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const loadBuyers = async () => {
-    const b = await fetchParties("buyer");
-    setBuyers(b);
-    setShowBuyers(true);
-  };
-
-  const handleAddBuyerInline = async () => {
-    if (!newBuyer.full_name.trim() || !newBuyer.mobile.trim()) {
-      toast("Enter buyer name and mobile", "error");
-      return;
-    }
-    try {
-      const { data, error } = await supabase
-        .from("parties")
-        .insert({
-          party_type: "buyer",
-          party_subtype: newBuyer.party_subtype,
-          full_name: newBuyer.full_name.trim(),
-          mobile: newBuyer.mobile.trim(),
-          city: newBuyer.city.trim() || null,
-          consent: true,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      const created = data as Party;
-      setBuyers((b) => [...b, created]);
-      setForm((f) => ({ ...f, buyer_party_id: created.id }));
-      setAddBuyerMode(false);
-      setNewBuyer({ full_name: "", mobile: "", city: "", party_subtype: "individual" });
-      toast("Buyer added", "success");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to add buyer", "error");
     }
   };
 
@@ -1669,7 +1491,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
           icon={<ShoppingCart size={20} />}
           title="No sale recorded"
           description="Record a sale to calculate profit and partner distributions."
-          action={<button onClick={loadBuyers} className="btn-primary"><ShoppingCart size={16} /> Record Sale</button>}
+          action={<button onClick={() => setShowBuyers(true)} className="btn-primary"><ShoppingCart size={16} /> Record Sale</button>}
         />
       </Card>
 
@@ -1685,30 +1507,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
         </>}
       >
         <div className="space-y-4">
-          <Field label="Buyer" required>
-            {addBuyerMode ? (
-              <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50/30 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-brand-700">New Buyer</span>
-                  <button onClick={() => setAddBuyerMode(false)} className="text-xs text-slate-500 hover:text-slate-700">Use existing instead</button>
-                </div>
-                <Select
-                  value={newBuyer.party_subtype}
-                  onChange={(v) => setNewBuyer((b) => ({ ...b, party_subtype: v }))}
-                  options={[{ value: "individual", label: "Individual (Person)" }, { value: "agent", label: "Agent" }]}
-                />
-                <input className="input" placeholder="Full name" value={newBuyer.full_name} onChange={(e) => setNewBuyer((b) => ({ ...b, full_name: e.target.value }))} />
-                <input className="input" placeholder="Mobile number" value={newBuyer.mobile} onChange={(e) => setNewBuyer((b) => ({ ...b, mobile: e.target.value }))} />
-                <input className="input" placeholder="City (optional)" value={newBuyer.city} onChange={(e) => setNewBuyer((b) => ({ ...b, city: e.target.value }))} />
-                <button onClick={handleAddBuyerInline} className="btn-primary btn-sm w-full">Add Buyer</button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <Select value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} placeholder="Select buyer" options={buyers.map((b) => ({ value: b.id, label: `${b.full_name} · ${b.mobile}` }))} />
-                <button onClick={() => setAddBuyerMode(true)} className="btn-secondary shrink-0" title="Add new buyer"><Plus size={16} /> New</button>
-              </div>
-            )}
-          </Field>
+          <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
           <div className="grid grid-cols-3 gap-4">
             <Field label="Sale Price (₹)" required><input className="input" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" /></Field>
             <Field label="Discount (₹)"><input className="input" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} /></Field>
