@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
-import { Check, AlertTriangle } from "lucide-react";
+import { Check, AlertTriangle, FileText } from "lucide-react";
 import { TopBar, Field, Input, Select, Button, Spinner, Card } from "./ui/primitives";
 import { PartyPickerField } from "@/components/PartyPickerField";
+import { MultiScreenshotUpload } from "@/components/MultiScreenshotUpload";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
-import { checkRegistrationUnique, fetchVehicle } from "@/lib/queries";
+import { viewProof } from "@/lib/proofStorage";
+import { checkRegistrationUnique, fetchVehicleFull } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { generateSlug } from "@/lib/calc";
-import { VEHICLE_CATEGORIES, FUEL_TYPES } from "@/lib/constants";
+import { VEHICLE_CATEGORIES, FUEL_TYPES, PAYMENT_METHODS } from "@/lib/constants";
+import type { UploadedProof } from "@/components/ScreenshotUpload";
 import type { Vehicle } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
@@ -38,6 +41,32 @@ const initialCore: CoreForm = {
   minimum_price: "",
 };
 
+interface PurchaseForm {
+  seller_party_id: string;
+  purchase_price: string;
+  broker_commission: string;
+  other_fee: string;
+  payment_method: string;
+  payment_reference: string;
+  handover_location: string;
+  odometer_at_purchase: string;
+  keys_received: boolean;
+  documents_received: boolean;
+}
+
+const emptyPurchaseForm: PurchaseForm = {
+  seller_party_id: "",
+  purchase_price: "",
+  broker_commission: "0",
+  other_fee: "0",
+  payment_method: "UPI",
+  payment_reference: "",
+  handover_location: "",
+  odometer_at_purchase: "",
+  keys_received: true,
+  documents_received: false,
+};
+
 interface MobileVehicleFormProps {
   mode: "create" | "edit";
   vehicleId?: string;
@@ -57,27 +86,57 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Edit-mode purchase record (mobile onboarding only ever captures purchase price;
+  // the rest is filled in later here once a stock number and purchase row exist).
+  const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [purchaseForm, setPurchaseForm] = useState<PurchaseForm>(emptyPurchaseForm);
+  const [existingProofs, setExistingProofs] = useState<string[]>([]);
+  const [removedProofs, setRemovedProofs] = useState<string[]>([]);
+  const [newProofs, setNewProofs] = useState<UploadedProof[]>([]);
+  const [uploadSessionId] = useState(() => crypto.randomUUID());
+
   const update = <K extends keyof CoreForm>(key: K, value: CoreForm[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const updatePurchase = <K extends keyof PurchaseForm>(key: K, value: PurchaseForm[K]) => setPurchaseForm((f) => ({ ...f, [key]: value }));
 
   useEffect(() => {
     if (mode !== "edit" || !vehicleId) return;
     let cancelled = false;
     (async () => {
-      const v = await fetchVehicle(vehicleId);
-      if (cancelled || !v) return;
-      setVehicle(v);
+      const full = await fetchVehicleFull(vehicleId);
+      if (cancelled || !full) return;
+      setVehicle(full);
       setForm({
-        registration_number: v.registration_number ?? "",
-        category: v.category,
-        manufacturer: v.manufacturer,
-        model: v.model,
-        fuel_type: v.fuel_type,
-        colour: v.colour ?? "",
-        manufacture_year: v.manufacture_year ? String(v.manufacture_year) : "",
-        odometer: v.odometer !== null ? String(v.odometer) : "",
-        asking_price: v.asking_price !== null ? String(v.asking_price) : "",
-        minimum_price: v.minimum_price !== null ? String(v.minimum_price) : "",
+        registration_number: full.registration_number ?? "",
+        category: full.category,
+        manufacturer: full.manufacturer,
+        model: full.model,
+        fuel_type: full.fuel_type,
+        colour: full.colour ?? "",
+        manufacture_year: full.manufacture_year ? String(full.manufacture_year) : "",
+        odometer: full.odometer !== null ? String(full.odometer) : "",
+        asking_price: full.asking_price !== null ? String(full.asking_price) : "",
+        minimum_price: full.minimum_price !== null ? String(full.minimum_price) : "",
       });
+      const purchase = full.purchase ?? null;
+      const payment = purchase?.payments?.[0];
+      if (purchase) {
+        setPurchaseId(purchase.id);
+        setPaymentId(payment?.id ?? null);
+        setPurchaseForm({
+          seller_party_id: purchase.seller_party_id ?? "",
+          purchase_price: String(purchase.agreed_price ?? ""),
+          broker_commission: String(purchase.broker_commission ?? 0),
+          other_fee: String(purchase.other_fee ?? 0),
+          payment_method: payment?.payment_method ?? "UPI",
+          payment_reference: payment?.reference ?? "",
+          handover_location: purchase.handover_location ?? "",
+          odometer_at_purchase: purchase.odometer_at_purchase !== null ? String(purchase.odometer_at_purchase) : "",
+          keys_received: purchase.keys_received,
+          documents_received: purchase.documents_received,
+        });
+        setExistingProofs(payment?.proof_urls ?? []);
+      }
       setLoading(false);
     })();
     return () => {
@@ -113,6 +172,11 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
     Boolean(form.manufacturer.trim() && form.model.trim() && form.registration_number.trim() && form.manufacture_year) &&
     regAvailable === true &&
     (mode === "edit" || Boolean(sellerPartyId && purchasePrice && Number(purchasePrice) > 0));
+
+  const removeExistingProof = (path: string) => {
+    setExistingProofs((prev) => prev.filter((p) => p !== path));
+    setRemovedProofs((prev) => [...prev, path]);
+  };
 
   const handleCreate = async () => {
     setSubmitting(true);
@@ -183,6 +247,45 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         updated_at: new Date().toISOString(),
       }).eq("id", vehicleId);
       if (error) throw error;
+
+      if (purchaseId) {
+        const { error: purErr } = await supabase.from("purchases").update({
+          seller_party_id: purchaseForm.seller_party_id || null,
+          agreed_price: Number(purchaseForm.purchase_price) || 0,
+          broker_commission: Number(purchaseForm.broker_commission) || 0,
+          other_fee: Number(purchaseForm.other_fee) || 0,
+          handover_location: purchaseForm.handover_location || null,
+          odometer_at_purchase: purchaseForm.odometer_at_purchase ? Number(purchaseForm.odometer_at_purchase) : null,
+          keys_received: purchaseForm.keys_received,
+          documents_received: purchaseForm.documents_received,
+        }).eq("id", purchaseId);
+        if (purErr) throw purErr;
+
+        const finalProofs = [...existingProofs, ...newProofs.map((p) => p.path)];
+        const amount = (Number(purchaseForm.purchase_price) || 0) + (Number(purchaseForm.broker_commission) || 0) + (Number(purchaseForm.other_fee) || 0);
+        if (paymentId) {
+          const { error: payErr } = await supabase.from("purchase_payments").update({
+            amount,
+            payment_method: purchaseForm.payment_method,
+            reference: purchaseForm.payment_reference || null,
+            proof_urls: finalProofs.length ? finalProofs : null,
+          }).eq("id", paymentId);
+          if (payErr) throw payErr;
+        } else if (finalProofs.length || purchaseForm.payment_reference) {
+          const { error: payErr } = await supabase.from("purchase_payments").insert({
+            purchase_id: purchaseId,
+            amount,
+            payment_method: purchaseForm.payment_method,
+            reference: purchaseForm.payment_reference || null,
+            proof_urls: finalProofs.length ? finalProofs : null,
+            paid_at: new Date().toISOString(),
+          });
+          if (payErr) throw payErr;
+        }
+        if (removedProofs.length) {
+          await supabase.storage.from("finance-proofs").remove(removedProofs);
+        }
+      }
 
       if (askingPrice && askingPrice > 0) {
         const { data: existingListing } = await supabase.from("listings").select("id").eq("vehicle_id", vehicleId).maybeSingle();
@@ -284,6 +387,78 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
               <Field label="Purchase Price (₹)" required>
                 <Input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} placeholder="62000" />
               </Field>
+            </Card>
+          </>
+        )}
+
+        {mode === "edit" && purchaseId && (
+          <>
+            <Card className="p-4">
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Seller</h3>
+              <PartyPickerField partyType="seller" value={purchaseForm.seller_party_id} onChange={(v) => updatePurchase("seller_party_id", v)} />
+            </Card>
+            <Card className="p-4 space-y-4">
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text">Purchase</h3>
+              <Field label="Purchase Price (₹)" required>
+                <Input type="number" value={purchaseForm.purchase_price} onChange={(e) => updatePurchase("purchase_price", e.target.value)} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Broker Commission (₹)">
+                  <Input type="number" value={purchaseForm.broker_commission} onChange={(e) => updatePurchase("broker_commission", e.target.value)} />
+                </Field>
+                <Field label="Other Fees (₹)">
+                  <Input type="number" value={purchaseForm.other_fee} onChange={(e) => updatePurchase("other_fee", e.target.value)} />
+                </Field>
+              </div>
+              <Field label="Payment Method">
+                <Select value={purchaseForm.payment_method} onChange={(v) => updatePurchase("payment_method", v)} options={PAYMENT_METHODS} />
+              </Field>
+              <Field label="Payment Reference">
+                <Input value={purchaseForm.payment_reference} onChange={(e) => updatePurchase("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Handover Location">
+                  <Input value={purchaseForm.handover_location} onChange={(e) => updatePurchase("handover_location", e.target.value)} placeholder="Chennai" />
+                </Field>
+                <Field label="Odometer at Purchase">
+                  <Input type="number" value={purchaseForm.odometer_at_purchase} onChange={(e) => updatePurchase("odometer_at_purchase", e.target.value)} />
+                </Field>
+              </div>
+              <div className="flex items-center gap-5">
+                <label className="flex items-center gap-2 text-sm text-mobile-text">
+                  <input type="checkbox" checked={purchaseForm.keys_received} onChange={(e) => updatePurchase("keys_received", e.target.checked)} className="rounded border-mobile-border" />
+                  Keys received
+                </label>
+                <label className="flex items-center gap-2 text-sm text-mobile-text">
+                  <input type="checkbox" checked={purchaseForm.documents_received} onChange={(e) => updatePurchase("documents_received", e.target.checked)} className="rounded border-mobile-border" />
+                  Docs received
+                </label>
+              </div>
+
+              {existingProofs.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-mobile-text-secondary mb-1.5">Existing Payment Proof</label>
+                  <div className="space-y-1.5">
+                    {existingProofs.map((path) => (
+                      <div key={path} className="flex items-center justify-between rounded-xl border border-mobile-border bg-white p-2.5">
+                        <button onClick={() => viewProof("finance-proofs", path)} className="flex items-center gap-2 min-w-0 text-mobile-primary">
+                          <FileText size={15} className="shrink-0" />
+                          <span className="text-sm truncate">{path.split("/").pop()}</span>
+                        </button>
+                        <button onClick={() => removeExistingProof(path)} className="text-xs text-mobile-error shrink-0">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <MultiScreenshotUpload
+                bucket="finance-proofs"
+                pathPrefix={`purchase-payments/${uploadSessionId}`}
+                value={newProofs}
+                onChange={setNewProofs}
+                label="Add Payment Proof"
+              />
             </Card>
           </>
         )}

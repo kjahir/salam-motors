@@ -416,16 +416,21 @@ function Spec({ label, value }: { label: string; value: string | null | undefine
 
 
 // ============ EXPENSES ============
+const emptyExpenseForm = { category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" };
+
 function ExpensesTab({ vehicle, partners, onChanged }: {
   vehicle: VehicleWithRelations;
   partners: Partner[];
   onChanged: () => void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" });
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [form, setForm] = useState(emptyExpenseForm);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadedEvidence, setUploadedEvidence] = useState<{ path: string; previewUrl: string; name: string } | null>(null);
+  const [existingBillUrl, setExistingBillUrl] = useState<string | null>(null);
+  const [removeExisting, setRemoveExisting] = useState(false);
   const evidenceInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -436,6 +441,39 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       return null;
     });
     if (evidenceInputRef.current) evidenceInputRef.current.value = "";
+  };
+
+  const resetModal = () => {
+    setShowAdd(false);
+    setEditingExpense(null);
+    setForm(emptyExpenseForm);
+    setExistingBillUrl(null);
+    setRemoveExisting(false);
+    clearUploadedEvidence();
+  };
+
+  const openAdd = () => {
+    setEditingExpense(null);
+    setForm(emptyExpenseForm);
+    setExistingBillUrl(null);
+    setRemoveExisting(false);
+    setShowAdd(true);
+  };
+
+  const openEdit = (e: Expense) => {
+    setEditingExpense(e);
+    setForm({
+      category: e.category,
+      amount: String(e.amount),
+      vendor: e.vendor ?? "",
+      description: e.description ?? "",
+      paid_by_partner_id: e.paid_by_partner_id ?? "",
+      bill_available: e.bill_available,
+      approval_status: e.approval_status,
+    });
+    setExistingBillUrl(e.bill_url);
+    setRemoveExisting(false);
+    setShowAdd(true);
   };
 
   const handleEvidenceSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,6 +490,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       const { error: upErr } = await supabase.storage.from("finance-proofs").upload(path, file, { cacheControl: "3600", upsert: false });
       if (upErr) throw upErr;
       setUploadedEvidence({ path, previewUrl: URL.createObjectURL(file), name: file.name });
+      setRemoveExisting(false);
       setForm((f) => ({ ...f, bill_available: true }));
       toast("Evidence uploaded", "success");
     } catch (err) {
@@ -461,34 +500,53 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
     }
   };
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
       toast("Enter a valid amount", "error");
       return;
     }
     setSubmitting(true);
     try {
-      const { error } = await supabase.from("expenses").insert({
-        vehicle_id: vehicle.id,
-        category: form.category,
-        amount: Number(form.amount),
-        paid_by_partner_id: form.paid_by_partner_id || null,
-        vendor: form.vendor || null,
-        description: form.description || null,
-        bill_available: form.bill_available,
-        bill_url: uploadedEvidence?.path || null,
-        approval_status: form.approval_status,
-        approved_by: form.approval_status === "Approved" ? (user?.email ?? "Unknown") : null,
-        approved_at: form.approval_status === "Approved" ? new Date().toISOString() : null,
-      });
-      if (error) throw error;
-      toast("Expense added", "success");
-      setShowAdd(false);
-      setForm({ category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" });
-      clearUploadedEvidence();
+      const finalBillUrl = uploadedEvidence?.path ?? (removeExisting ? null : existingBillUrl);
+      const staleStoragePath = uploadedEvidence || removeExisting ? existingBillUrl : null;
+
+      if (editingExpense) {
+        const { error } = await supabase
+          .from("expenses")
+          .update({
+            category: form.category,
+            amount: Number(form.amount),
+            paid_by_partner_id: form.paid_by_partner_id || null,
+            vendor: form.vendor || null,
+            description: form.description || null,
+            bill_available: form.bill_available,
+            bill_url: finalBillUrl,
+          })
+          .eq("id", editingExpense.id);
+        if (error) throw error;
+        if (staleStoragePath) await supabase.storage.from("finance-proofs").remove([staleStoragePath]);
+        toast("Expense updated", "success");
+      } else {
+        const { error } = await supabase.from("expenses").insert({
+          vehicle_id: vehicle.id,
+          category: form.category,
+          amount: Number(form.amount),
+          paid_by_partner_id: form.paid_by_partner_id || null,
+          vendor: form.vendor || null,
+          description: form.description || null,
+          bill_available: form.bill_available,
+          bill_url: finalBillUrl,
+          approval_status: form.approval_status,
+          approved_by: form.approval_status === "Approved" ? (user?.email ?? "Unknown") : null,
+          approved_at: form.approval_status === "Approved" ? new Date().toISOString() : null,
+        });
+        if (error) throw error;
+        toast("Expense added", "success");
+      }
+      resetModal();
       onChanged();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to add expense", "error");
+      toast(e instanceof Error ? e.message : "Failed to save expense", "error");
     } finally {
       setSubmitting(false);
     }
@@ -540,7 +598,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900">Expense Records</h3>
-          <button onClick={() => setShowAdd(true)} className="btn-primary btn-sm"><Plus size={14} /> Add Expense</button>
+          <button onClick={openAdd} className="btn-primary btn-sm"><Plus size={14} /> Add Expense</button>
         </div>
         {vehicle.expenses && vehicle.expenses.length > 0 ? (
           <div className="overflow-x-auto">
@@ -571,6 +629,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
                       <td className="py-2.5"><Badge color={e.approval_status === "Approved" ? "emerald" : e.approval_status === "Submitted" ? "amber" : e.approval_status === "Rejected" ? "red" : "slate"}>{e.approval_status}</Badge></td>
                       <td className="py-2.5 text-right">
                         {e.approval_status === "Submitted" && <button onClick={() => handleApprove(e)} className="text-brand-600 hover:text-brand-700 text-xs font-medium mr-2">Approve</button>}
+                        <button onClick={() => openEdit(e)} className="text-slate-400 hover:text-brand-600 p-1"><Pencil size={14} /></button>
                         <button onClick={() => handleDelete(e.id)} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
                       </td>
                     </tr>
@@ -586,11 +645,11 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
 
       <Modal
         open={showAdd}
-        onClose={() => { setShowAdd(false); clearUploadedEvidence(); }}
-        title="Add Expense"
+        onClose={resetModal}
+        title={editingExpense ? "Edit Expense" : "Add Expense"}
         footer={<>
-          <button onClick={() => { setShowAdd(false); clearUploadedEvidence(); }} className="btn-secondary">Cancel</button>
-          <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add Expense</button>
+          <button onClick={resetModal} className="btn-secondary">Cancel</button>
+          <button onClick={handleSave} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} {editingExpense ? "Save Changes" : "Add Expense"}</button>
         </>}
       >
         <div className="space-y-4">
@@ -621,6 +680,17 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
                   <span className="text-sm text-slate-700 truncate max-w-xs">{uploadedEvidence.name}</span>
                 </div>
                 <button onClick={clearUploadedEvidence} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+              </div>
+            ) : existingBillUrl && !removeExisting ? (
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <button onClick={() => viewProof("finance-proofs", existingBillUrl)} className="flex items-center gap-2 text-brand-600 hover:text-brand-700">
+                  <CheckCircle2 size={16} />
+                  <span className="text-sm font-medium">Current evidence attached</span>
+                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => evidenceInputRef.current?.click()} className="text-xs text-brand-600 hover:text-brand-700 font-medium">Replace</button>
+                  <button onClick={() => setRemoveExisting(true)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                </div>
               </div>
             ) : (
               <div className="flex gap-2">
