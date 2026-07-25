@@ -40,6 +40,7 @@ import {
 import { fetchVehicleFull, fetchPartners, fetchMechanics } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
 import { supabase } from "@/lib/supabase";
+import { viewProof } from "@/lib/proofStorage";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import {
   EXPENSE_CATEGORIES,
@@ -423,8 +424,42 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" });
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedEvidence, setUploadedEvidence] = useState<{ path: string; previewUrl: string; name: string } | null>(null);
+  const evidenceInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  const clearUploadedEvidence = () => {
+    setUploadedEvidence((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+    if (evidenceInputRef.current) evidenceInputRef.current.value = "";
+  };
+
+  const handleEvidenceSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast("File too large (max 10MB)", "error");
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `expenses/${vehicle.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("finance-proofs").upload(path, file, { cacheControl: "3600", upsert: false });
+      if (upErr) throw upErr;
+      setUploadedEvidence({ path, previewUrl: URL.createObjectURL(file), name: file.name });
+      setForm((f) => ({ ...f, bill_available: true }));
+      toast("Evidence uploaded", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Upload failed", "error");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleAdd = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
@@ -441,6 +476,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
         vendor: form.vendor || null,
         description: form.description || null,
         bill_available: form.bill_available,
+        bill_url: uploadedEvidence?.path || null,
         approval_status: form.approval_status,
         approved_by: form.approval_status === "Approved" ? (user?.email ?? "Unknown") : null,
         approved_at: form.approval_status === "Approved" ? new Date().toISOString() : null,
@@ -449,6 +485,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       toast("Expense added", "success");
       setShowAdd(false);
       setForm({ category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" });
+      clearUploadedEvidence();
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to add expense", "error");
@@ -466,6 +503,15 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to delete", "error");
+    }
+  };
+
+  const handleViewEvidence = async (e: Expense) => {
+    if (!e.bill_url) return;
+    try {
+      await viewProof("finance-proofs", e.bill_url);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to open evidence", "error");
     }
   };
 
@@ -513,7 +559,15 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
                       <td className="py-2.5 text-right font-medium">{formatINR(e.amount)}</td>
                       <td className="py-2.5 text-slate-600">{partner?.name ?? "Business"}</td>
                       <td className="py-2.5 text-slate-500 text-xs">{formatDate(e.expense_date)}</td>
-                      <td className="py-2.5">{e.bill_available ? <Badge color="emerald">Yes</Badge> : <Badge color="slate">No</Badge>}</td>
+                      <td className="py-2.5">
+                        {e.bill_url ? (
+                          <button onClick={() => handleViewEvidence(e)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">View</button>
+                        ) : e.bill_available ? (
+                          <Badge color="emerald">Yes</Badge>
+                        ) : (
+                          <Badge color="slate">No</Badge>
+                        )}
+                      </td>
                       <td className="py-2.5"><Badge color={e.approval_status === "Approved" ? "emerald" : e.approval_status === "Submitted" ? "amber" : e.approval_status === "Rejected" ? "red" : "slate"}>{e.approval_status}</Badge></td>
                       <td className="py-2.5 text-right">
                         {e.approval_status === "Submitted" && <button onClick={() => handleApprove(e)} className="text-brand-600 hover:text-brand-700 text-xs font-medium mr-2">Approve</button>}
@@ -532,10 +586,10 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
 
       <Modal
         open={showAdd}
-        onClose={() => setShowAdd(false)}
+        onClose={() => { setShowAdd(false); clearUploadedEvidence(); }}
         title="Add Expense"
         footer={<>
-          <button onClick={() => setShowAdd(false)} className="btn-secondary">Cancel</button>
+          <button onClick={() => { setShowAdd(false); clearUploadedEvidence(); }} className="btn-secondary">Cancel</button>
           <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add Expense</button>
         </>}
       >
@@ -557,6 +611,29 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
           <Field label="Description">
             <input className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Brake pads + air filter" />
           </Field>
+
+          <Field label="Evidence" hint="Bill, receipt, or payment screenshot (max 10MB)">
+            <input ref={evidenceInputRef} type="file" accept="image/*,.pdf" onChange={handleEvidenceSelect} className="hidden" />
+            {uploadedEvidence ? (
+              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-emerald-600" />
+                  <span className="text-sm text-slate-700 truncate max-w-xs">{uploadedEvidence.name}</span>
+                </div>
+                <button onClick={clearUploadedEvidence} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={() => evidenceInputRef.current?.click()} disabled={uploading} className="btn-secondary flex-1">
+                  {uploading ? <Spinner size={14} /> : <Upload size={15} />} Choose File
+                </button>
+                <button onClick={() => evidenceInputRef.current?.click()} disabled={uploading} className="btn-secondary flex-1">
+                  <Camera size={15} /> Take Photo
+                </button>
+              </div>
+            )}
+          </Field>
+
           <div className="grid grid-cols-2 gap-4">
             <Field label="Bill Available">
               <label className="flex items-center gap-2 mt-2">
