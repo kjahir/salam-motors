@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { Check, AlertTriangle, FileText } from "lucide-react";
+import { Check, AlertTriangle } from "lucide-react";
 import { TopBar, Field, Input, Select, Button, Spinner, Card } from "./ui/primitives";
 import { PartyPickerField } from "@/components/PartyPickerField";
-import { MultiScreenshotUpload } from "@/components/MultiScreenshotUpload";
+import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
-import { viewProof } from "@/lib/proofStorage";
 import { checkRegistrationUnique, fetchVehicleFull } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { generateSlug } from "@/lib/calc";
 import { VEHICLE_CATEGORIES, FUEL_TYPES, PAYMENT_METHODS } from "@/lib/constants";
-import type { UploadedProof } from "@/components/ScreenshotUpload";
+import { diffRemovedPaths, type UploadedFile } from "@/lib/uploadedFile";
+import { syncVehicleAlerts } from "@/lib/compliance";
 import type { Vehicle } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
@@ -91,9 +91,8 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [purchaseForm, setPurchaseForm] = useState<PurchaseForm>(emptyPurchaseForm);
-  const [existingProofs, setExistingProofs] = useState<string[]>([]);
-  const [removedProofs, setRemovedProofs] = useState<string[]>([]);
-  const [newProofs, setNewProofs] = useState<UploadedProof[]>([]);
+  const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
+  const [originalProofPaths, setOriginalProofPaths] = useState<string[]>([]);
   const [uploadSessionId] = useState(() => crypto.randomUUID());
 
   const update = <K extends keyof CoreForm>(key: K, value: CoreForm[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -135,7 +134,9 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
           keys_received: purchase.keys_received,
           documents_received: purchase.documents_received,
         });
-        setExistingProofs(payment?.proof_urls ?? []);
+        const existing = payment?.proof_urls ?? [];
+        setProofFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
+        setOriginalProofPaths(existing);
       }
       setLoading(false);
     })();
@@ -172,11 +173,6 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
     Boolean(form.manufacturer.trim() && form.model.trim() && form.registration_number.trim() && form.manufacture_year) &&
     regAvailable === true &&
     (mode === "edit" || Boolean(sellerPartyId && purchasePrice && Number(purchasePrice) > 0));
-
-  const removeExistingProof = (path: string) => {
-    setExistingProofs((prev) => prev.filter((p) => p !== path));
-    setRemovedProofs((prev) => [...prev, path]);
-  };
 
   const handleCreate = async () => {
     setSubmitting(true);
@@ -261,7 +257,8 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         }).eq("id", purchaseId);
         if (purErr) throw purErr;
 
-        const finalProofs = [...existingProofs, ...newProofs.map((p) => p.path)];
+        const finalProofs = proofFiles.map((f) => f.path);
+        const removedProofs = diffRemovedPaths(originalProofPaths, proofFiles);
         const amount = (Number(purchaseForm.purchase_price) || 0) + (Number(purchaseForm.broker_commission) || 0) + (Number(purchaseForm.other_fee) || 0);
         if (paymentId) {
           const { error: payErr } = await supabase.from("purchase_payments").update({
@@ -285,6 +282,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         if (removedProofs.length) {
           await supabase.storage.from("finance-proofs").remove(removedProofs);
         }
+        syncVehicleAlerts(vehicleId).catch(() => {});
       }
 
       if (askingPrice && askingPrice > 0) {
@@ -435,30 +433,14 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
                 </label>
               </div>
 
-              {existingProofs.length > 0 && (
-                <div>
-                  <label className="block text-xs font-medium text-mobile-text-secondary mb-1.5">Existing Payment Proof</label>
-                  <div className="space-y-1.5">
-                    {existingProofs.map((path) => (
-                      <div key={path} className="flex items-center justify-between rounded-xl border border-mobile-border bg-white p-2.5">
-                        <button onClick={() => viewProof("finance-proofs", path)} className="flex items-center gap-2 min-w-0 text-mobile-primary">
-                          <FileText size={15} className="shrink-0" />
-                          <span className="text-sm truncate">{path.split("/").pop()}</span>
-                        </button>
-                        <button onClick={() => removeExistingProof(path)} className="text-xs text-mobile-error shrink-0">Remove</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <MultiScreenshotUpload
-                bucket="finance-proofs"
-                pathPrefix={`purchase-payments/${uploadSessionId}`}
-                value={newProofs}
-                onChange={setNewProofs}
-                label="Add Payment Proof"
-              />
+              <Field label="Payment Proof" hint="Add one screenshot per transaction">
+                <FileUploadGrid
+                  bucket="finance-proofs"
+                  pathPrefix={`purchase-payments/${uploadSessionId}`}
+                  value={proofFiles}
+                  onChange={setProofFiles}
+                />
+              </Field>
             </Card>
           </>
         )}

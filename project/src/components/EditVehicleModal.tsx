@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
-import { FileText } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { checkRegistrationUnique, fetchVehicleFull } from "@/lib/queries";
 import { generateSlug } from "@/lib/calc";
-import { viewProof } from "@/lib/proofStorage";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { PartyPickerField } from "@/components/PartyPickerField";
-import { MultiScreenshotUpload } from "@/components/MultiScreenshotUpload";
+import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { VehicleFormFields, type VehicleCoreFormData } from "@/components/VehicleFormFields";
-import type { UploadedProof } from "@/components/ScreenshotUpload";
+import { diffRemovedPaths, type UploadedFile } from "@/lib/uploadedFile";
+import { syncVehicleAlerts } from "@/lib/compliance";
 import type { Vehicle, Purchase, PurchasePayment } from "@/lib/types";
 
 interface EditVehicleModalProps {
@@ -97,9 +96,8 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormData>(emptyPurchaseForm);
-  const [existingProofs, setExistingProofs] = useState<string[]>([]);
-  const [removedProofs, setRemovedProofs] = useState<string[]>([]);
-  const [newProofs, setNewProofs] = useState<UploadedProof[]>([]);
+  const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
+  const [originalProofPaths, setOriginalProofPaths] = useState<string[]>([]);
   const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
 
   const { toast } = useToast();
@@ -113,8 +111,6 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
     setForm(toFormData(vehicle));
     setRegAvailable(true);
     setLoadingPurchase(true);
-    setRemovedProofs([]);
-    setNewProofs([]);
     setUploadSessionId(crypto.randomUUID());
     (async () => {
       const [{ data: listing }, full] = await Promise.all([
@@ -128,12 +124,15 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
         setPurchaseId(purchase.id);
         setPaymentId(payment?.id ?? null);
         setPurchaseForm(toPurchaseFormData(purchase, payment));
-        setExistingProofs(payment?.proof_urls ?? []);
+        const existing = payment?.proof_urls ?? [];
+        setProofFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
+        setOriginalProofPaths(existing);
       } else {
         setPurchaseId(null);
         setPaymentId(null);
         setPurchaseForm(emptyPurchaseForm);
-        setExistingProofs([]);
+        setProofFiles([]);
+        setOriginalProofPaths([]);
       }
       setLoadingPurchase(false);
     })();
@@ -167,11 +166,6 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
 
   const update = <K extends keyof VehicleCoreFormData>(key: K, value: VehicleCoreFormData[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
-  };
-
-  const removeExistingProof = (path: string) => {
-    setExistingProofs((prev) => prev.filter((p) => p !== path));
-    setRemovedProofs((prev) => [...prev, path]);
   };
 
   const isValid = Boolean(
@@ -225,7 +219,8 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
         }).eq("id", purchaseId);
         if (purErr) throw purErr;
 
-        const finalProofs = [...existingProofs, ...newProofs.map((p) => p.path)];
+        const finalProofs = proofFiles.map((f) => f.path);
+        const removedProofs = diffRemovedPaths(originalProofPaths, proofFiles);
         if (paymentId) {
           const { error: payErr } = await supabase.from("purchase_payments").update({
             amount: (Number(purchaseForm.purchase_price) || 0) + (Number(purchaseForm.broker_commission) || 0) + (Number(purchaseForm.other_fee) || 0),
@@ -248,6 +243,7 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
         if (removedProofs.length) {
           await supabase.storage.from("finance-proofs").remove(removedProofs);
         }
+        syncVehicleAlerts(vehicle.id).catch(() => {});
       }
 
       if (askingPrice && askingPrice > 0) {
@@ -352,29 +348,13 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
                 </div>
               </div>
 
-              {existingProofs.length > 0 && (
-                <div>
-                  <label className="label">Existing Payment Proof</label>
-                  <div className="space-y-1.5">
-                    {existingProofs.map((path) => (
-                      <div key={path} className="flex items-center justify-between rounded-lg border border-slate-200 p-2.5">
-                        <button onClick={() => viewProof("finance-proofs", path)} className="flex items-center gap-2 min-w-0 text-brand-600 hover:text-brand-700">
-                          <FileText size={15} className="shrink-0" />
-                          <span className="text-sm truncate">{path.split("/").pop()}</span>
-                        </button>
-                        <button onClick={() => removeExistingProof(path)} className="text-xs text-red-500 hover:text-red-700 shrink-0">Remove</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <MultiScreenshotUpload
+              <FileUploadGrid
                 bucket="finance-proofs"
                 pathPrefix={`purchase-payments/${uploadSessionId}`}
-                value={newProofs}
-                onChange={setNewProofs}
-                label="Add Payment Proof"
+                value={proofFiles}
+                onChange={setProofFiles}
+                label="Payment Proof"
+                hint="Add one screenshot per transaction — useful for partial payments, broker fees, or other charges paid separately."
               />
             </div>
           )}

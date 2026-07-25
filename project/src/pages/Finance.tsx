@@ -4,7 +4,8 @@ import { PageHeader, Tabs, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SettlementModal } from "@/components/SettlementModal";
-import { viewProof } from "@/lib/proofStorage";
+import { Lightbox } from "@/components/ui/Lightbox";
+import { useProofLightbox } from "@/hooks/useProofLightbox";
 import { formatINR, formatDate, formatPercent } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
 import {
@@ -16,12 +17,12 @@ import {
   fetchFinancialSummaries,
 } from "@/lib/queries";
 import type { Investment, Expense, ProfitDistribution, ProfitSettlementPayment, Purchase, Sale, Vehicle, Partner, Party, VehicleFinancialSummary } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 type DistributionRow = ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] };
 
 interface FinanceProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 export function Finance({ onNavigate }: FinanceProps) {
@@ -35,6 +36,7 @@ export function Finance({ onNavigate }: FinanceProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [settlingDistribution, setSettlingDistribution] = useState<DistributionRow | null>(null);
+  const proofLightbox = useProofLightbox("finance-proofs");
 
   const reload = async () => {
     try {
@@ -157,9 +159,14 @@ export function Finance({ onNavigate }: FinanceProps) {
                       <td className="px-4 py-3 text-sm text-slate-600">{inv.purpose ?? "—"}</td>
                       <td className="px-4 py-3"><Badge color={inv.status === "Fully used" ? "emerald" : inv.status === "Received" ? "blue" : "amber"}>{inv.status}</Badge></td>
                       <td className="px-4 py-3 text-right">
-                        {inv.proof_url && (
-                          <button onClick={() => viewProof("finance-proofs", inv.proof_url!)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">Proof</button>
-                        )}
+                        {(() => {
+                          const paths = inv.proof_urls?.length ? inv.proof_urls : inv.proof_url ? [inv.proof_url] : [];
+                          return paths.length > 0 ? (
+                            <button onClick={() => proofLightbox.open(paths)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">
+                              Proof{paths.length > 1 ? ` (${paths.length})` : ""}
+                            </button>
+                          ) : null;
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -378,6 +385,14 @@ export function Finance({ onNavigate }: FinanceProps) {
           open={Boolean(settlingDistribution)}
           onClose={() => setSettlingDistribution(null)}
           onSaved={reload}
+        />
+      )}
+      {proofLightbox.lightbox && (
+        <Lightbox
+          items={proofLightbox.lightbox.items}
+          index={proofLightbox.lightbox.index}
+          onClose={proofLightbox.close}
+          onIndexChange={proofLightbox.setIndex}
         />
       )}
     </div>

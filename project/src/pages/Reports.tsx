@@ -15,10 +15,10 @@ import { formatINR, formatDate, daysSince, formatPercent } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
 import { fetchVehicles, fetchFinancialSummaries, fetchProfitDistributions, fetchInvestments, fetchPartners } from "@/lib/queries";
 import type { Vehicle, VehicleFinancialSummary, ProfitDistribution, Investment, Partner } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface ReportsProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 type ReportKey = "inventory" | "ageing" | "profit" | "partner-ledger" | "expenses";
@@ -104,7 +104,7 @@ export function Reports({ onNavigate }: ReportsProps) {
 function InventoryReport({ vehicles, summaryMap, onNavigate }: {
   vehicles: Vehicle[];
   summaryMap: Map<string, VehicleFinancialSummary>;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }) {
   const inStock = vehicles.filter((v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status));
   const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
@@ -178,7 +178,7 @@ function InventoryReport({ vehicles, summaryMap, onNavigate }: {
 function AgeingReport({ vehicles, summaryMap, onNavigate }: {
   vehicles: Vehicle[];
   summaryMap: Map<string, VehicleFinancialSummary>;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }) {
   const inStock = vehicles
     .filter((v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status))
@@ -253,7 +253,7 @@ function AgeingReport({ vehicles, summaryMap, onNavigate }: {
 function ProfitReport({ vehicles, summaryMap, onNavigate }: {
   vehicles: Vehicle[];
   summaryMap: Map<string, VehicleFinancialSummary>;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }) {
   const sold = vehicles.filter((v) => v.current_status === "SOLD" || v.current_status === "DELIVERED");
   const totalProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
@@ -407,7 +407,7 @@ function PartnerLedgerReport({ partners, investments, distributions }: {
 function ExpenseReport({ vehicles, summaryMap, onNavigate }: {
   vehicles: Vehicle[];
   summaryMap: Map<string, VehicleFinancialSummary>;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }) {
   const rows = vehicles.map((v) => {
     const s = summaryMap.get(v.id);

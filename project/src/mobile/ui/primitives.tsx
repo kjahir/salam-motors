@@ -81,9 +81,9 @@ export function Field({ label, required, hint, children, className = "" }: { lab
   );
 }
 
-export function Card({ children, className = "", onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
+export function Card({ children, className = "", onClick, id }: { children: ReactNode; className?: string; onClick?: () => void; id?: string }) {
   return (
-    <div onClick={onClick} className={`bg-mobile-card rounded-2xl border border-mobile-border shadow-mobile-sm ${onClick ? "active:bg-mobile-bg cursor-pointer" : ""} ${className}`}>
+    <div id={id} onClick={onClick} className={`bg-mobile-card rounded-2xl border border-mobile-border shadow-mobile-sm ${onClick ? "active:bg-mobile-bg cursor-pointer" : ""} ${className}`}>
       {children}
     </div>
   );

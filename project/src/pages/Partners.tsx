@@ -10,14 +10,15 @@ import { fetchPartners, fetchInvestments, fetchProfitDistributions } from "@/lib
 import { supabase } from "@/lib/supabase";
 import { AddInvestmentModal } from "@/components/AddInvestmentModal";
 import { SettlementModal } from "@/components/SettlementModal";
-import { viewProof } from "@/lib/proofStorage";
+import { Lightbox } from "@/components/ui/Lightbox";
+import { useProofLightbox } from "@/hooks/useProofLightbox";
 import type { Partner, Investment, ProfitDistribution, ProfitSettlementPayment, Vehicle } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 type DistributionRow = ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] };
 
 interface PartnersProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 export function Partners({ onNavigate }: PartnersProps) {
@@ -32,6 +33,7 @@ export function Partners({ onNavigate }: PartnersProps) {
   const [investingPartner, setInvestingPartner] = useState<Partner | null>(null);
   const [settlingDistribution, setSettlingDistribution] = useState<DistributionRow | null>(null);
   const { toast } = useToast();
+  const proofLightbox = useProofLightbox("finance-proofs");
 
   const reload = async () => {
     try {
@@ -204,11 +206,14 @@ export function Partners({ onNavigate }: PartnersProps) {
                     </button>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-medium text-slate-900">{formatINR(inv.amount)}</span>
-                      {inv.proof_url && (
-                        <button onClick={() => viewProof("finance-proofs", inv.proof_url!)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
-                          Proof
-                        </button>
-                      )}
+                      {(() => {
+                        const paths = inv.proof_urls?.length ? inv.proof_urls : inv.proof_url ? [inv.proof_url] : [];
+                        return paths.length > 0 ? (
+                          <button onClick={() => proofLightbox.open(paths)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
+                            Proof{paths.length > 1 ? ` (${paths.length})` : ""}
+                          </button>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -293,6 +298,14 @@ export function Partners({ onNavigate }: PartnersProps) {
           open={Boolean(settlingDistribution)}
           onClose={() => setSettlingDistribution(null)}
           onSaved={reload}
+        />
+      )}
+      {proofLightbox.lightbox && (
+        <Lightbox
+          items={proofLightbox.lightbox.items}
+          index={proofLightbox.lightbox.index}
+          onClose={proofLightbox.close}
+          onIndexChange={proofLightbox.setIndex}
         />
       )}
     </div>

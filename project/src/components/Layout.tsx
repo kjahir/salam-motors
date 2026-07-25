@@ -11,6 +11,7 @@ import {
   LogOut,
   ChevronDown,
   History,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 
@@ -25,7 +26,16 @@ export type PageKey =
   | "alerts"
   | "reports"
   | "passport"
-  | "history";
+  | "history"
+  | "policies";
+
+export interface NavigateParams {
+  vehicleId?: string;
+  historyVehicleId?: string;
+  tab?: string;
+  openEditVehicle?: boolean;
+  highlightPolicyId?: string;
+}
 
 interface LayoutProps {
   current: PageKey;
@@ -42,12 +52,13 @@ const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: "partners", label: "Partners", icon: <Users size={18} /> },
   { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
   { key: "history", label: "History", icon: <History size={18} /> },
+  { key: "policies", label: "Policies", icon: <ShieldCheck size={18} /> },
 ];
 
 const navSections: { key: PageKey }[][] = [
   [{ key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
-  [{ key: "alerts" }, { key: "history" }],
+  [{ key: "alerts" }, { key: "history" }, { key: "policies" }],
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {

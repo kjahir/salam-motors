@@ -9,12 +9,12 @@ import { checkRegistrationUnique } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { VehicleFormFields, type VehicleCoreFormData } from "@/components/VehicleFormFields";
-import { MultiScreenshotUpload } from "@/components/MultiScreenshotUpload";
-import type { UploadedProof } from "@/components/ScreenshotUpload";
-import type { PageKey } from "@/components/Layout";
+import { FileUploadGrid } from "@/components/FileUploadGrid";
+import type { UploadedFile } from "@/lib/uploadedFile";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface AddVehicleProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 interface FormData extends VehicleCoreFormData {
@@ -71,7 +71,7 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
   const [showMorePurchase, setShowMorePurchase] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
-  const [paymentProofs, setPaymentProofs] = useState<UploadedProof[]>([]);
+  const [paymentProofs, setPaymentProofs] = useState<UploadedFile[]>([]);
   const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const { toast } = useToast();
   const { user } = useAuth();
@@ -215,11 +215,13 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
                 <input className="input" value={form.payment_reference} onChange={(e) => update("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
               </Field>
               <div className="sm:col-span-2">
-                <MultiScreenshotUpload
+                <FileUploadGrid
                   bucket="finance-proofs"
                   pathPrefix={`purchase-payments/${uploadSessionId}`}
                   value={paymentProofs}
                   onChange={setPaymentProofs}
+                  label="Payment Proof"
+                  hint="Add one screenshot per transaction — useful for partial payments, broker fees, or other charges paid separately."
                 />
               </div>
               <Field label="Handover Location">

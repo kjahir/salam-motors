@@ -2,18 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, Bike, PlusCircle, AlertTriangle, Download, X, Pencil, Trash2, Bell, Share2 } from "lucide-react";
 import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
-import { StatusBadge, AgeingBadge } from "@/components/ui/Badge";
+import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
-import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts } from "@/lib/queries";
+import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts, fetchComplianceStatuses } from "@/lib/queries";
 import { VEHICLE_STATUSES, VEHICLE_CATEGORIES } from "@/lib/constants";
 import { EditVehicleModal } from "@/components/EditVehicleModal";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
-import type { Vehicle, VehicleFinancialSummary, Partner } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { Vehicle, VehicleFinancialSummary, Partner, VehicleComplianceStatus } from "@/lib/types";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface InventoryProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 type AgeingFilter = "all" | "normal" | "attention" | "high" | "breach";
@@ -22,6 +22,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [openAlertCounts, setOpenAlertCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +37,11 @@ export function Inventory({ onNavigate }: InventoryProps) {
 
   const reload = async () => {
     try {
-      const [v, s, p, a] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchPartners(), fetchAlerts()]);
+      const [v, s, p, a, c] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchPartners(), fetchAlerts(), fetchComplianceStatuses()]);
       setVehicles(v);
       setSummaries(s);
       setPartners(p);
+      setComplianceStatuses(c);
       const counts = new Map<string, number>();
       for (const alert of a) {
         if (alert.status === "Open") counts.set(alert.vehicle_id, (counts.get(alert.vehicle_id) ?? 0) + 1);
@@ -57,6 +59,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   }, []);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
+  const complianceMap = useMemo(() => new Map(complianceStatuses.map((c) => [c.vehicle_id, c])), [complianceStatuses]);
 
   const filtered = useMemo(() => {
     const soldStatuses = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -241,6 +244,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                   <th className="px-4 py-3 font-medium">Vehicle</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Ageing</th>
+                  <th className="px-4 py-3 font-medium">Compliance</th>
                   <th className="px-4 py-3 font-medium text-right">Total Cost</th>
                   <th className="px-4 py-3 font-medium text-right">Asking</th>
                   <th className="px-4 py-3 font-medium text-right">Est. Profit</th>
@@ -273,6 +277,12 @@ export function Inventory({ onNavigate }: InventoryProps) {
                         ) : (
                           <AgeingBadge days={days} />
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ComplianceBadge
+                          violationCount={complianceMap.get(v.id)?.violation_count ?? 0}
+                          maxSeverityRank={complianceMap.get(v.id)?.max_severity_rank ?? 0}
+                        />
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(s?.total_vehicle_cost ?? 0)}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(v.asking_price)}</td>

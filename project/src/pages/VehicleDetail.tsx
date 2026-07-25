@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Bike,
@@ -16,13 +16,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   Wrench,
-  Upload,
-  Camera,
   Star,
 } from "lucide-react";
 import { PageHeader, Tabs, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
-import { Badge, StatusBadge, VerificationBadge } from "@/components/ui/Badge";
+import { Badge, StatusBadge, VerificationBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
@@ -37,11 +35,14 @@ import {
   computePartnerFunding,
   documentCompleteness,
 } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners, fetchMechanics } from "@/lib/queries";
+import { fetchVehicleFull, fetchPartners, fetchMechanics, fetchCompliancePolicies } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
 import { supabase } from "@/lib/supabase";
-import { viewProof } from "@/lib/proofStorage";
 import { PartyPickerField } from "@/components/PartyPickerField";
+import { FileUploadGrid } from "@/components/FileUploadGrid";
+import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
+import { diffRemovedPaths, isImageName, type UploadedFile } from "@/lib/uploadedFile";
+import { evaluateVehicleCompliance, syncVehicleAlerts, findViolatingRecordIds, type ComplianceViolation } from "@/lib/compliance";
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -55,24 +56,34 @@ import {
   CONDITION_LEVELS,
   ACCIDENT_STATUSES,
   SCORE_WEIGHTS,
+  SEVERITY_RANK,
 } from "@/lib/constants";
-import type { VehicleWithRelations, Partner, Party, Expense, VehicleDocument, Inspection, InspectionItem, MechanicInspectionFeedback } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { VehicleWithRelations, Partner, Party, Expense, VehicleDocument, Inspection, InspectionItem, MechanicInspectionFeedback, CompliancePolicy } from "@/lib/types";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface VehicleDetailProps {
   vehicleId: string;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string; historyVehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
   onBack: () => void;
+  initialTab?: string;
+  openEditVehicle?: boolean;
+  highlightPolicyId?: string;
 }
 
-export function VehicleDetail({ vehicleId, onNavigate, onBack }: VehicleDetailProps) {
+export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openEditVehicle, highlightPolicyId }: VehicleDetailProps) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState("overview");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+    if (openEditVehicle) setShowEditModal(true);
+  }, [initialTab, openEditVehicle, highlightPolicyId, vehicleId]);
 
   const reload = async () => {
     try {
@@ -87,10 +98,11 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack }: VehicleDetailPr
     let cancelled = false;
     (async () => {
       try {
-        const [v, p] = await Promise.all([fetchVehicleFull(vehicleId), fetchPartners()]);
+        const [v, p, pol] = await Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies()]);
         if (cancelled) return;
         setVehicle(v);
         setPartners(p);
+        setPolicies(pol);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load vehicle");
       } finally {
@@ -101,6 +113,18 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack }: VehicleDetailPr
       cancelled = true;
     };
   }, [vehicleId]);
+
+  const complianceViolations = useMemo(
+    () => (vehicle ? evaluateVehicleCompliance(vehicle, policies) : []),
+    [vehicle, policies],
+  );
+
+  const highlightRecordIds = useMemo(() => {
+    if (!vehicle || !highlightPolicyId) return [];
+    const policy = policies.find((p) => p.id === highlightPolicyId);
+    if (!policy) return [];
+    return findViolatingRecordIds(vehicle, policy);
+  }, [vehicle, policies, highlightPolicyId]);
 
   const cost = useMemo(
     () => computeCostBreakdown(vehicle?.purchase, vehicle?.expenses ?? []),
@@ -218,12 +242,13 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack }: VehicleDetailPr
             overallScore={overallScore}
             docCompleteness={docCompleteness}
             funding={funding}
+            complianceViolations={complianceViolations}
             onNavigate={onNavigate}
           />
         )}
-        {tab === "expenses" && <ExpensesTab vehicle={vehicle} partners={partners} onChanged={reload} />}
+        {tab === "expenses" && <ExpensesTab vehicle={vehicle} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
         {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
-        {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} />}
+        {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
         {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} onChanged={reload} />}
       </div>
     </div>
@@ -231,14 +256,15 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack }: VehicleDetailPr
 }
 
 // ============ OVERVIEW ============
-function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, onNavigate }: {
+function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, complianceViolations, onNavigate }: {
   vehicle: VehicleWithRelations;
   cost: ReturnType<typeof computeCostBreakdown>;
   profit: ReturnType<typeof computeProfit> | null;
   overallScore: number | null;
   docCompleteness: ReturnType<typeof documentCompleteness>;
   funding: ReturnType<typeof computePartnerFunding>;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string; historyVehicleId?: string }) => void;
+  complianceViolations: ComplianceViolation[];
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -295,6 +321,24 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${docCompleteness.pct}%` }} />
           </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="text-slate-500">Compliance</span>
+            <ComplianceBadge
+              violationCount={complianceViolations.length}
+              maxSeverityRank={complianceViolations.reduce((max, v) => Math.max(max, SEVERITY_RANK[v.severity] ?? 0), 0)}
+            />
+          </div>
+          {complianceViolations.length > 0 && (
+            <ul className="space-y-1">
+              {complianceViolations.map((v) => (
+                <li key={v.policyId} className="text-xs text-slate-500 flex items-start gap-1.5">
+                  <span className="text-slate-300 mt-0.5">•</span> {v.name}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </Card>
 
@@ -418,45 +462,47 @@ function Spec({ label, value }: { label: string; value: string | null | undefine
 // ============ EXPENSES ============
 const emptyExpenseForm = { category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" };
 
-function ExpensesTab({ vehicle, partners, onChanged }: {
+function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
   vehicle: VehicleWithRelations;
   partners: Partner[];
   onChanged: () => void;
+  highlightIds?: string[];
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [form, setForm] = useState(emptyExpenseForm);
   const [submitting, setSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadedEvidence, setUploadedEvidence] = useState<{ path: string; previewUrl: string; name: string } | null>(null);
-  const [existingBillUrl, setExistingBillUrl] = useState<string | null>(null);
-  const [removeExisting, setRemoveExisting] = useState(false);
-  const evidenceInputRef = useRef<HTMLInputElement>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<UploadedFile[]>([]);
+  const [originalBillUrls, setOriginalBillUrls] = useState<string[]>([]);
+  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
+  const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const clearUploadedEvidence = () => {
-    setUploadedEvidence((prev) => {
-      if (prev) URL.revokeObjectURL(prev.previewUrl);
-      return null;
-    });
-    if (evidenceInputRef.current) evidenceInputRef.current.value = "";
-  };
+  useEffect(() => {
+    if (!highlightIds || highlightIds.length === 0) return;
+    setActiveHighlights(new Set(highlightIds));
+    const el = document.getElementById(`expense-row-${highlightIds[0]}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setActiveHighlights(new Set()), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightIds?.join(",")]);
 
   const resetModal = () => {
     setShowAdd(false);
     setEditingExpense(null);
     setForm(emptyExpenseForm);
-    setExistingBillUrl(null);
-    setRemoveExisting(false);
-    clearUploadedEvidence();
+    setEvidenceFiles([]);
+    setOriginalBillUrls([]);
+    setUploadSessionId(crypto.randomUUID());
   };
 
   const openAdd = () => {
     setEditingExpense(null);
     setForm(emptyExpenseForm);
-    setExistingBillUrl(null);
-    setRemoveExisting(false);
+    setEvidenceFiles([]);
+    setOriginalBillUrls([]);
     setShowAdd(true);
   };
 
@@ -471,33 +517,10 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       bill_available: e.bill_available,
       approval_status: e.approval_status,
     });
-    setExistingBillUrl(e.bill_url);
-    setRemoveExisting(false);
+    const existing = e.bill_urls?.length ? e.bill_urls : e.bill_url ? [e.bill_url] : [];
+    setEvidenceFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
+    setOriginalBillUrls(existing);
     setShowAdd(true);
-  };
-
-  const handleEvidenceSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast("File too large (max 10MB)", "error");
-      return;
-    }
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `expenses/${vehicle.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("finance-proofs").upload(path, file, { cacheControl: "3600", upsert: false });
-      if (upErr) throw upErr;
-      setUploadedEvidence({ path, previewUrl: URL.createObjectURL(file), name: file.name });
-      setRemoveExisting(false);
-      setForm((f) => ({ ...f, bill_available: true }));
-      toast("Evidence uploaded", "success");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Upload failed", "error");
-    } finally {
-      setUploading(false);
-    }
   };
 
   const handleSave = async () => {
@@ -507,8 +530,8 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
     }
     setSubmitting(true);
     try {
-      const finalBillUrl = uploadedEvidence?.path ?? (removeExisting ? null : existingBillUrl);
-      const staleStoragePath = uploadedEvidence || removeExisting ? existingBillUrl : null;
+      const billUrls = evidenceFiles.map((f) => f.path);
+      const removedPaths = diffRemovedPaths(originalBillUrls, evidenceFiles);
 
       if (editingExpense) {
         const { error } = await supabase
@@ -519,12 +542,13 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
             paid_by_partner_id: form.paid_by_partner_id || null,
             vendor: form.vendor || null,
             description: form.description || null,
-            bill_available: form.bill_available,
-            bill_url: finalBillUrl,
+            bill_available: billUrls.length > 0,
+            bill_url: billUrls[0] ?? null,
+            bill_urls: billUrls,
           })
           .eq("id", editingExpense.id);
         if (error) throw error;
-        if (staleStoragePath) await supabase.storage.from("finance-proofs").remove([staleStoragePath]);
+        if (removedPaths.length > 0) await supabase.storage.from("finance-proofs").remove(removedPaths);
         toast("Expense updated", "success");
       } else {
         const { error } = await supabase.from("expenses").insert({
@@ -534,8 +558,9 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
           paid_by_partner_id: form.paid_by_partner_id || null,
           vendor: form.vendor || null,
           description: form.description || null,
-          bill_available: form.bill_available,
-          bill_url: finalBillUrl,
+          bill_available: billUrls.length > 0,
+          bill_url: billUrls[0] ?? null,
+          bill_urls: billUrls,
           approval_status: form.approval_status,
           approved_by: form.approval_status === "Approved" ? (user?.email ?? "Unknown") : null,
           approved_at: form.approval_status === "Approved" ? new Date().toISOString() : null,
@@ -544,6 +569,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
         toast("Expense added", "success");
       }
       resetModal();
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to save expense", "error");
@@ -558,19 +584,30 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       const { error } = await supabase.from("expenses").delete().eq("id", id);
       if (error) throw error;
       toast("Expense removed", "success");
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to delete", "error");
     }
   };
 
-  const handleViewEvidence = async (e: Expense) => {
-    if (!e.bill_url) return;
-    try {
-      await viewProof("finance-proofs", e.bill_url);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to open evidence", "error");
-    }
+  const [evidenceLightbox, setEvidenceLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
+
+  const handleViewEvidence = (e: Expense) => {
+    const paths = e.bill_urls?.length ? e.bill_urls : e.bill_url ? [e.bill_url] : [];
+    if (paths.length === 0) return;
+    setEvidenceLightbox({
+      items: paths.map((path) => ({
+        name: path.split("/").pop() ?? path,
+        isImage: isImageName(path),
+        resolve: async () => {
+          const { data, error } = await supabase.storage.from("finance-proofs").createSignedUrl(path, 300);
+          if (error) throw error;
+          return data.signedUrl;
+        },
+      })),
+      index: 0,
+    });
   };
 
   const handleApprove = async (e: Expense) => {
@@ -578,6 +615,7 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
       const { error } = await supabase.from("expenses").update({ approval_status: "Approved", approved_by: user?.email ?? "Unknown", approved_at: new Date().toISOString() }).eq("id", e.id);
       if (error) throw error;
       toast("Expense approved", "success");
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to approve", "error");
@@ -612,7 +650,11 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
                 {vehicle.expenses.map((e) => {
                   const partner = partners.find((p) => p.id === e.paid_by_partner_id);
                   return (
-                    <tr key={e.id} className="hover:bg-slate-50">
+                    <tr
+                      key={e.id}
+                      id={`expense-row-${e.id}`}
+                      className={`hover:bg-slate-50 transition-colors ${activeHighlights.has(e.id) ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}
+                    >
                       <td className="py-2.5"><span className="font-medium text-slate-900">{e.category}</span>{e.description && <p className="text-xs text-slate-500">{e.description}</p>}</td>
                       <td className="py-2.5 text-right font-medium">{formatINR(e.amount)}</td>
                       <td className="py-2.5 text-slate-600">{partner?.name ?? "Business"}</td>
@@ -671,38 +713,15 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
             <input className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Brake pads + air filter" />
           </Field>
 
-          <Field label="Evidence" hint="Bill, receipt, or payment screenshot (max 10MB)">
-            <input ref={evidenceInputRef} type="file" accept="image/*,.pdf" onChange={handleEvidenceSelect} className="hidden" />
-            {uploadedEvidence ? (
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-600" />
-                  <span className="text-sm text-slate-700 truncate max-w-xs">{uploadedEvidence.name}</span>
-                </div>
-                <button onClick={clearUploadedEvidence} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-              </div>
-            ) : existingBillUrl && !removeExisting ? (
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <button onClick={() => viewProof("finance-proofs", existingBillUrl)} className="flex items-center gap-2 text-brand-600 hover:text-brand-700">
-                  <CheckCircle2 size={16} />
-                  <span className="text-sm font-medium">Current evidence attached</span>
-                </button>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => evidenceInputRef.current?.click()} className="text-xs text-brand-600 hover:text-brand-700 font-medium">Replace</button>
-                  <button onClick={() => setRemoveExisting(true)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button onClick={() => evidenceInputRef.current?.click()} disabled={uploading} className="btn-secondary flex-1">
-                  {uploading ? <Spinner size={14} /> : <Upload size={15} />} Choose File
-                </button>
-                <button onClick={() => evidenceInputRef.current?.click()} disabled={uploading} className="btn-secondary flex-1">
-                  <Camera size={15} /> Take Photo
-                </button>
-              </div>
-            )}
-          </Field>
+          <FileUploadGrid
+            bucket="finance-proofs"
+            pathPrefix={`expenses/${vehicle.id}/${uploadSessionId}`}
+            value={evidenceFiles}
+            onChange={setEvidenceFiles}
+            label="Evidence"
+            hint="Bill, receipt, or payment screenshot — add as many as you need (max 10MB each)"
+          />
+
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Bill Available">
@@ -717,6 +736,15 @@ function ExpensesTab({ vehicle, partners, onChanged }: {
           </div>
         </div>
       </Modal>
+
+      {evidenceLightbox && (
+        <Lightbox
+          items={evidenceLightbox.items}
+          index={evidenceLightbox.index}
+          onClose={() => setEvidenceLightbox(null)}
+          onIndexChange={(index) => setEvidenceLightbox((s) => (s ? { ...s, index } : s))}
+        />
+      )}
     </div>
   );
 }
@@ -1212,55 +1240,44 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
 }
 
 // ============ DOCUMENTS ============
-function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
+function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ document_type: "RC book", document_number: "", issue_date: "", expiry_date: "", issuer: "", verification_status: "Uploaded", notes: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ path: string; previewUrl: string; name: string } | null>(null);
-  const [viewingId, setViewingId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [documentFiles, setDocumentFiles] = useState<UploadedFile[]>([]);
+  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
+  const [docLightbox, setDocLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
+  const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { user } = useAuth();
 
+  useEffect(() => {
+    if (!highlightIds || highlightIds.length === 0) return;
+    setActiveHighlights(new Set(highlightIds));
+    const el = document.getElementById(`document-row-${highlightIds[0]}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setActiveHighlights(new Set()), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightIds?.join(",")]);
+
   // The vehicle-documents bucket is private (identity docs live in it), so reads
-  // always go through a short-lived signed URL rather than a public URL.
+  // always go through a short-lived signed URL rather than a public URL. Older
+  // rows may have stored a full URL rather than a bare storage path.
   const storagePathFor = (fileUrl: string) =>
     fileUrl.includes("/vehicle-documents/") ? fileUrl.split("/vehicle-documents/")[1] : fileUrl;
 
-  const clearUploadedFile = () => {
-    setUploadedFile((prev) => {
-      if (prev) URL.revokeObjectURL(prev.previewUrl);
-      return null;
-    });
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast("File too large (max 10MB)", "error");
-      return;
-    }
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${vehicle.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("vehicle-documents").upload(path, file, { cacheControl: "3600", upsert: false });
-      if (upErr) throw upErr;
-      // Local object URL for the immediate preview — avoids a round-trip and never touches the network.
-      setUploadedFile({ path, previewUrl: URL.createObjectURL(file), name: file.name });
-      toast("File uploaded", "success");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Upload failed", "error");
-    } finally {
-      setUploading(false);
-    }
+  const resetAddForm = () => {
+    setShowAdd(false);
+    setForm({ document_type: "RC book", document_number: "", issue_date: "", expiry_date: "", issuer: "", verification_status: "Uploaded", notes: "" });
+    setDocumentFiles([]);
+    setUploadSessionId(crypto.randomUUID());
   };
 
   const handleAdd = async () => {
     setSubmitting(true);
     try {
+      const fileUrls = documentFiles.map((f) => f.path);
       const { error } = await supabase.from("vehicle_documents").insert({
         vehicle_id: vehicle.id,
         document_type: form.document_type,
@@ -1269,14 +1286,14 @@ function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; o
         expiry_date: form.expiry_date || null,
         issuer: form.issuer || null,
         verification_status: form.verification_status,
-        file_url: uploadedFile?.path || null,
+        file_url: fileUrls[0] ?? null,
+        file_urls: fileUrls,
         notes: form.notes || null,
       });
       if (error) throw error;
       toast("Document added", "success");
-      setShowAdd(false);
-      setForm({ document_type: "RC book", document_number: "", issue_date: "", expiry_date: "", issuer: "", verification_status: "Uploaded", notes: "" });
-      clearUploadedFile();
+      resetAddForm();
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to add document", "error");
@@ -1294,37 +1311,39 @@ function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; o
       }).eq("id", d.id);
       if (error) throw error;
       toast("Document verified", "success");
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to verify", "error");
     }
   };
 
-  const handleView = async (d: VehicleDocument) => {
-    if (!d.file_url) return;
-    setViewingId(d.id);
-    try {
-      const path = storagePathFor(d.file_url);
-      const { data, error } = await supabase.storage.from("vehicle-documents").createSignedUrl(path, 300);
-      if (error) throw error;
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to open document", "error");
-    } finally {
-      setViewingId(null);
-    }
+  const handleView = (d: VehicleDocument) => {
+    const paths = (d.file_urls?.length ? d.file_urls : d.file_url ? [d.file_url] : []).map(storagePathFor);
+    if (paths.length === 0) return;
+    setDocLightbox({
+      items: paths.map((path) => ({
+        name: path.split("/").pop() ?? path,
+        isImage: isImageName(path),
+        resolve: async () => {
+          const { data, error } = await supabase.storage.from("vehicle-documents").createSignedUrl(path, 300);
+          if (error) throw error;
+          return data.signedUrl;
+        },
+      })),
+      index: 0,
+    });
   };
 
   const handleDelete = async (d: VehicleDocument) => {
     if (!confirm("Delete this document record?")) return;
     try {
-      if (d.file_url) {
-        const path = storagePathFor(d.file_url);
-        if (path) await supabase.storage.from("vehicle-documents").remove([path]);
-      }
+      const paths = (d.file_urls?.length ? d.file_urls : d.file_url ? [d.file_url] : []).map(storagePathFor).filter(Boolean);
+      if (paths.length > 0) await supabase.storage.from("vehicle-documents").remove(paths);
       const { error } = await supabase.from("vehicle_documents").delete().eq("id", d.id);
       if (error) throw error;
       toast("Document removed", "success");
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to delete", "error");
@@ -1348,17 +1367,20 @@ function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; o
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {vehicle.documents.map((d) => (
-                  <tr key={d.id} className="hover:bg-slate-50">
+                  <tr
+                    key={d.id}
+                    id={`document-row-${d.id}`}
+                    className={`hover:bg-slate-50 transition-colors ${activeHighlights.has(d.id) ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}
+                  >
                     <td className="py-2.5"><span className="font-medium text-slate-900">{d.document_type}</span>{d.issuer && <p className="text-xs text-slate-500">{d.issuer}</p>}</td>
                     <td className="py-2.5 font-mono text-xs text-slate-600">{d.document_number || "—"}</td>
                     <td className="py-2.5">
-                      {d.file_url ? (
+                      {(d.file_urls?.length ?? (d.file_url ? 1 : 0)) > 0 ? (
                         <button
                           onClick={() => handleView(d)}
-                          disabled={viewingId === d.id}
-                          className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 text-xs font-medium disabled:opacity-50"
+                          className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 text-xs font-medium"
                         >
-                          {viewingId === d.id ? <Spinner size={12} /> : <Download size={13} />} View
+                          <Download size={13} /> View{(d.file_urls?.length ?? 1) > 1 ? ` (${d.file_urls!.length})` : ""}
                         </button>
                       ) : (
                         <span className="text-xs text-slate-400">No file</span>
@@ -1382,12 +1404,12 @@ function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; o
 
       <Modal
         open={showAdd}
-        onClose={() => { setShowAdd(false); clearUploadedFile(); }}
+        onClose={resetAddForm}
         title="Add Document"
         size="lg"
         footer={<>
-          <button onClick={() => { setShowAdd(false); clearUploadedFile(); }} className="btn-secondary">Cancel</button>
-          <button onClick={handleAdd} disabled={submitting || uploading} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add</button>
+          <button onClick={resetAddForm} className="btn-secondary">Cancel</button>
+          <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add</button>
         </>}
       >
         <div className="space-y-4">
@@ -1395,31 +1417,14 @@ function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; o
             <Select value={form.document_type} onChange={(v) => setForm((f) => ({ ...f, document_type: v }))} options={DOCUMENT_TYPES} />
           </Field>
 
-          {/* File upload */}
-          <Field label="Document File / Photo" hint="Upload a photo or scan of the physical document (max 10MB)">
-            <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleFileSelect} className="hidden" />
-            {uploadedFile ? (
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-600" />
-                  <span className="text-sm text-slate-700 truncate max-w-xs">{uploadedFile.name}</span>
-                </div>
-                <button onClick={() => { clearUploadedFile(); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn-secondary flex-1">
-                  {uploading ? <Spinner size={14} /> : <Upload size={15} />} Choose File
-                </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn-secondary flex-1">
-                  <Camera size={15} /> Take Photo
-                </button>
-              </div>
-            )}
-            {uploadedFile && uploadedFile.name.match(/\.(jpg|jpeg|png|webp|gif)$/i) && (
-              <img src={uploadedFile.previewUrl} alt="Preview" className="mt-3 rounded-lg max-h-48 object-contain border border-slate-200" />
-            )}
-          </Field>
+          <FileUploadGrid
+            bucket="vehicle-documents"
+            pathPrefix={`${vehicle.id}/${uploadSessionId}`}
+            value={documentFiles}
+            onChange={setDocumentFiles}
+            label="Document File / Photo"
+            hint="Upload a photo or scan of the physical document — add multiple pages if needed (max 10MB each)"
+          />
 
           <Field label="Document Number">
             <input className="input" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} placeholder="TN22AB1234" />
@@ -1435,6 +1440,15 @@ function DocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; o
           <Field label="Notes"><input className="input" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
         </div>
       </Modal>
+
+      {docLightbox && (
+        <Lightbox
+          items={docLightbox.items}
+          index={docLightbox.index}
+          onClose={() => setDocLightbox(null)}
+          onIndexChange={(index) => setDocLightbox((s) => (s ? { ...s, index } : s))}
+        />
+      )}
     </div>
   );
 }

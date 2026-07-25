@@ -89,6 +89,7 @@ export interface VehicleDocument {
   verified_by: string | null;
   verified_at: string | null;
   file_url: string | null;
+  file_urls: string[] | null;
   version: number;
   notes: string | null;
   created_at: string;
@@ -173,6 +174,7 @@ export interface Expense {
   vendor: string | null;
   bill_available: boolean;
   bill_url: string | null;
+  bill_urls: string[] | null;
   description: string | null;
   approval_status: string;
   approved_by: string | null;
@@ -193,6 +195,7 @@ export interface Investment {
   status: string;
   notes: string | null;
   proof_url: string | null;
+  proof_urls: string[] | null;
   created_at: string;
 }
 
@@ -319,6 +322,7 @@ export interface ProfitSettlementPayment {
   payment_method: string;
   reference: string | null;
   proof_url: string | null;
+  proof_urls: string[] | null;
   notes: string | null;
   paid_at: string;
   created_at: string;
@@ -337,6 +341,35 @@ export interface Alert {
   acknowledged_at: string | null;
   resolved_at: string | null;
   created_at: string;
+  policy_id: string | null;
+}
+
+export interface CompliancePolicy {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  rule_type: string;
+  params: Record<string, unknown>;
+  severity: string;
+  is_active: boolean;
+  resolution_mode: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VehicleComplianceViolation {
+  policy_id: string;
+  name: string;
+  category: string;
+  severity: string;
+}
+
+export interface VehicleComplianceStatus {
+  vehicle_id: string;
+  violation_count: number;
+  max_severity_rank: number;
+  violations: VehicleComplianceViolation[];
 }
 
 export interface AuditLog {

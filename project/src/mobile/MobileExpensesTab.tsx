@@ -1,90 +1,66 @@
-import { useRef, useState } from "react";
-import { CheckCircle2, Pencil, Plus, Receipt, Trash2, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { Card, Spinner, EmptyState, Sheet, Button, Field, Select, Input } from "./ui/primitives";
+import { FileUploadGrid } from "./ui/FileUploadGrid";
+import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
-import { viewProof } from "@/lib/proofStorage";
+import { diffRemovedPaths, isImageName, type UploadedFile } from "@/lib/uploadedFile";
+import { syncVehicleAlerts } from "@/lib/compliance";
 import { formatINR, formatDate } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import type { Expense, VehicleWithRelations } from "@/lib/types";
 
-interface UploadedEvidence {
-  path: string;
-  previewUrl: string;
-  name: string;
-}
-
 const emptyForm = { category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" };
 
-export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
+export function MobileExpensesTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[] }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [evidence, setEvidence] = useState<UploadedEvidence | null>(null);
-  const [existingBillUrl, setExistingBillUrl] = useState<string | null>(null);
-  const [removeExisting, setRemoveExisting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<UploadedFile[]>([]);
+  const [originalBillUrls, setOriginalBillUrls] = useState<string[]>([]);
+  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
+  const [evidenceLightbox, setEvidenceLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
+  const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const clearEvidence = () => {
-    setEvidence((prev) => {
-      if (prev) URL.revokeObjectURL(prev.previewUrl);
-      return null;
-    });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+  useEffect(() => {
+    if (!highlightIds || highlightIds.length === 0) return;
+    setActiveHighlights(new Set(highlightIds));
+    const el = document.getElementById(`expense-card-${highlightIds[0]}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setActiveHighlights(new Set()), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightIds?.join(",")]);
 
   const resetSheet = () => {
     setSheetOpen(false);
     setEditingExpense(null);
     setForm(emptyForm);
-    setExistingBillUrl(null);
-    setRemoveExisting(false);
-    clearEvidence();
+    setEvidenceFiles([]);
+    setOriginalBillUrls([]);
+    setUploadSessionId(crypto.randomUUID());
   };
 
   const openAdd = () => {
     setEditingExpense(null);
     setForm(emptyForm);
-    setExistingBillUrl(null);
-    setRemoveExisting(false);
+    setEvidenceFiles([]);
+    setOriginalBillUrls([]);
     setSheetOpen(true);
   };
 
   const openEdit = (e: Expense) => {
     setEditingExpense(e);
     setForm({ category: e.category, amount: String(e.amount), vendor: e.vendor ?? "" });
-    setExistingBillUrl(e.bill_url);
-    setRemoveExisting(false);
+    const existing = e.bill_urls?.length ? e.bill_urls : e.bill_url ? [e.bill_url] : [];
+    setEvidenceFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
+    setOriginalBillUrls(existing);
     setSheetOpen(true);
-  };
-
-  const handleEvidenceSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast("File too large (max 10MB)", "error");
-      return;
-    }
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `expenses/${vehicle.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage.from("finance-proofs").upload(path, file, { cacheControl: "3600", upsert: false });
-      if (error) throw error;
-      if (evidence) URL.revokeObjectURL(evidence.previewUrl);
-      setEvidence({ path, previewUrl: URL.createObjectURL(file), name: file.name });
-      setRemoveExisting(false);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Upload failed", "error");
-    } finally {
-      setUploading(false);
-    }
   };
 
   const expenses = vehicle.expenses ?? [];
@@ -97,8 +73,8 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
     }
     setSubmitting(true);
     try {
-      const finalBillUrl = evidence?.path ?? (removeExisting ? null : existingBillUrl);
-      const staleStoragePath = evidence || removeExisting ? existingBillUrl : null;
+      const billUrls = evidenceFiles.map((f) => f.path);
+      const removedPaths = diffRemovedPaths(originalBillUrls, evidenceFiles);
 
       if (editingExpense) {
         const { error } = await supabase
@@ -107,12 +83,13 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
             category: form.category,
             amount: Number(form.amount),
             vendor: form.vendor || null,
-            bill_available: Boolean(finalBillUrl),
-            bill_url: finalBillUrl,
+            bill_available: billUrls.length > 0,
+            bill_url: billUrls[0] ?? null,
+            bill_urls: billUrls,
           })
           .eq("id", editingExpense.id);
         if (error) throw error;
-        if (staleStoragePath) await supabase.storage.from("finance-proofs").remove([staleStoragePath]);
+        if (removedPaths.length > 0) await supabase.storage.from("finance-proofs").remove(removedPaths);
         toast("Expense updated", "success");
       } else {
         // Mobile-logged expenses save immediately with no approval step, matching the
@@ -122,8 +99,9 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
           category: form.category,
           amount: Number(form.amount),
           vendor: form.vendor || null,
-          bill_available: Boolean(finalBillUrl),
-          bill_url: finalBillUrl,
+          bill_available: billUrls.length > 0,
+          bill_url: billUrls[0] ?? null,
+          bill_urls: billUrls,
           approval_status: "Approved",
           approved_by: user?.email ?? "Unknown",
           approved_at: new Date().toISOString(),
@@ -132,6 +110,7 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
         toast("Expense added", "success");
       }
       resetSheet();
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to save expense", "error");
@@ -140,12 +119,21 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
     }
   };
 
-  const handleViewEvidence = async (billUrl: string) => {
-    try {
-      await viewProof("finance-proofs", billUrl);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to open evidence", "error");
-    }
+  const handleViewEvidence = (e: Expense) => {
+    const paths = e.bill_urls?.length ? e.bill_urls : e.bill_url ? [e.bill_url] : [];
+    if (paths.length === 0) return;
+    setEvidenceLightbox({
+      items: paths.map((path) => ({
+        name: path.split("/").pop() ?? path,
+        isImage: isImageName(path),
+        resolve: async () => {
+          const { data, error } = await supabase.storage.from("finance-proofs").createSignedUrl(path, 300);
+          if (error) throw error;
+          return data.signedUrl;
+        },
+      })),
+      index: 0,
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -154,6 +142,7 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
       const { error } = await supabase.from("expenses").delete().eq("id", id);
       if (error) throw error;
       toast("Expense removed", "success");
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to delete", "error");
@@ -175,13 +164,17 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
       ) : (
         <div className="space-y-2">
           {expenses.map((e) => (
-            <Card key={e.id} className="p-3.5">
+            <Card
+              key={e.id}
+              id={`expense-card-${e.id}`}
+              className={`p-3.5 transition-colors ${activeHighlights.has(e.id) ? "ring-2 ring-amber-400 bg-amber-50/50" : ""}`}
+            >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-mobile-text truncate">{e.category}</p>
                   <p className="text-xs text-mobile-text-muted">{e.vendor ?? "Business"} · {formatDate(e.expense_date)}</p>
-                  {e.bill_url && (
-                    <button onClick={() => handleViewEvidence(e.bill_url!)} className="text-xs text-mobile-primary font-medium mt-0.5">View evidence</button>
+                  {(e.bill_urls?.length ?? (e.bill_url ? 1 : 0)) > 0 && (
+                    <button onClick={() => handleViewEvidence(e)} className="text-xs text-mobile-primary font-medium mt-0.5">View evidence</button>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -220,35 +213,24 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
           <Field label="Vendor">
             <Input value={form.vendor} onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Sai Spares" />
           </Field>
-          <Field label="Evidence" hint="Bill, receipt, or payment screenshot">
-            <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleEvidenceSelect} className="hidden" />
-            {evidence ? (
-              <div className="flex items-center justify-between rounded-xl border border-mobile-border bg-white p-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <CheckCircle2 size={16} className="text-mobile-success shrink-0" />
-                  <span className="text-sm text-mobile-text truncate">{evidence.name}</span>
-                </div>
-                <button type="button" onClick={clearEvidence} className="text-xs text-mobile-error shrink-0">Remove</button>
-              </div>
-            ) : existingBillUrl && !removeExisting ? (
-              <div className="flex items-center justify-between rounded-xl border border-mobile-border bg-white p-2.5">
-                <button type="button" onClick={() => handleViewEvidence(existingBillUrl)} className="flex items-center gap-2 min-w-0 text-mobile-primary">
-                  <CheckCircle2 size={16} className="shrink-0" />
-                  <span className="text-sm truncate">Current evidence attached</span>
-                </button>
-                <div className="flex items-center gap-3 shrink-0">
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs text-mobile-primary font-medium">Replace</button>
-                  <button type="button" onClick={() => setRemoveExisting(true)} className="text-xs text-mobile-error">Remove</button>
-                </div>
-              </div>
-            ) : (
-              <Button variant="secondary" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()} loading={uploading}>
-                {uploading ? null : <Upload size={14} />} Add Evidence
-              </Button>
-            )}
-          </Field>
+          <FileUploadGrid
+            bucket="finance-proofs"
+            pathPrefix={`expenses/${vehicle.id}/${uploadSessionId}`}
+            value={evidenceFiles}
+            onChange={setEvidenceFiles}
+            hint="Bill, receipt, or payment screenshot — add as many as you need"
+          />
         </div>
       </Sheet>
+
+      {evidenceLightbox && (
+        <Lightbox
+          items={evidenceLightbox.items}
+          index={evidenceLightbox.index}
+          onClose={() => setEvidenceLightbox(null)}
+          onIndexChange={(index) => setEvidenceLightbox((s) => (s ? { ...s, index } : s))}
+        />
+      )}
     </div>
   );
 }

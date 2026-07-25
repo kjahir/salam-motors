@@ -14,10 +14,10 @@ import {
   SELLER_SUBTYPES, BUYER_SUBTYPES, MECHANIC_SUBTYPES, PARTY_SUBTYPE_LABELS, IDENTITY_TYPES, INDIAN_STATES,
 } from "@/lib/constants";
 import type { Party, PartySubtype, Vehicle } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface PartiesProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 type RoleFilter = "all" | "seller" | "buyer" | "mechanic";

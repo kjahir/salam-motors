@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { generateSlug } from "./calc";
 import { nextStockNumber } from "./queries";
+import { syncVehicleAlerts } from "./compliance";
 import type { Vehicle } from "./types";
 
 export interface CreateVehicleInput {
@@ -164,6 +165,8 @@ export async function createVehicle(input: CreateVehicleInput, performedBy: stri
       reason: `Onboarded ${stockNumber}: ${input.manufacturer} ${input.model}`,
     });
     if (auditErr) throw auditErr;
+
+    syncVehicleAlerts(v.id).catch(() => {});
 
     return v;
   } catch (e) {

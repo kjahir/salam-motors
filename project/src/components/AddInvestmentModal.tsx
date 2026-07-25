@@ -5,7 +5,9 @@ import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { fetchVehicles } from "@/lib/queries";
 import { PAYMENT_METHODS, INVESTMENT_STATUSES } from "@/lib/constants";
-import { ScreenshotUpload, type UploadedProof } from "@/components/ScreenshotUpload";
+import { FileUploadGrid } from "@/components/FileUploadGrid";
+import type { UploadedFile } from "@/lib/uploadedFile";
+import { syncVehicleAlerts } from "@/lib/compliance";
 import type { Partner, Vehicle } from "@/lib/types";
 
 interface AddInvestmentModalProps {
@@ -27,7 +29,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
   const [purpose, setPurpose] = useState("Capital contribution");
   const [status, setStatus] = useState("Received");
   const [notes, setNotes] = useState("");
-  const [proof, setProof] = useState<UploadedProof | null>(null);
+  const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -45,7 +47,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     setPurpose("Capital contribution");
     setStatus("Received");
     setNotes("");
-    setProof(null);
+    setProofFiles([]);
   };
 
   const handleClose = () => {
@@ -62,6 +64,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     }
     setSubmitting(true);
     try {
+      const proofUrls = proofFiles.map((f) => f.path);
       const { error } = await supabase.from("investments").insert({
         partner_id: partner.id,
         vehicle_id: vehicleId || null,
@@ -72,10 +75,12 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
         reference: reference.trim() || null,
         status,
         notes: notes.trim() || null,
-        proof_url: proof?.path ?? null,
+        proof_url: proofUrls[0] ?? null,
+        proof_urls: proofUrls,
       });
       if (error) throw error;
       toast("Investment recorded", "success");
+      if (vehicleId) syncVehicleAlerts(vehicleId).catch(() => {});
       onSaved();
       handleClose();
     } catch (e) {
@@ -132,11 +137,13 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
         <Field label="Notes">
           <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
         </Field>
-        <ScreenshotUpload
+        <FileUploadGrid
           bucket="finance-proofs"
           pathPrefix={`investments/${partner.id}`}
-          value={proof}
-          onChange={setProof}
+          value={proofFiles}
+          onChange={setProofFiles}
+          label="Payment Proof"
+          hint="Add one or more screenshots or receipts (max 10MB each)"
         />
       </div>
     </Modal>

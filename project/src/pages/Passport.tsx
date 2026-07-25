@@ -25,11 +25,11 @@ import { formatDate } from "@/lib/format";
 import { computeOverallScore } from "@/lib/calc";
 import { fetchVehicleFull } from "@/lib/queries";
 import type { VehicleWithRelations, InspectionItem } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface PassportProps {
   vehicleId: string;
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
   onBack: () => void;
 }
 

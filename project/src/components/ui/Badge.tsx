@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { COMPLIANCE_BANDS } from "@/lib/constants";
 
 type Color = "brand" | "emerald" | "green" | "blue" | "amber" | "orange" | "red" | "slate" | "purple";
 
@@ -72,6 +73,12 @@ export function AgeingBadge({ days }: { days: number }) {
       <span className="text-xs text-slate-500">{label}</span>
     </span>
   );
+}
+
+export function ComplianceBadge({ violationCount, maxSeverityRank }: { violationCount: number; maxSeverityRank: number }) {
+  if (violationCount === 0) return <Badge color="emerald">Compliant</Badge>;
+  const band = COMPLIANCE_BANDS.find((b) => maxSeverityRank >= b.minRank) ?? COMPLIANCE_BANDS[COMPLIANCE_BANDS.length - 1];
+  return <Badge color={band.color as Color}>{band.label} ({violationCount})</Badge>;
 }
 
 export function VerificationBadge({ status }: { status: string }) {
