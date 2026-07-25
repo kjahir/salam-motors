@@ -17,9 +17,9 @@ import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge, StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
+import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies, fetchInvestments } from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
-import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy, Investment } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface DashboardProps {
@@ -32,6 +32,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,12 +41,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p] = await Promise.all([
+        const [v, s, a, c, p, inv] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
           fetchComplianceStatuses(),
           fetchCompliancePolicies(),
+          fetchInvestments(),
         ]);
         if (cancelled) return;
         setVehicles(v);
@@ -53,6 +55,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setAlerts(a);
         setComplianceStatuses(c);
         setPolicies(p);
+        setInvestments(inv);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
       } finally {
@@ -86,7 +89,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
 
-    const totalInvestment = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_invested ?? 0), 0);
+    const totalInvestment = investments
+      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .reduce((s, i) => s + i.amount, 0);
     const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const totalAsking = inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0);
     const estProfit = inStock.reduce((s, v) => {
@@ -130,7 +135,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       complianceIssues,
       openAlertList: openAlerts.slice(0, 5),
     };
-  }, [vehicles, summaries, alerts, complianceStatuses]);
+  }, [vehicles, summaries, alerts, complianceStatuses, investments]);
 
   if (loading) {
     return (
@@ -190,17 +195,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           color="emerald"
           hint="Across current stock at asking price"
         />
-        <StatCard
-          label="Open Alerts"
-          value={stats.openAlerts}
-          icon={<AlertTriangle size={20} />}
-          color="red"
-          hint={`${stats.aged60} vehicles past 60-day limit`}
-          onClick={() => onNavigate("alerts")}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Compliance Issues"
           value={stats.complianceIssues}
@@ -279,7 +273,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         {/* Open alerts */}
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900">Recent Alerts</h3>
+            <h3 className="font-semibold text-slate-900">Recent Alerts list ({stats.openAlerts} open alert{stats.openAlerts !== 1 ? "s" : ""})</h3>
             <button onClick={() => onNavigate("alerts")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
               All <ArrowRight size={14} />
             </button>

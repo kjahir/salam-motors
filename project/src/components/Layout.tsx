@@ -3,7 +3,6 @@ import {
   Bike,
   Users,
   UserCircle,
-  Wallet,
   Bell,
   PlusCircle,
   Menu,
@@ -26,7 +25,6 @@ export type PageKey =
   | "partners"
   | "finance"
   | "alerts"
-  | "reports"
   | "passport"
   | "history"
   | "policies";
@@ -50,19 +48,18 @@ const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
   { key: "add-vehicle", label: "Add Vehicle", icon: <PlusCircle size={18} /> },
   { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },
-  { key: "finance", label: "Finance", icon: <Wallet size={18} /> },
+  { key: "finance", label: "Reports", icon: <FileBarChart size={18} /> },
   { key: "parties", label: "Parties", icon: <UserCircle size={18} /> },
   { key: "partners", label: "Partners", icon: <Users size={18} /> },
   { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
   { key: "history", label: "History", icon: <History size={18} /> },
   { key: "policies", label: "Policies", icon: <ShieldCheck size={18} /> },
-  { key: "reports", label: "Reports", icon: <FileBarChart size={18} /> },
 ];
 
 const navSections: { key: PageKey }[][] = [
   [{ key: "dashboard" }, { key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
-  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "reports" }],
+  [{ key: "alerts" }, { key: "history" }, { key: "policies" }],
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {

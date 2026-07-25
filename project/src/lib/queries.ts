@@ -27,6 +27,7 @@ import type {
   CompliancePolicy,
   VehicleComplianceStatus,
   VehicleComplianceViolation,
+  VehicleMedia,
 } from "./types";
 
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
@@ -107,6 +108,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
     listingRes,
     enquiriesRes,
     feedbackRes,
+    mediaRes,
   ] = await Promise.all([
     supabase.from("purchases").select("*").eq("vehicle_id", vehicleId).maybeSingle(),
     supabase.from("expenses").select("*").eq("vehicle_id", vehicleId).order("expense_date", { ascending: false }),
@@ -151,6 +153,11 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
       .select("*, mechanic:parties(*)")
       .eq("vehicle_id", vehicleId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("vehicle_media")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .order("uploaded_at", { ascending: false }),
   ]);
 
   // Fetch payments + party relations
@@ -214,6 +221,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
     listing: listingRes.data as Listing | null,
     enquiries: enquiriesRes.data as (Enquiry & { buyer: Party | null })[],
     mechanic_feedback: (feedbackRes.data ?? []) as (MechanicInspectionFeedback & { mechanic: Party | null })[],
+    media: (mediaRes.data ?? []) as VehicleMedia[],
   };
 }
 

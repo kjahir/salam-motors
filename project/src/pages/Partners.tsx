@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2, Banknote } from "lucide-react";
+import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2, Banknote, Download } from "lucide-react";
 import { PageHeader, Field, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
 import { formatINR, formatDate, formatPercent, initials } from "@/lib/format";
+import { downloadCSV } from "@/lib/calc";
 import { fetchPartners, fetchInvestments, fetchProfitDistributions } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { AddInvestmentModal } from "@/components/AddInvestmentModal";
@@ -23,7 +24,7 @@ interface PartnersProps {
 
 export function Partners({ onNavigate }: PartnersProps) {
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [investments, setInvestments] = useState<(Investment & { partner: Partner | null; vehicle: { id: string; stock_number: string; manufacturer: string; model: string } | null })[]>([]);
+  const [investments, setInvestments] = useState<(Investment & { partner: Partner | null; vehicle: Vehicle | null })[]>([]);
   const [distributions, setDistributions] = useState<DistributionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -258,6 +259,12 @@ export function Partners({ onNavigate }: PartnersProps) {
         </div>
       )}
 
+      {partners.length > 0 && (
+        <div className="mt-5">
+          <PartnerLedgerReport partners={partners} investments={investments} distributions={distributions} />
+        </div>
+      )}
+
       {/* Profit-share allocations note */}
       <Card className="p-4 mt-5 bg-slate-50/50">
         <p className="text-xs text-slate-600">
@@ -309,5 +316,84 @@ export function Partners({ onNavigate }: PartnersProps) {
         />
       )}
     </div>
+  );
+}
+
+function PartnerLedgerReport({ partners, investments, distributions }: {
+  partners: Partner[];
+  investments: (Investment & { partner: Partner | null; vehicle: Vehicle | null })[];
+  distributions: (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null })[];
+}) {
+  const rows = partners.map((p) => {
+    const inv = investments.filter((i) => i.partner_id === p.id);
+    const dist = distributions.filter((d) => d.partner_id === p.id);
+    const totalInvested = inv.filter((i) => ["Received", "Partially used", "Fully used"].includes(i.status)).reduce((s, i) => s + i.amount, 0);
+    const principalReturned = dist.reduce((s, d) => s + d.principal_return, 0);
+    const profitCredited = dist.reduce((s, d) => s + d.profit_share, 0);
+    const paid = dist.reduce((s, d) => s + d.amount_paid, 0);
+    const balance = dist.reduce((s, d) => s + d.balance_payable, 0);
+    const closingBalance = totalInvested - principalReturned;
+    return { partner: p, totalInvested, principalReturned, profitCredited, paid, balance, closingBalance, invCount: inv.length };
+  });
+
+  const exportCsv = () => {
+    downloadCSV("partner-ledger.csv", rows.map((r) => ({
+      Partner: r.partner.name,
+      "Total Invested": r.totalInvested,
+      "Principal Returned": r.principalReturned,
+      "Profit Credited": r.profitCredited,
+      "Amount Paid": r.paid,
+      "Balance Payable": r.balance,
+      "Closing Balance": r.closingBalance,
+      "Investment Count": r.invCount,
+    })));
+  };
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between p-4 border-b border-slate-100">
+        <h3 className="font-semibold text-slate-900">Partner Capital Ledger</h3>
+        <button onClick={exportCsv} className="btn-secondary btn-sm"><Download size={14} /> Export CSV</button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr className="text-left text-xs text-slate-600">
+              <th className="px-4 py-3 font-medium">Partner</th>
+              <th className="px-4 py-3 font-medium text-right">Invested</th>
+              <th className="px-4 py-3 font-medium text-right">Principal Returned</th>
+              <th className="px-4 py-3 font-medium text-right">Profit Credited</th>
+              <th className="px-4 py-3 font-medium text-right">Paid</th>
+              <th className="px-4 py-3 font-medium text-right">Balance</th>
+              <th className="px-4 py-3 font-medium text-right">Closing</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((r) => (
+              <tr key={r.partner.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 font-medium text-slate-900">{r.partner.name}</td>
+                <td className="px-4 py-3 text-right">{formatINR(r.totalInvested)}</td>
+                <td className="px-4 py-3 text-right">{formatINR(r.principalReturned)}</td>
+                <td className="px-4 py-3 text-right text-emerald-600 font-medium">{formatINR(r.profitCredited)}</td>
+                <td className="px-4 py-3 text-right">{formatINR(r.paid)}</td>
+                <td className="px-4 py-3 text-right text-amber-600">{formatINR(r.balance)}</td>
+                <td className="px-4 py-3 text-right font-bold">{formatINR(r.closingBalance)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+            <tr className="font-semibold">
+              <td className="px-4 py-3">Total</td>
+              <td className="px-4 py-3 text-right">{formatINR(rows.reduce((s, r) => s + r.totalInvested, 0))}</td>
+              <td className="px-4 py-3 text-right">{formatINR(rows.reduce((s, r) => s + r.principalReturned, 0))}</td>
+              <td className="px-4 py-3 text-right text-emerald-600">{formatINR(rows.reduce((s, r) => s + r.profitCredited, 0))}</td>
+              <td className="px-4 py-3 text-right">{formatINR(rows.reduce((s, r) => s + r.paid, 0))}</td>
+              <td className="px-4 py-3 text-right text-amber-600">{formatINR(rows.reduce((s, r) => s + r.balance, 0))}</td>
+              <td className="px-4 py-3 text-right">{formatINR(rows.reduce((s, r) => s + r.closingBalance, 0))}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Card>
   );
 }

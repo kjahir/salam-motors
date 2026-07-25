@@ -5,13 +5,16 @@ import { PartyPickerField } from "@/components/PartyPickerField";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
+import { supabase } from "@/lib/supabase";
 import { formatINR, formatDate, formatPercent, daysSince } from "@/lib/format";
 import { computeCostBreakdown, computeProfit, computeOverallScore, computePartnerFunding, documentCompleteness } from "@/lib/calc";
 import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
 import { evaluateVehicleCompliance, findViolatingRecordIds } from "@/lib/compliance";
 import { ScoreRing } from "@/components/ui/ScoreRing";
+import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { PAYMENT_METHODS, SEVERITY_RANK } from "@/lib/constants";
+import type { UploadedFile } from "@/lib/uploadedFile";
 import type { VehicleWithRelations, Partner, InspectionItem, CompliancePolicy } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 import { MobileDocumentsTab } from "./MobileDocumentsTab";
@@ -173,6 +176,62 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
   );
 }
 
+function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
+  const media = vehicle.media ?? [];
+  const [files, setFiles] = useState<UploadedFile[]>(() =>
+    media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })),
+  );
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setFiles(media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle.media]);
+
+  const handleChange = async (newFiles: UploadedFile[]) => {
+    setFiles(newFiles);
+    setSaving(true);
+    try {
+      const existingPaths = new Set(media.map((m) => m.file_url).filter(Boolean));
+      const newPaths = new Set(newFiles.map((f) => f.path));
+      const added = newFiles.filter((f) => !existingPaths.has(f.path));
+      const removed = media.filter((m) => m.file_url && !newPaths.has(m.file_url));
+
+      if (added.length > 0) {
+        const { error } = await supabase.from("vehicle_media").insert(
+          added.map((f) => ({ vehicle_id: vehicle.id, media_type: "photo", media_category: "general", file_url: f.path })),
+        );
+        if (error) throw error;
+      }
+      if (removed.length > 0) {
+        const { error } = await supabase.from("vehicle_media").delete().in("id", removed.map((m) => m.id));
+        if (error) throw error;
+        await supabase.storage.from("vehicle-photos").remove(removed.map((m) => m.file_url!));
+      }
+      onChanged();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to save photos", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Photos</h3>
+      <FileUploadGrid
+        bucket="vehicle-photos"
+        pathPrefix={vehicle.id}
+        value={files}
+        onChange={handleChange}
+        hint={saving ? "Saving…" : "Add photos — exterior, interior, damage, etc."}
+        fileAccept="image/*"
+      />
+    </Card>
+  );
+}
+
 function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, complianceViolations, partners, onChanged, onNavigate }: {
   vehicle: VehicleWithRelations;
   cost: ReturnType<typeof computeCostBreakdown>;
@@ -227,6 +286,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
 
   return (
     <div className="space-y-3 pt-3">
+      <PhotosCard vehicle={vehicle} onChanged={onChanged} />
       {vehicle.sale ? (
         <Card className="p-4">
           <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Sale Completed</h3>

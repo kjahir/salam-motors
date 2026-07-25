@@ -15,7 +15,6 @@ import { Partners } from "@/pages/Partners";
 import { Parties } from "@/pages/Parties";
 import { Finance } from "@/pages/Finance";
 import { Alerts } from "@/pages/Alerts";
-import { Reports } from "@/pages/Reports";
 import { History } from "@/pages/History";
 import { Policies } from "@/pages/Policies";
 import { fetchAlerts } from "@/lib/queries";
@@ -91,8 +90,6 @@ function AppContent() {
         return <Finance onNavigate={handleNavigate} />;
       case "alerts":
         return <Alerts onNavigate={handleNavigate} />;
-      case "reports":
-        return <Reports onNavigate={handleNavigate} />;
       case "history":
         return <History vehicleFilter={historyVehicleId} />;
       case "policies":
