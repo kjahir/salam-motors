@@ -67,7 +67,7 @@ export function MobileApp() {
 
       {showBottomNav && (
         <nav className="fixed bottom-0 left-0 right-0 z-30 bg-mobile-card border-t border-mobile-border">
-          <div className="relative flex items-center justify-around h-16 max-w-md mx-auto px-2">
+          <div className="flex items-stretch max-w-md mx-auto">
             <NavButton
               active={isTabActive("dashboard")}
               icon={<LayoutDashboard size={20} />}
@@ -80,20 +80,22 @@ export function MobileApp() {
               label="Inventory"
               onClick={() => navigate("inventory")}
             />
-            <div className="w-14 shrink-0" />
+            <button
+              onClick={() => navigate("add-vehicle")}
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
+              aria-label="Add vehicle"
+            >
+              <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-mobile-primary text-white">
+                <Plus size={18} />
+              </span>
+              <span className="text-[11px] font-semibold leading-none text-mobile-primary">Add</span>
+            </button>
             <NavButton
               active={isTabActive("reports")}
               icon={<FileBarChart size={20} />}
               label="Reports"
               onClick={() => navigate("reports")}
             />
-            <button
-              onClick={() => navigate("add-vehicle")}
-              className="absolute left-1/2 -top-5 -translate-x-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-mobile-primary text-white shadow-mobile-lg active:bg-mobile-primary-active"
-              aria-label="Add vehicle"
-            >
-              <Plus size={26} />
-            </button>
           </div>
         </nav>
       )}
@@ -103,7 +105,7 @@ export function MobileApp() {
 
 function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-lg ${active ? "text-mobile-primary" : "text-mobile-text-muted"}`}>
+    <button onClick={onClick} className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 ${active ? "text-mobile-primary" : "text-mobile-text-muted"}`}>
       {icon}
       <span className="text-[10px] font-medium leading-none">{label}</span>
     </button>

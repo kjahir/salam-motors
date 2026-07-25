@@ -30,6 +30,7 @@ export interface CreateVehicleInput {
   other_fee: string;
   payment_method: string;
   payment_reference: string;
+  payment_proof_paths: string[];
   handover_location: string;
   odometer_at_purchase: string;
   keys_received: boolean;
@@ -135,6 +136,7 @@ export async function createVehicle(input: CreateVehicleInput, performedBy: stri
       amount: Number(input.purchase_price) + Number(input.broker_commission || 0) + Number(input.other_fee || 0),
       payment_method: input.payment_method,
       reference: input.payment_reference || null,
+      proof_urls: input.payment_proof_paths.length ? input.payment_proof_paths : null,
       paid_at: new Date().toISOString(),
     }).select().single();
     if (payErr) throw payErr;

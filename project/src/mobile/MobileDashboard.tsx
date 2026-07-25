@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bike, TrendingUp, Wallet, AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut } from "lucide-react";
 import { Spinner, Card, EmptyState } from "./ui/primitives";
 import { formatINR, daysSince } from "@/lib/format";
 import { fetchVehicles, fetchFinancialSummaries, fetchAlerts } from "@/lib/queries";
@@ -14,7 +14,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [loading, setLoading] = useState(true);
-  const { signOut, user } = useAuth();
+  const { signOut } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -38,16 +38,21 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
     const inStock = vehicles.filter((v) => !SOLD_STATUSES.includes(v.current_status));
     const sold = vehicles.filter((v) => v.current_status === "SOLD" || v.current_status === "DELIVERED");
+    const purchasedValue = vehicles.reduce((s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0), 0);
+    const soldValue = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.sale_price ?? 0), 0);
     const inStockValue = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
-    const estProfit = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.estimated_profit ?? 0), 0);
-    const realisedProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
+    const totalExpenses = vehicles.reduce((s, v) => s + (summaryMap.get(v.id)?.total_expense ?? 0), 0);
+    const overallProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
     const openAlerts = alerts.filter((a) => a.status === "Open").sort((a, b) => (b.days_in_inventory ?? 0) - (a.days_in_inventory ?? 0));
     return {
-      inStockCount: inStock.length,
+      purchasedCount: vehicles.length,
+      purchasedValue,
       soldCount: sold.length,
+      soldValue,
+      inStockCount: inStock.length,
       inStockValue,
-      estProfit,
-      realisedProfit,
+      totalExpenses,
+      overallProfit,
       openAlerts: openAlerts.slice(0, 5),
       openAlertCount: openAlerts.length,
     };
@@ -61,33 +66,43 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     );
   }
 
+  const plPositive = stats.overallProfit >= 0;
+
   return (
     <div>
-      <div className="flex items-center justify-between px-4 pt-5 pb-2">
+      <div className="bg-mobile-navy text-white px-5 pt-6 pb-8 flex items-start justify-between">
         <div>
-          <p className="text-xs text-mobile-text-muted">Welcome back</p>
-          <h1 className="text-lg font-poppins font-bold text-mobile-text">{user?.email?.split("@")[0] ?? "Dashboard"}</h1>
+          <p className="font-poppins text-[13px] font-medium uppercase tracking-wide text-white/70">Salam</p>
+          <h1 className="font-poppins text-2xl font-bold mt-1">Dashboard</h1>
         </div>
-        <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white border border-mobile-border text-mobile-text-muted active:bg-mobile-bg" aria-label="Sign out">
+        <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label="Sign out">
           <LogOut size={16} />
         </button>
       </div>
 
-      <div className="px-4 pt-2">
-        <Card className="p-5 bg-mobile-navy text-white border-0">
-          <p className="text-xs text-white/70">Realised Profit (All Time)</p>
-          <p className="text-3xl font-poppins font-bold mt-1">{formatINR(stats.realisedProfit)}</p>
-          <p className="text-xs text-white/60 mt-2">
-            + {formatINR(stats.estProfit)} estimated across {stats.inStockCount} vehicle{stats.inStockCount !== 1 ? "s" : ""} in stock
+      <div className="px-4 -mt-4">
+        <Card className="p-5">
+          <p className="text-[13px] font-medium text-mobile-text-secondary">Overall Profit / Loss</p>
+          <p className={`font-poppins text-[32px] font-bold mt-1 ${plPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+            {plPositive ? "+" : ""}
+            {formatINR(stats.overallProfit)}
+          </p>
+          <p className="text-xs text-mobile-text-muted mt-1">
+            Across {stats.soldCount} bike{stats.soldCount !== 1 ? "s" : ""} sold to date
           </p>
         </Card>
       </div>
 
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <StatTile icon={<Bike size={16} />} label="In Stock" value={String(stats.inStockCount)} onClick={() => onNavigate("inventory")} />
-        <StatTile icon={<CheckCircle2 size={16} />} label="Sold" value={String(stats.soldCount)} />
-        <StatTile icon={<Wallet size={16} />} label="Stock Value" value={formatINR(stats.inStockValue, { compact: true })} />
-        <StatTile icon={<TrendingUp size={16} />} label="Est. Profit" value={formatINR(stats.estProfit, { compact: true })} />
+        <StatTile label="Purchased" value={`${stats.purchasedCount} bike${stats.purchasedCount !== 1 ? "s" : ""}`} sub={formatINR(stats.purchasedValue)} />
+        <StatTile label="Sold" value={`${stats.soldCount} bike${stats.soldCount !== 1 ? "s" : ""}`} sub={formatINR(stats.soldValue)} />
+        <StatTile
+          label="In Stock"
+          value={`${stats.inStockCount} bike${stats.inStockCount !== 1 ? "s" : ""}`}
+          sub={formatINR(stats.inStockValue)}
+          onClick={() => onNavigate("inventory")}
+        />
+        <StatTile label="Total Expenses" value={formatINR(stats.totalExpenses)} sub="Service, repairs & more" />
       </div>
 
       <div className="px-4 pt-5">
@@ -129,14 +144,12 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   );
 }
 
-function StatTile({ icon, label, value, onClick }: { icon: React.ReactNode; label: string; value: string; onClick?: () => void }) {
+function StatTile({ label, value, sub, onClick }: { label: string; value: string; sub: string; onClick?: () => void }) {
   return (
-    <Card className="p-3.5" onClick={onClick}>
-      <div className="flex items-center gap-1.5 text-mobile-text-muted">
-        {icon}
-        <span className="text-[11px] font-medium uppercase tracking-wide">{label}</span>
-      </div>
-      <p className="text-lg font-poppins font-bold text-mobile-text mt-1">{value}</p>
+    <Card className="p-4" onClick={onClick}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-mobile-text-muted">{label}</p>
+      <p className="font-poppins text-[22px] font-bold text-mobile-text mt-1.5">{value}</p>
+      <p className="text-[13px] text-mobile-text-secondary mt-0.5">{sub}</p>
     </Card>
   );
 }
