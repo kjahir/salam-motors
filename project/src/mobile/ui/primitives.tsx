@@ -38,7 +38,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { className = "", ...rest } = props;
   return (
     <input
-      className={`w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm text-mobile-text placeholder-mobile-text-muted transition-colors focus:border-mobile-primary focus:outline-none focus:ring-2 focus:ring-mobile-primary/15 ${className}`}
+      className={`mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-mobile-text placeholder-mobile-text-muted transition-colors focus:border-mobile-primary focus:outline-none focus:ring-2 focus:ring-mobile-primary/15 ${className}`}
       {...rest}
     />
   );
@@ -58,7 +58,7 @@ export function Select({ value, onChange, options, placeholder, className = "" }
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm text-mobile-text focus:border-mobile-primary focus:outline-none focus:ring-2 focus:ring-mobile-primary/15 ${className}`}
+      className={`mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-mobile-text focus:border-mobile-primary focus:outline-none focus:ring-2 focus:ring-mobile-primary/15 ${className}`}
     >
       {placeholder && <option value="">{placeholder}</option>}
       {opts.map((o) => (

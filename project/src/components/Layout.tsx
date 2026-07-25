@@ -1,12 +1,10 @@
 import { type ReactNode, useState } from "react";
 import {
-  LayoutDashboard,
   Bike,
   Users,
   UserCircle,
   Wallet,
   Bell,
-  FileBarChart,
   PlusCircle,
   Menu,
   X,
@@ -37,15 +35,19 @@ interface LayoutProps {
 }
 
 const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
-  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
   { key: "add-vehicle", label: "Add Vehicle", icon: <PlusCircle size={18} /> },
   { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },
+  { key: "finance", label: "Finance", icon: <Wallet size={18} /> },
   { key: "parties", label: "Parties", icon: <UserCircle size={18} /> },
   { key: "partners", label: "Partners", icon: <Users size={18} /> },
-  { key: "finance", label: "Finance", icon: <Wallet size={18} /> },
   { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
-  { key: "reports", label: "Reports", icon: <FileBarChart size={18} /> },
   { key: "history", label: "History", icon: <History size={18} /> },
+];
+
+const navSections: { key: PageKey }[][] = [
+  [{ key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
+  [{ key: "parties" }, { key: "partners" }],
+  [{ key: "alerts" }, { key: "history" }],
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
@@ -73,27 +75,35 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const active = isActive(item.key);
-          return (
-            <button
-              key={item.key}
-              onClick={() => handleNav(item.key)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                active ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              {item.icon}
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.key === "alerts" && alertCount > 0 && (
-                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                  {alertCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        {navSections.map((section, sectionIndex) => (
+          <div
+            key={sectionIndex}
+            className={`space-y-0.5 ${sectionIndex > 0 ? "mt-4 pt-4 border-t border-slate-800" : ""}`}
+          >
+            {section.map(({ key }) => {
+              const item = navItems.find((n) => n.key === key)!;
+              const active = isActive(item.key);
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => handleNav(item.key)}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    active ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {item.icon}
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {item.key === "alerts" && alertCount > 0 && (
+                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {alertCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="px-3 py-4 border-t border-slate-800">
