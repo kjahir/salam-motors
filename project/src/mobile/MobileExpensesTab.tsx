@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CheckCircle2, Plus, Receipt, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, Pencil, Plus, Receipt, Trash2, Upload } from "lucide-react";
 import { Card, Spinner, EmptyState, Sheet, Button, Field, Select, Input } from "./ui/primitives";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { viewProof } from "@/lib/proofStorage";
 import { formatINR, formatDate } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
-import type { VehicleWithRelations } from "@/lib/types";
+import type { Expense, VehicleWithRelations } from "@/lib/types";
 
 interface UploadedEvidence {
   path: string;
@@ -15,12 +15,17 @@ interface UploadedEvidence {
   name: string;
 }
 
+const emptyForm = { category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" };
+
 export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" });
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [evidence, setEvidence] = useState<UploadedEvidence | null>(null);
+  const [existingBillUrl, setExistingBillUrl] = useState<string | null>(null);
+  const [removeExisting, setRemoveExisting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -31,6 +36,31 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
       return null;
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const resetSheet = () => {
+    setSheetOpen(false);
+    setEditingExpense(null);
+    setForm(emptyForm);
+    setExistingBillUrl(null);
+    setRemoveExisting(false);
+    clearEvidence();
+  };
+
+  const openAdd = () => {
+    setEditingExpense(null);
+    setForm(emptyForm);
+    setExistingBillUrl(null);
+    setRemoveExisting(false);
+    setSheetOpen(true);
+  };
+
+  const openEdit = (e: Expense) => {
+    setEditingExpense(e);
+    setForm({ category: e.category, amount: String(e.amount), vendor: e.vendor ?? "" });
+    setExistingBillUrl(e.bill_url);
+    setRemoveExisting(false);
+    setSheetOpen(true);
   };
 
   const handleEvidenceSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,6 +79,7 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
       if (error) throw error;
       if (evidence) URL.revokeObjectURL(evidence.previewUrl);
       setEvidence({ path, previewUrl: URL.createObjectURL(file), name: file.name });
+      setRemoveExisting(false);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Upload failed", "error");
     } finally {
@@ -59,34 +90,51 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
   const expenses = vehicle.expenses ?? [];
   const total = expenses.filter((e) => e.approval_status === "Approved" || e.approval_status === "Paid").reduce((s, e) => s + e.amount, 0);
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
       toast("Enter a valid amount", "error");
       return;
     }
     setSubmitting(true);
     try {
-      // Mobile-logged expenses save immediately with no approval step, matching the
-      // design's one-tap flow — they count toward cost/profit right away.
-      const { error } = await supabase.from("expenses").insert({
-        vehicle_id: vehicle.id,
-        category: form.category,
-        amount: Number(form.amount),
-        vendor: form.vendor || null,
-        bill_available: Boolean(evidence),
-        bill_url: evidence?.path ?? null,
-        approval_status: "Approved",
-        approved_by: user?.email ?? "Unknown",
-        approved_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      toast("Expense added", "success");
-      setShowAdd(false);
-      setForm({ category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" });
-      clearEvidence();
+      const finalBillUrl = evidence?.path ?? (removeExisting ? null : existingBillUrl);
+      const staleStoragePath = evidence || removeExisting ? existingBillUrl : null;
+
+      if (editingExpense) {
+        const { error } = await supabase
+          .from("expenses")
+          .update({
+            category: form.category,
+            amount: Number(form.amount),
+            vendor: form.vendor || null,
+            bill_available: Boolean(finalBillUrl),
+            bill_url: finalBillUrl,
+          })
+          .eq("id", editingExpense.id);
+        if (error) throw error;
+        if (staleStoragePath) await supabase.storage.from("finance-proofs").remove([staleStoragePath]);
+        toast("Expense updated", "success");
+      } else {
+        // Mobile-logged expenses save immediately with no approval step, matching the
+        // design's one-tap flow — they count toward cost/profit right away.
+        const { error } = await supabase.from("expenses").insert({
+          vehicle_id: vehicle.id,
+          category: form.category,
+          amount: Number(form.amount),
+          vendor: form.vendor || null,
+          bill_available: Boolean(finalBillUrl),
+          bill_url: finalBillUrl,
+          approval_status: "Approved",
+          approved_by: user?.email ?? "Unknown",
+          approved_at: new Date().toISOString(),
+        });
+        if (error) throw error;
+        toast("Expense added", "success");
+      }
+      resetSheet();
       onChanged();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to add expense", "error");
+      toast(e instanceof Error ? e.message : "Failed to save expense", "error");
     } finally {
       setSubmitting(false);
     }
@@ -119,7 +167,7 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
           <p className="text-[10px] text-mobile-text-muted uppercase">Total Expenses</p>
           <p className="text-lg font-poppins font-bold text-mobile-text mt-0.5">{formatINR(total)}</p>
         </div>
-        <Button size="sm" onClick={() => setShowAdd(true)}><Plus size={14} /> Add</Button>
+        <Button size="sm" onClick={openAdd}><Plus size={14} /> Add</Button>
       </Card>
 
       {expenses.length === 0 ? (
@@ -138,6 +186,9 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-sm font-semibold text-mobile-text">{formatINR(e.amount)}</span>
+                  <button onClick={() => openEdit(e)} className="text-mobile-text-muted active:text-mobile-primary p-1">
+                    <Pencil size={14} />
+                  </button>
                   <button onClick={() => handleDelete(e.id)} className="text-mobile-text-muted active:text-mobile-error p-1">
                     <Trash2 size={14} />
                   </button>
@@ -149,13 +200,13 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
       )}
 
       <Sheet
-        open={showAdd}
-        onClose={() => { setShowAdd(false); clearEvidence(); }}
-        title="Add Expense"
+        open={sheetOpen}
+        onClose={resetSheet}
+        title={editingExpense ? "Edit Expense" : "Add Expense"}
         footer={
           <div className="flex gap-3 w-full">
-            <Button variant="secondary" className="flex-1" onClick={() => { setShowAdd(false); clearEvidence(); }}>Cancel</Button>
-            <Button className="flex-1" onClick={handleAdd} loading={submitting}>{submitting ? <Spinner size={14} /> : null} Save</Button>
+            <Button variant="secondary" className="flex-1" onClick={resetSheet}>Cancel</Button>
+            <Button className="flex-1" onClick={handleSave} loading={submitting}>{submitting ? <Spinner size={14} /> : null} Save</Button>
           </div>
         }
       >
@@ -178,6 +229,17 @@ export function MobileExpensesTab({ vehicle, onChanged }: { vehicle: VehicleWith
                   <span className="text-sm text-mobile-text truncate">{evidence.name}</span>
                 </div>
                 <button type="button" onClick={clearEvidence} className="text-xs text-mobile-error shrink-0">Remove</button>
+              </div>
+            ) : existingBillUrl && !removeExisting ? (
+              <div className="flex items-center justify-between rounded-xl border border-mobile-border bg-white p-2.5">
+                <button type="button" onClick={() => handleViewEvidence(existingBillUrl)} className="flex items-center gap-2 min-w-0 text-mobile-primary">
+                  <CheckCircle2 size={16} className="shrink-0" />
+                  <span className="text-sm truncate">Current evidence attached</span>
+                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs text-mobile-primary font-medium">Replace</button>
+                  <button type="button" onClick={() => setRemoveExisting(true)} className="text-xs text-mobile-error">Remove</button>
+                </div>
               </div>
             ) : (
               <Button variant="secondary" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()} loading={uploading}>
