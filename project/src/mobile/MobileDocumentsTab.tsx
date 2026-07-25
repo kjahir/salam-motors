@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle2, Eye, FileText } from "lucide-react";
+import { CheckCircle2, Eye, FileText, Upload } from "lucide-react";
 import { Card, Spinner, Tag, EmptyState } from "./ui/primitives";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
@@ -108,7 +108,7 @@ export function MobileDocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWit
 
   return (
     <div className="space-y-2.5 pt-3">
-      <input ref={fileInputRef} type="file" accept="image/*,.pdf" capture="environment" onChange={handleFileSelect} className="hidden" />
+      <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleFileSelect} className="hidden" />
       {documents.length === 0 ? (
         <Card className="p-5"><EmptyState icon={<FileText size={20} />} title="No documents" /></Card>
       ) : (
@@ -129,7 +129,7 @@ export function MobileDocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWit
                 </button>
               ) : (
                 <button onClick={() => openPicker(d)} disabled={uploadingId === d.id} className="flex h-9 w-9 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary shrink-0">
-                  {uploadingId === d.id ? <Spinner size={14} /> : <Camera size={16} />}
+                  {uploadingId === d.id ? <Spinner size={14} /> : <Upload size={16} />}
                 </button>
               )}
             </div>
