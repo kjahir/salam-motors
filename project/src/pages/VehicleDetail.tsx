@@ -1480,6 +1480,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
 
   const sale = vehicle.sale;
   const distributions = vehicle.profit_distributions ?? [];
+  const openCriticalAlerts = (vehicle.alerts ?? []).filter((a) => a.status === "Open" && a.severity === "Critical");
 
   const handleRecordSale = async () => {
     setSubmitting(true);
@@ -1648,12 +1649,20 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
       </Card>
 
       <Card className="p-5">
-        <EmptyState
-          icon={<ShoppingCart size={20} />}
-          title="No sale recorded"
-          description="Record a sale to calculate profit and partner distributions."
-          action={<button onClick={() => setShowBuyers(true)} className="btn-primary"><ShoppingCart size={16} /> Record Sale</button>}
-        />
+        {openCriticalAlerts.length > 0 ? (
+          <EmptyState
+            icon={<AlertTriangle size={20} />}
+            title="Sale blocked — open Critical alerts"
+            description={`Resolve these before recording a sale: ${openCriticalAlerts.map((a) => a.title).join(", ")}`}
+          />
+        ) : (
+          <EmptyState
+            icon={<ShoppingCart size={20} />}
+            title="No sale recorded"
+            description="Record a sale to calculate profit and partner distributions."
+            action={<button onClick={() => setShowBuyers(true)} className="btn-primary"><ShoppingCart size={16} /> Record Sale</button>}
+          />
+        )}
       </Card>
 
       <Modal
@@ -1664,7 +1673,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
         size="lg"
         footer={<>
           <button onClick={() => setShowBuyers(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleRecordSale} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Complete Sale</button>
+          <button onClick={handleRecordSale} disabled={submitting || openCriticalAlerts.length > 0} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Complete Sale</button>
         </>}
       >
         <div className="space-y-4">

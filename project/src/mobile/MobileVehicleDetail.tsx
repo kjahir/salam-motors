@@ -192,6 +192,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   const { user } = useAuth();
 
   const isBelowCost = Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost;
+  const openCriticalAlerts = (vehicle.alerts ?? []).filter((a) => a.status === "Open" && a.severity === "Critical");
 
   const handleRecordSale = async () => {
     setSubmitting(true);
@@ -237,6 +238,13 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
             <Spec label="Margin" value={formatPercent(profit?.profitMarginPct)} />
             <Spec label="Return on Cost" value={formatPercent(profit?.returnOnCostPct)} />
           </div>
+        </Card>
+      ) : openCriticalAlerts.length > 0 ? (
+        <Card className="p-4">
+          <h3 className="text-sm font-poppins font-semibold text-mobile-error">Sale blocked — open Critical alerts</h3>
+          <p className="text-xs text-mobile-text-muted mt-0.5">
+            Resolve these before recording a sale: {openCriticalAlerts.map((a) => a.title).join(", ")}
+          </p>
         </Card>
       ) : (
         <Card className="p-4">
@@ -315,7 +323,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
         footer={
           <div className="flex gap-3 w-full">
             <Button variant="secondary" className="flex-1" onClick={() => setShowSale(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleRecordSale} loading={submitting}>Complete Sale</Button>
+            <Button className="flex-1" onClick={handleRecordSale} loading={submitting} disabled={openCriticalAlerts.length > 0}>Complete Sale</Button>
           </div>
         }
       >
