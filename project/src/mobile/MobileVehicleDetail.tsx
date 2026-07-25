@@ -280,23 +280,23 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
         <div className="space-y-4">
           <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
           <Field label="Sale Price (₹)" required>
-            <input className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" />
+            <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Discount (₹)">
-              <input className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} />
+              <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} />
             </Field>
             <Field label="Buyer Charges (₹)">
-              <input className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm" type="number" value={form.buyer_charges} onChange={(e) => setForm((f) => ({ ...f, buyer_charges: e.target.value }))} />
+              <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.buyer_charges} onChange={(e) => setForm((f) => ({ ...f, buyer_charges: e.target.value }))} />
             </Field>
           </div>
           <Field label="Payment Method">
-            <select className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm" value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
+            <select className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
               {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
           <Field label="Notes" required={isBelowCost} hint={isBelowCost ? "Required: this sale is below total cost" : undefined}>
-            <textarea className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5 text-sm" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+            <textarea className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
           </Field>
           {isBelowCost && (
             <div className="flex items-start gap-2 rounded-xl bg-mobile-error-bg p-3 text-xs text-mobile-error">

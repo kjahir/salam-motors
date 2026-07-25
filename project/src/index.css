@@ -8,9 +8,12 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
   body {
     @apply bg-slate-50 text-slate-800 font-sans;
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   * {
     scrollbar-width: thin;
@@ -30,12 +33,35 @@
 
 .mobile-shell {
   @apply font-roboto bg-mobile-bg text-mobile-text;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 .mobile-shell h1,
 .mobile-shell h2,
 .mobile-shell h3,
 .mobile-shell .font-display {
   @apply font-poppins;
+}
+
+/*
+ * iOS Safari zooms the whole layout on focus of any form field whose
+ * *computed* font-size is under 16px. Force 16px on every mobile field
+ * so the browser never triggers the zoom, then visually shrink the field
+ * back to its designed size with a transform (which doesn't affect the
+ * computed font-size iOS checks). Width is compensated so the scaled
+ * result still fills its container; overflow-x above catches any
+ * stray reflow the unscaled layout box would otherwise cause.
+ */
+.mobile-shell input,
+.mobile-shell select,
+.mobile-shell textarea {
+  font-size: 16px;
+}
+
+.mobile-input-scale {
+  transform: scale(0.875);
+  transform-origin: left center;
+  width: 114.2857%;
 }
 
 @layer components {
