@@ -1,20 +1,12 @@
 import type { VehicleStatus, PartySubtype } from "./types";
 
+// Only the statuses the app actually transitions a vehicle into today
+// (PURCHASED on onboarding, SOLD on sale) — used solely by Inventory's
+// status filter dropdown. The broader VehicleStatus type still has the
+// full lifecycle for when those transitions get built.
 export const VEHICLE_STATUSES: VehicleStatus[] = [
-  "DRAFT",
-  "PURCHASE_PENDING",
   "PURCHASED",
-  "IN_TRANSIT",
-  "IN_YARD",
-  "UNDER_INSPECTION",
-  "UNDER_REPAIR",
-  "READY_FOR_SALE",
-  "RESERVED",
   "SOLD",
-  "DELIVERED",
-  "CANCELLED",
-  "RETURNED",
-  "WRITTEN_OFF",
 ];
 
 export const VEHICLE_CATEGORIES = [

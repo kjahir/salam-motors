@@ -1,22 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, TrendingUp, ShoppingCart, Bike } from "lucide-react";
+import { Search, TrendingUp, ShoppingCart, Bike, ArrowUpDown } from "lucide-react";
 import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs, Button } from "./ui/primitives";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
 import { fetchAllPurchases, fetchAllSales, fetchVehicles, fetchFinancialSummaries } from "@/lib/queries";
+import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
 import type { Purchase, Sale, Vehicle, Party, VehicleFinancialSummary } from "@/lib/types";
 
 type ReportTab = "purchases" | "inventory" | "sales";
-type Period = "all" | "30d" | "month";
+type SortDir = "desc" | "asc";
 
 const PAGE_SIZE = 10;
-
-function withinPeriod(dateStr: string, period: Period): boolean {
-  if (period === "all") return true;
-  const d = new Date(dateStr);
-  const now = new Date();
-  if (period === "30d") return (now.getTime() - d.getTime()) / 86400000 <= 30;
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-}
 
 export function MobileReports() {
   const [tab, setTab] = useState<ReportTab>("inventory");
@@ -26,7 +19,8 @@ export function MobileReports() {
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [period, setPeriod] = useState<Period>("all");
+  const [dateRange, setDateRange] = useState<DateRangeKey>("all");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   useEffect(() => {
@@ -42,7 +36,7 @@ export function MobileReports() {
 
   useEffect(() => {
     setLimit(PAGE_SIZE);
-  }, [tab, search, period]);
+  }, [tab, search, dateRange]);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
 
@@ -52,20 +46,22 @@ export function MobileReports() {
       !q || [v?.stock_number, v?.registration_number, v?.manufacturer, v?.model].filter(Boolean).join(" ").toLowerCase().includes(q);
   }, [search]);
 
+  const dirFactor = sortDir === "desc" ? -1 : 1;
+
   const purchaseRows = useMemo(
-    () => purchases.filter((p) => withinPeriod(p.purchase_date, period) && matches(p.vehicle)).sort((a, b) => +new Date(b.purchase_date) - +new Date(a.purchase_date)),
-    [purchases, period, matches],
+    () => purchases.filter((p) => isWithinDateRange(p.purchase_date, dateRange) && matches(p.vehicle)).sort((a, b) => dirFactor * (+new Date(a.purchase_date) - +new Date(b.purchase_date))),
+    [purchases, dateRange, matches, dirFactor],
   );
   const saleRows = useMemo(
-    () => sales.filter((s) => withinPeriod(s.sale_date, period) && matches(s.vehicle)).sort((a, b) => +new Date(b.sale_date) - +new Date(a.sale_date)),
-    [sales, period, matches],
+    () => sales.filter((s) => isWithinDateRange(s.sale_date, dateRange) && matches(s.vehicle)).sort((a, b) => dirFactor * (+new Date(a.sale_date) - +new Date(b.sale_date))),
+    [sales, dateRange, matches, dirFactor],
   );
   const inventoryRows = useMemo(
     () =>
       vehicles
-        .filter((v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status) && withinPeriod(v.onboarded_at, period) && matches(v))
-        .sort((a, b) => daysSince(b.onboarded_at) - daysSince(a.onboarded_at)),
-    [vehicles, period, matches],
+        .filter((v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status) && isWithinDateRange(v.onboarded_at, dateRange) && matches(v))
+        .sort((a, b) => dirFactor * (+new Date(a.onboarded_at) - +new Date(b.onboarded_at))),
+    [vehicles, dateRange, matches, dirFactor],
   );
 
   if (loading) {
@@ -83,7 +79,7 @@ export function MobileReports() {
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search stock #, model..." className="pl-10" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by make, model or reg. no." className="pl-10" />
         </div>
         <SegmentedTabs
           tabs={[
@@ -94,16 +90,22 @@ export function MobileReports() {
           active={tab}
           onChange={(k) => setTab(k as ReportTab)}
         />
-        <div className="flex gap-1.5">
-          {(["all", "30d", "month"] as Period[]).map((p) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {DATE_RANGE_OPTIONS.map((opt) => (
             <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`rounded-pill px-3 py-1 text-xs font-medium ${period === p ? "bg-mobile-navy text-white" : "bg-white text-mobile-text-secondary border border-mobile-border"}`}
+              key={opt.value}
+              onClick={() => setDateRange(opt.value)}
+              className={`shrink-0 rounded-pill px-3 py-1 text-xs font-medium ${dateRange === opt.value ? "bg-mobile-navy text-white" : "bg-white text-mobile-text-secondary border border-mobile-border"}`}
             >
-              {p === "all" ? "All time" : p === "30d" ? "Last 30 days" : "This month"}
+              {opt.label}
             </button>
           ))}
+          <button
+            onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+            className="shrink-0 ml-auto inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium bg-white text-mobile-text-secondary border border-mobile-border"
+          >
+            <ArrowUpDown size={12} /> {sortDir === "desc" ? "Newest" : "Oldest"}
+          </button>
         </div>
       </div>
 

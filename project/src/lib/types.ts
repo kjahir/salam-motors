@@ -416,6 +416,16 @@ export interface VehicleFinancialSummary {
   total_invested: number;
 }
 
+export interface VehicleMedia {
+  id: string;
+  vehicle_id: string;
+  media_type: string;
+  media_category: string;
+  file_url: string | null;
+  thumbnail_url: string | null;
+  uploaded_at: string;
+}
+
 export interface VehicleWithRelations extends Vehicle {
   seller?: Party | null;
   inspections?: (Inspection & { mechanic?: Party | null })[];
@@ -431,4 +441,5 @@ export interface VehicleWithRelations extends Vehicle {
   alerts?: Alert[];
   listing?: Listing | null;
   enquiries?: (Enquiry & { buyer?: Party | null })[];
+  media?: VehicleMedia[];
 }

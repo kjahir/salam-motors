@@ -244,6 +244,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
             funding={funding}
             complianceViolations={complianceViolations}
             onNavigate={onNavigate}
+            onChanged={reload}
           />
         )}
         {tab === "expenses" && <ExpensesTab vehicle={vehicle} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
@@ -255,8 +256,65 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   );
 }
 
+function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
+  const media = vehicle.media ?? [];
+  const [files, setFiles] = useState<UploadedFile[]>(() =>
+    media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })),
+  );
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setFiles(media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle.media]);
+
+  const handleChange = async (newFiles: UploadedFile[]) => {
+    setFiles(newFiles);
+    setSaving(true);
+    try {
+      const existingPaths = new Set(media.map((m) => m.file_url).filter(Boolean));
+      const newPaths = new Set(newFiles.map((f) => f.path));
+      const added = newFiles.filter((f) => !existingPaths.has(f.path));
+      const removed = media.filter((m) => m.file_url && !newPaths.has(m.file_url));
+
+      if (added.length > 0) {
+        const { error } = await supabase.from("vehicle_media").insert(
+          added.map((f) => ({ vehicle_id: vehicle.id, media_type: "photo", media_category: "general", file_url: f.path })),
+        );
+        if (error) throw error;
+      }
+      if (removed.length > 0) {
+        const { error } = await supabase.from("vehicle_media").delete().in("id", removed.map((m) => m.id));
+        if (error) throw error;
+        await supabase.storage.from("vehicle-photos").remove(removed.map((m) => m.file_url!));
+      }
+      onChanged();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to save photos", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-5">
+      <h3 className="font-semibold text-slate-900 mb-4">Photos</h3>
+      <FileUploadGrid
+        bucket="vehicle-photos"
+        pathPrefix={vehicle.id}
+        value={files}
+        onChange={handleChange}
+        label=""
+        hint={saving ? "Saving…" : "Add photos of the vehicle — exterior, interior, damage, etc."}
+        fileAccept="image/*"
+      />
+    </Card>
+  );
+}
+
 // ============ OVERVIEW ============
-function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, complianceViolations, onNavigate }: {
+function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, complianceViolations, onNavigate, onChanged }: {
   vehicle: VehicleWithRelations;
   cost: ReturnType<typeof computeCostBreakdown>;
   profit: ReturnType<typeof computeProfit> | null;
@@ -265,9 +323,11 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   funding: ReturnType<typeof computePartnerFunding>;
   complianceViolations: ComplianceViolation[];
   onNavigate: (page: PageKey, params?: NavigateParams) => void;
+  onChanged: () => void;
 }) {
   return (
     <div className="space-y-5">
+    <PhotosCard vehicle={vehicle} onChanged={onChanged} />
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <Card className="p-5 lg:col-span-2">
         <div className="flex items-center justify-between mb-4">
