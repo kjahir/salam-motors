@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert } from "lucide-react";
 import { Spinner, Card, EmptyState } from "./ui/primitives";
 import { formatINR, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts } from "@/lib/queries";
+import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
+import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
 import { useAuth } from "@/lib/useAuth";
-import type { Vehicle, VehicleFinancialSummary, Alert } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -13,6 +14,8 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
+  const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
+  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const { signOut } = useAuth();
 
@@ -20,11 +23,14 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     let cancelled = false;
     (async () => {
       try {
-        const [v, s, a] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchAlerts()]);
+        await syncAllVehiclesCompliance().catch(() => {});
+        const [v, s, a, c, p] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchAlerts(), fetchComplianceStatuses(), fetchCompliancePolicies()]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
         setAlerts(a);
+        setComplianceStatuses(c);
+        setPolicies(p);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -33,6 +39,18 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       cancelled = true;
     };
   }, []);
+
+  const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
+
+  const navigateToAlert = (a: Alert) => {
+    const policy = a.policy_id ? policyMap.get(a.policy_id) : undefined;
+    const destination = resolveAlertDestination(policy);
+    if (destination.openEditVehicle) {
+      onNavigate("edit-vehicle", { vehicleId: a.vehicle_id });
+    } else {
+      onNavigate("vehicle", { vehicleId: a.vehicle_id, tab: destination.tab, highlightPolicyId: policy?.id });
+    }
+  };
 
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
@@ -44,6 +62,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     const totalExpenses = vehicles.reduce((s, v) => s + (summaryMap.get(v.id)?.total_expense ?? 0), 0);
     const overallProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
     const openAlerts = alerts.filter((a) => a.status === "Open").sort((a, b) => (b.days_in_inventory ?? 0) - (a.days_in_inventory ?? 0));
+    const complianceIssues = complianceStatuses.filter((c) => c.violation_count > 0).length;
     return {
       purchasedCount: vehicles.length,
       purchasedValue,
@@ -55,8 +74,9 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       overallProfit,
       openAlerts: openAlerts.slice(0, 5),
       openAlertCount: openAlerts.length,
+      complianceIssues,
     };
-  }, [vehicles, summaries, alerts]);
+  }, [vehicles, summaries, alerts, complianceStatuses]);
 
   if (loading) {
     return (
@@ -103,6 +123,12 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
           onClick={() => onNavigate("inventory")}
         />
         <StatTile label="Total Expenses" value={formatINR(stats.totalExpenses)} sub="Service, repairs & more" />
+        <StatTile
+          label="Compliance Issues"
+          value={String(stats.complianceIssues)}
+          sub={stats.complianceIssues > 0 ? "Vehicles need attention" : "All vehicles compliant"}
+          onClick={() => onNavigate("inventory")}
+        />
       </div>
 
       <div className="px-4 pt-5">
@@ -122,10 +148,10 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         ) : (
           <div className="space-y-2">
             {stats.openAlerts.map((a) => (
-              <Card key={a.id} className="p-3.5" onClick={() => a.vehicle_id && onNavigate("vehicle", { vehicleId: a.vehicle_id })}>
+              <Card key={a.id} className="p-3.5" onClick={() => a.vehicle_id && navigateToAlert(a)}>
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mobile-warning-bg text-mobile-warning">
-                    <AlertTriangle size={15} />
+                    {a.alert_type === "Compliance" ? <ShieldAlert size={15} /> : <AlertTriangle size={15} />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-mobile-text truncate">{a.title}</p>

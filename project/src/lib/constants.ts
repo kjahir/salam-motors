@@ -202,6 +202,8 @@ export const SETTLEMENT_STATUSES = [
 
 export const ALERT_SEVERITIES = ["Info", "Warning", "High", "Critical"];
 
+export const SEVERITY_RANK: Record<string, number> = { Critical: 4, High: 3, Warning: 2, Info: 1 };
+
 export const MAX_HOLDING_DAYS = 60;
 
 export const SCORE_WEIGHTS: Record<string, number> = {
@@ -231,4 +233,64 @@ export const AGEING_BANDS = [
   { min: 45, label: "High priority", color: "orange" },
   { min: 30, label: "Attention", color: "amber" },
   { min: 0, label: "Normal", color: "emerald" },
+];
+
+export const COMPLIANCE_BANDS = [
+  { minRank: 4, label: "Critical issues", color: "red" },
+  { minRank: 3, label: "High priority", color: "orange" },
+  { minRank: 2, label: "Needs attention", color: "amber" },
+  { minRank: 1, label: "Minor issues", color: "blue" },
+  { minRank: 0, label: "Compliant", color: "emerald" },
+] as const;
+
+export const COMPLIANCE_CATEGORIES = ["document", "financial_evidence", "financial_reconciliation"] as const;
+
+export const COMPLIANCE_CATEGORY_LABELS: Record<string, string> = {
+  document: "Document",
+  financial_evidence: "Financial Evidence",
+  financial_reconciliation: "Financial Reconciliation",
+};
+
+export const COMPLIANCE_RULE_TYPES = ["document_required", "evidence_required", "amount_reconciliation"] as const;
+
+export const COMPLIANCE_RULE_TYPE_LABELS: Record<string, string> = {
+  document_required: "Document required",
+  evidence_required: "Evidence required",
+  amount_reconciliation: "Amount reconciliation",
+};
+
+export const COMPLIANCE_EVIDENCE_ENTITIES = ["purchase_payment", "expense", "investment"] as const;
+
+export const COMPLIANCE_EVIDENCE_ENTITY_LABELS: Record<string, string> = {
+  purchase_payment: "Purchase payment",
+  expense: "Expense",
+  investment: "Investment",
+};
+
+export const COMPLIANCE_RESOLUTION_MODES = ["manual", "auto_only"] as const;
+
+export const COMPLIANCE_RESOLUTION_MODE_LABELS: Record<string, string> = {
+  manual: "Manual — Acknowledge/Resolve allowed",
+  auto_only: "Requires action — only clears automatically when fixed",
+};
+
+export interface DefaultCompliancePolicy {
+  name: string;
+  description: string;
+  category: (typeof COMPLIANCE_CATEGORIES)[number];
+  rule_type: (typeof COMPLIANCE_RULE_TYPES)[number];
+  params: Record<string, unknown>;
+  severity: string;
+  resolution_mode: (typeof COMPLIANCE_RESOLUTION_MODES)[number];
+}
+
+export const DEFAULT_COMPLIANCE_POLICIES: DefaultCompliancePolicy[] = [
+  { name: "RC book required", description: "Every vehicle must have its Registration Certificate attached.", category: "document", rule_type: "document_required", params: { document_type: "RC book" }, severity: "Critical", resolution_mode: "auto_only" },
+  { name: "Insurance required", description: "Every vehicle must have proof of insurance attached.", category: "document", rule_type: "document_required", params: { document_type: "Insurance" }, severity: "High", resolution_mode: "auto_only" },
+  { name: "PUC required", description: "Every vehicle must have a valid PUC certificate attached.", category: "document", rule_type: "document_required", params: { document_type: "PUC" }, severity: "Warning", resolution_mode: "auto_only" },
+  { name: "Seller identity required", description: "Every vehicle must have the seller's ID proof attached.", category: "document", rule_type: "document_required", params: { document_type: "Seller identity" }, severity: "Warning", resolution_mode: "auto_only" },
+  { name: "Purchase payments need proof", description: "Every purchase payment must have a supporting screenshot or receipt.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "purchase_payment" }, severity: "High", resolution_mode: "auto_only" },
+  { name: "Expenses need bills", description: "Every submitted or approved expense must have a bill or receipt attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "expense" }, severity: "Warning", resolution_mode: "auto_only" },
+  { name: "Vehicle investments need proof", description: "Every investment tied to a specific vehicle must have supporting proof attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "investment" }, severity: "Warning", resolution_mode: "auto_only" },
+  { name: "Purchase payments must match price", description: "Total purchase payments must reconcile exactly to the agreed price plus broker commission and other fees.", category: "financial_reconciliation", rule_type: "amount_reconciliation", params: { target: "purchase_payments_vs_purchase_price", tolerance: 0.01 }, severity: "Critical", resolution_mode: "auto_only" },
 ];

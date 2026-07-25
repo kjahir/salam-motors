@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layout, type PageKey } from "@/components/Layout";
+import { Layout, type PageKey, type NavigateParams } from "@/components/Layout";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
@@ -17,6 +17,7 @@ import { Finance } from "@/pages/Finance";
 import { Alerts } from "@/pages/Alerts";
 import { Reports } from "@/pages/Reports";
 import { History } from "@/pages/History";
+import { Policies } from "@/pages/Policies";
 import { fetchAlerts } from "@/lib/queries";
 
 function AppContent() {
@@ -27,6 +28,9 @@ function AppContent() {
   const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
   const [previousPage, setPreviousPage] = useState<PageKey>("inventory");
   const [alertCount, setAlertCount] = useState(0);
+  const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
+  const [openEditVehicle, setOpenEditVehicle] = useState(false);
+  const [highlightPolicyId, setHighlightPolicyId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!session) return;
@@ -35,13 +39,18 @@ function AppContent() {
       .catch(() => undefined);
   }, [page, session]);
 
-  const handleNavigate = (next: PageKey, params?: { vehicleId?: string; historyVehicleId?: string }) => {
+  const handleNavigate = (next: PageKey, params?: NavigateParams) => {
     if (params?.vehicleId) {
       setPreviousPage(page === "vehicle" || page === "passport" ? previousPage : page);
       setVehicleId(params.vehicleId);
     }
     if (next === "history") {
       setHistoryVehicleId(params?.historyVehicleId ?? null);
+    }
+    if (next === "vehicle") {
+      setVehicleTab(params?.tab);
+      setOpenEditVehicle(Boolean(params?.openEditVehicle));
+      setHighlightPolicyId(params?.highlightPolicyId);
     }
     setPage(next);
   };
@@ -60,7 +69,18 @@ function AppContent() {
       case "add-vehicle":
         return <AddVehicle onNavigate={handleNavigate} />;
       case "vehicle":
-        return vehicleId ? <VehicleDetail vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} /> : <Inventory onNavigate={handleNavigate} />;
+        return vehicleId ? (
+          <VehicleDetail
+            vehicleId={vehicleId}
+            onNavigate={handleNavigate}
+            onBack={handleBack}
+            initialTab={vehicleTab}
+            openEditVehicle={openEditVehicle}
+            highlightPolicyId={highlightPolicyId}
+          />
+        ) : (
+          <Inventory onNavigate={handleNavigate} />
+        );
       case "passport":
         return vehicleId ? <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} /> : <Inventory onNavigate={handleNavigate} />;
       case "partners":
@@ -75,6 +95,8 @@ function AppContent() {
         return <Reports onNavigate={handleNavigate} />;
       case "history":
         return <History vehicleFilter={historyVehicleId} />;
+      case "policies":
+        return <Policies />;
       default:
         return <Dashboard onNavigate={handleNavigate} />;
     }

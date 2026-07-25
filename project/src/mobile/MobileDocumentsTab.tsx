@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Eye, FileText, Upload } from "lucide-react";
-import { Card, Spinner, Tag, EmptyState } from "./ui/primitives";
+import { CheckCircle2, FileText } from "lucide-react";
+import { Card, Spinner, Tag, EmptyState, Sheet, Button } from "./ui/primitives";
+import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
+import { type UploadedFile } from "@/lib/uploadedFile";
+import { syncVehicleAlerts } from "@/lib/compliance";
 import type { VehicleWithRelations, VehicleDocument } from "@/lib/types";
 
 // The mobile design's 5-document checklist, mapped onto our real DOCUMENT_TYPES values
@@ -15,14 +18,24 @@ const CORE_DOCUMENTS: { type: string; label: string }[] = [
   { type: "Sale agreement", label: "Sale Agreement" },
 ];
 
-export function MobileDocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
+export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[] }) {
   const seeded = useRef(false);
   const [seeding, setSeeding] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [viewingId, setViewingId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const targetDocRef = useRef<VehicleDocument | null>(null);
+  const [activeDoc, setActiveDoc] = useState<VehicleDocument | null>(null);
+  const [docFiles, setDocFiles] = useState<UploadedFile[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!highlightIds || highlightIds.length === 0) return;
+    setActiveHighlights(new Set(highlightIds));
+    const el = document.getElementById(`document-card-${highlightIds[0]}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setActiveHighlights(new Set()), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightIds?.join(",")]);
 
   useEffect(() => {
     if (seeded.current) return;
@@ -49,54 +62,38 @@ export function MobileDocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle.id]);
 
-  const storagePathFor = (fileUrl: string) => (fileUrl.includes("/vehicle-documents/") ? fileUrl.split("/vehicle-documents/")[1] : fileUrl);
-
-  const openPicker = (doc: VehicleDocument) => {
-    targetDocRef.current = doc;
-    fileInputRef.current?.click();
+  const openDoc = (d: VehicleDocument) => {
+    const existing = d.file_urls?.length ? d.file_urls : d.file_url ? [d.file_url] : [];
+    setDocFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
+    setActiveDoc(d);
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const doc = targetDocRef.current;
-    e.target.value = "";
-    if (!file || !doc) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast("File too large (max 10MB)", "error");
-      return;
-    }
-    setUploadingId(doc.id);
+  const closeSheet = () => {
+    setActiveDoc(null);
+    setDocFiles([]);
+  };
+
+  const handleFilesChange = async (files: UploadedFile[]) => {
+    setDocFiles(files);
+    if (!activeDoc) return;
+    setSaving(true);
     try {
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${vehicle.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("vehicle-documents").upload(path, file, { cacheControl: "3600", upsert: false });
-      if (upErr) throw upErr;
-      const { error: updErr } = await supabase
+      const fileUrls = files.map((f) => f.path);
+      const { error } = await supabase
         .from("vehicle_documents")
-        .update({ file_url: path, verification_status: "Uploaded" })
-        .eq("id", doc.id);
-      if (updErr) throw updErr;
-      toast("Document uploaded", "success");
+        .update({
+          file_url: fileUrls[0] ?? null,
+          file_urls: fileUrls,
+          verification_status: fileUrls.length > 0 ? (activeDoc.verification_status === "Verified" ? "Verified" : "Uploaded") : "Not uploaded",
+        })
+        .eq("id", activeDoc.id);
+      if (error) throw error;
+      syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Upload failed", "error");
+      toast(err instanceof Error ? err.message : "Failed to save document", "error");
     } finally {
-      setUploadingId(null);
-    }
-  };
-
-  const handleView = async (d: VehicleDocument) => {
-    if (!d.file_url) return;
-    setViewingId(d.id);
-    try {
-      const path = storagePathFor(d.file_url);
-      const { data, error } = await supabase.storage.from("vehicle-documents").createSignedUrl(path, 300);
-      if (error) throw error;
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to open document", "error");
-    } finally {
-      setViewingId(null);
+      setSaving(false);
     }
   };
 
@@ -108,33 +105,32 @@ export function MobileDocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWit
 
   return (
     <div className="space-y-2.5 pt-3">
-      <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleFileSelect} className="hidden" />
       {documents.length === 0 ? (
         <Card className="p-5"><EmptyState icon={<FileText size={20} />} title="No documents" /></Card>
       ) : (
-        documents.map((d) => (
-          <Card key={d.id} className="p-3.5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-mobile-text truncate">{CORE_DOCUMENTS.find((c) => c.type === d.document_type)?.label ?? d.document_type}</p>
-                <div className="mt-1">
-                  <Tag color={d.verification_status === "Verified" ? "success" : d.verification_status === "Not uploaded" ? "neutral" : "primary"}>
-                    {d.verification_status}
-                  </Tag>
+        documents.map((d) => {
+          const fileCount = d.file_urls?.length ?? (d.file_url ? 1 : 0);
+          return (
+            <Card
+              key={d.id}
+              id={`document-card-${d.id}`}
+              className={`p-3.5 transition-colors ${activeHighlights.has(d.id) ? "ring-2 ring-amber-400 bg-amber-50/50" : ""}`}
+              onClick={() => openDoc(d)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-mobile-text truncate">{CORE_DOCUMENTS.find((c) => c.type === d.document_type)?.label ?? d.document_type}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Tag color={d.verification_status === "Verified" ? "success" : d.verification_status === "Not uploaded" ? "neutral" : "primary"}>
+                      {d.verification_status}
+                    </Tag>
+                    {fileCount > 1 && <span className="text-[11px] text-mobile-text-muted">{fileCount} files</span>}
+                  </div>
                 </div>
               </div>
-              {d.file_url ? (
-                <button onClick={() => handleView(d)} disabled={viewingId === d.id} className="flex h-9 w-9 items-center justify-center rounded-full bg-mobile-bg text-mobile-primary shrink-0">
-                  {viewingId === d.id ? <Spinner size={14} /> : <Eye size={16} />}
-                </button>
-              ) : (
-                <button onClick={() => openPicker(d)} disabled={uploadingId === d.id} className="flex h-9 w-9 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary shrink-0">
-                  {uploadingId === d.id ? <Spinner size={14} /> : <Upload size={16} />}
-                </button>
-              )}
-            </div>
-          </Card>
-        ))
+            </Card>
+          );
+        })
       )}
       {documents.some((d) => d.verification_status !== "Not uploaded") && (
         <div className="flex items-center gap-2 text-xs text-mobile-text-muted px-1 pt-1">
@@ -142,6 +138,23 @@ export function MobileDocumentsTab({ vehicle, onChanged }: { vehicle: VehicleWit
           {documents.filter((d) => d.verification_status !== "Not uploaded").length}/{documents.length} uploaded
         </div>
       )}
+
+      <Sheet
+        open={activeDoc !== null}
+        onClose={closeSheet}
+        title={activeDoc ? CORE_DOCUMENTS.find((c) => c.type === activeDoc.document_type)?.label ?? activeDoc.document_type : ""}
+        footer={<Button onClick={closeSheet} className="w-full">Done</Button>}
+      >
+        {activeDoc && (
+          <FileUploadGrid
+            bucket="vehicle-documents"
+            pathPrefix={vehicle.id}
+            value={docFiles}
+            onChange={handleFilesChange}
+            hint={saving ? "Saving…" : "Add a photo or scan — you can attach multiple pages"}
+          />
+        )}
+      </Sheet>
     </div>
   );
 }

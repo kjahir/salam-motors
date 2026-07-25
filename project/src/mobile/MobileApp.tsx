@@ -8,16 +8,28 @@ import { MobileReports } from "./MobileReports";
 
 export type MobileScreen = "dashboard" | "inventory" | "vehicle" | "add-vehicle" | "edit-vehicle" | "reports";
 
+export interface MobileNavigateParams {
+  vehicleId?: string;
+  tab?: string;
+  highlightPolicyId?: string;
+}
+
 export interface MobileNavigate {
-  (screen: MobileScreen, params?: { vehicleId?: string }): void;
+  (screen: MobileScreen, params?: MobileNavigateParams): void;
 }
 
 export function MobileApp() {
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
+  const [highlightPolicyId, setHighlightPolicyId] = useState<string | undefined>(undefined);
 
   const navigate: MobileNavigate = (next, params) => {
     if (params?.vehicleId) setVehicleId(params.vehicleId);
+    if (next === "vehicle") {
+      setVehicleTab(params?.tab);
+      setHighlightPolicyId(params?.highlightPolicyId);
+    }
     setScreen(next);
   };
 
@@ -40,7 +52,13 @@ export function MobileApp() {
         return <MobileInventory onNavigate={navigate} />;
       case "vehicle":
         return vehicleId ? (
-          <MobileVehicleDetail vehicleId={vehicleId} onNavigate={navigate} onBack={() => navigate("inventory")} />
+          <MobileVehicleDetail
+            vehicleId={vehicleId}
+            onNavigate={navigate}
+            onBack={() => navigate("inventory")}
+            initialTab={vehicleTab}
+            highlightPolicyId={highlightPolicyId}
+          />
         ) : (
           <MobileInventory onNavigate={navigate} />
         );

@@ -5,8 +5,9 @@ import { useToast } from "@/components/ui/useToast";
 import { formatINR, formatDate } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { PAYMENT_METHODS } from "@/lib/constants";
-import { ScreenshotUpload, type UploadedProof } from "@/components/ScreenshotUpload";
-import { viewProof } from "@/lib/proofStorage";
+import { FileUploadGrid } from "@/components/FileUploadGrid";
+import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
+import { isImageName, type UploadedFile } from "@/lib/uploadedFile";
 import type { Partner, ProfitDistribution, ProfitSettlementPayment, Vehicle } from "@/lib/types";
 
 interface SettlementModalProps {
@@ -24,8 +25,9 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
-  const [proof, setProof] = useState<UploadedProof | null>(null);
+  const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [paymentLightbox, setPaymentLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const { toast } = useToast();
 
   const reset = () => {
@@ -34,7 +36,7 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
     setPaymentMethod("Bank transfer");
     setReference("");
     setNotes("");
-    setProof(null);
+    setProofFiles([]);
   };
 
   const handleClose = () => {
@@ -60,13 +62,15 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
       }
     };
     try {
+      const proofUrls = proofFiles.map((f) => f.path);
       const { data: paymentRec, error: payErr } = await supabase.from("profit_settlement_payments").insert({
         distribution_id: distribution.id,
         amount: payAmount,
         payment_method: paymentMethod,
         reference: reference.trim() || null,
         notes: notes.trim() || null,
-        proof_url: proof?.path ?? null,
+        proof_url: proofUrls[0] ?? null,
+        proof_urls: proofUrls,
         paid_at: new Date(paidAt).toISOString(),
       }).select().single();
       if (payErr) throw payErr;
@@ -126,35 +130,65 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
         <Field label="Notes">
           <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
         </Field>
-        <ScreenshotUpload
+        <FileUploadGrid
           bucket="finance-proofs"
           pathPrefix={`settlements/${distribution.id}`}
-          value={proof}
-          onChange={setProof}
+          value={proofFiles}
+          onChange={setProofFiles}
+          label="Payment Proof"
+          hint="Add one or more screenshots or receipts (max 10MB each)"
         />
 
         {distribution.payments && distribution.payments.length > 0 && (
           <div className="pt-4 border-t border-slate-200">
             <h4 className="text-sm font-semibold text-slate-800 mb-2">Payment History</h4>
             <div className="space-y-2">
-              {distribution.payments.map((pay) => (
-                <div key={pay.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 text-sm">
-                  <div>
-                    <span className="font-medium text-slate-800">{formatINR(pay.amount)}</span>
-                    <span className="text-xs text-slate-500 ml-2">{pay.payment_method} · {formatDate(pay.paid_at, { withTime: true })}</span>
-                    {pay.reference && <span className="text-xs text-slate-400 font-mono ml-2">{pay.reference}</span>}
+              {distribution.payments.map((pay) => {
+                const paths = pay.proof_urls?.length ? pay.proof_urls : pay.proof_url ? [pay.proof_url] : [];
+                return (
+                  <div key={pay.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 text-sm">
+                    <div>
+                      <span className="font-medium text-slate-800">{formatINR(pay.amount)}</span>
+                      <span className="text-xs text-slate-500 ml-2">{pay.payment_method} · {formatDate(pay.paid_at, { withTime: true })}</span>
+                      {pay.reference && <span className="text-xs text-slate-400 font-mono ml-2">{pay.reference}</span>}
+                    </div>
+                    {paths.length > 0 && (
+                      <button
+                        onClick={() =>
+                          setPaymentLightbox({
+                            items: paths.map((path) => ({
+                              name: path.split("/").pop() ?? path,
+                              isImage: isImageName(path),
+                              resolve: async () => {
+                                const { data, error } = await supabase.storage.from("finance-proofs").createSignedUrl(path, 300);
+                                if (error) throw error;
+                                return data.signedUrl;
+                              },
+                            })),
+                            index: 0,
+                          })
+                        }
+                        className="text-xs text-brand-600 hover:text-brand-700 font-medium"
+                      >
+                        View Proof{paths.length > 1 ? ` (${paths.length})` : ""}
+                      </button>
+                    )}
                   </div>
-                  {pay.proof_url && (
-                    <button onClick={() => viewProof("finance-proofs", pay.proof_url!)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
-                      View Proof
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
       </div>
+
+      {paymentLightbox && (
+        <Lightbox
+          items={paymentLightbox.items}
+          index={paymentLightbox.index}
+          onClose={() => setPaymentLightbox(null)}
+          onIndexChange={(index) => setPaymentLightbox((s) => (s ? { ...s, index } : s))}
+        />
+      )}
     </Modal>
   );
 }

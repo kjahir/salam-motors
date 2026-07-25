@@ -4,6 +4,7 @@ import {
   Clock,
   FileWarning,
   Wrench,
+  ShieldAlert,
   AlertTriangle,
   CheckCircle2,
   Download,
@@ -14,19 +15,21 @@ import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatINR, formatDate } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
-import { fetchAlerts, fetchFinancialSummaries } from "@/lib/queries";
+import { fetchAlerts, fetchFinancialSummaries, fetchCompliancePolicies } from "@/lib/queries";
+import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/useToast";
-import type { Alert, Vehicle, VehicleFinancialSummary } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import type { Alert, Vehicle, VehicleFinancialSummary, CompliancePolicy } from "@/lib/types";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface AlertsProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 export function Alerts({ onNavigate }: AlertsProps) {
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
+  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState("all");
@@ -36,9 +39,11 @@ export function Alerts({ onNavigate }: AlertsProps) {
 
   const reload = async () => {
     try {
-      const [a, s] = await Promise.all([fetchAlerts(), fetchFinancialSummaries()]);
+      await syncAllVehiclesCompliance().catch(() => {});
+      const [a, s, p] = await Promise.all([fetchAlerts(), fetchFinancialSummaries(), fetchCompliancePolicies()]);
       setAlerts(a);
       setSummaries(s);
+      setPolicies(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -51,6 +56,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
   }, []);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
+  const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
 
   const filtered = useMemo(() => {
     return alerts.filter((a) => {
@@ -121,6 +127,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
     if (type === "Ageing") return <Clock size={16} />;
     if (type === "Document") return <FileWarning size={16} />;
     if (type === "Repair") return <Wrench size={16} />;
+    if (type === "Compliance") return <ShieldAlert size={16} />;
     return <AlertTriangle size={16} />;
   };
 
@@ -161,6 +168,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
             { value: "Ageing", label: "Ageing" },
             { value: "Document", label: "Document" },
             { value: "Repair", label: "Repair" },
+            { value: "Compliance", label: "Compliance" },
           ]} className="w-auto" />
         </div>
       </Card>
@@ -173,8 +181,12 @@ export function Alerts({ onNavigate }: AlertsProps) {
             const sevColor = a.severity === "Critical" ? "red" : a.severity === "High" ? "orange" : a.severity === "Warning" ? "amber" : "slate";
             const sevBg = a.severity === "Critical" ? "bg-red-50 text-red-600" : a.severity === "High" ? "bg-orange-50 text-orange-600" : a.severity === "Warning" ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-600";
             const s = summaryMap.get(a.vehicle_id);
+            const policy = a.policy_id ? policyMap.get(a.policy_id) : undefined;
+            const actionRequired = policy?.resolution_mode === "auto_only";
+            const destination = resolveAlertDestination(policy);
+            const goToIssue = () => onNavigate("vehicle", { vehicleId: a.vehicle_id, ...destination, highlightPolicyId: policy?.id });
             return (
-              <Card key={a.id} className={`p-4 ${a.status === "Open" ? "" : "opacity-70"}`}>
+              <Card key={a.id} hover onClick={goToIssue} className={`p-4 ${a.status === "Open" ? "" : "opacity-70"}`}>
                 <div className="flex items-start gap-3">
                   <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${sevBg}`}>
                     {iconForType(a.alert_type)}
@@ -183,14 +195,13 @@ export function Alerts({ onNavigate }: AlertsProps) {
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{a.severity}</Badge>
                       <Badge color="slate">{a.alert_type}</Badge>
+                      {actionRequired && a.status !== "Resolved" && <Badge color="purple">Requires action to resolve</Badge>}
                       {a.status !== "Open" && <Badge color="emerald">{a.status}</Badge>}
                     </div>
                     <p className="text-sm font-medium text-slate-900">{a.title}</p>
                     {a.message && <p className="text-sm text-slate-600 mt-1">{a.message}</p>}
                     <div className="flex items-center gap-3 mt-2 text-xs text-slate-400 flex-wrap">
-                      <button onClick={() => onNavigate("vehicle", { vehicleId: a.vehicle_id })} className="font-mono text-brand-600 hover:text-brand-700">
-                        {a.vehicle?.stock_number}
-                      </button>
+                      <span className="font-mono text-brand-600">{a.vehicle?.stock_number}</span>
                       <span>{a.vehicle?.manufacturer} {a.vehicle?.model}</span>
                       {s && <span>Cost {formatINR(s.total_vehicle_cost)}</span>}
                       {a.vehicle?.asking_price && <span>Asking {formatINR(a.vehicle.asking_price)}</span>}
@@ -198,8 +209,8 @@ export function Alerts({ onNavigate }: AlertsProps) {
                       <span>{formatDate(a.created_at, { withTime: true })}</span>
                     </div>
                   </div>
-                  {a.status === "Open" && (
-                    <div className="flex flex-col gap-1.5 shrink-0">
+                  {a.status === "Open" && !actionRequired && (
+                    <div className="flex flex-col gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => handleAction(a.id, "acknowledge")} className="btn-ghost btn-sm">Acknowledge</button>
                       <button onClick={() => handleAction(a.id, "resolve")} className="btn-secondary btn-sm">Resolve</button>
                     </div>

@@ -24,6 +24,9 @@ import type {
   VehicleFinancialSummary,
   MechanicInspectionFeedback,
   PublicPassport,
+  CompliancePolicy,
+  VehicleComplianceStatus,
+  VehicleComplianceViolation,
 } from "./types";
 
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
@@ -50,6 +53,28 @@ export async function fetchFinancialSummary(vehicleId: string): Promise<VehicleF
     .maybeSingle();
   if (error) throw error;
   return data as VehicleFinancialSummary | null;
+}
+
+export async function fetchCompliancePolicies(): Promise<CompliancePolicy[]> {
+  const { data, error } = await supabase.from("compliance_policies").select("*").order("category").order("name");
+  if (error) throw error;
+  return (data ?? []) as CompliancePolicy[];
+}
+
+export async function fetchComplianceStatuses(): Promise<VehicleComplianceStatus[]> {
+  const { data, error } = await supabase.from("vehicle_compliance_status").select("*");
+  if (error) throw error;
+  return (data ?? []) as VehicleComplianceStatus[];
+}
+
+export async function fetchVehicleComplianceViolations(vehicleId: string): Promise<VehicleComplianceViolation[]> {
+  const { data, error } = await supabase
+    .from("vehicle_compliance_violations")
+    .select("policy_id, name, category, severity")
+    .eq("vehicle_id", vehicleId)
+    .eq("violated", true);
+  if (error) throw error;
+  return (data ?? []) as VehicleComplianceViolation[];
 }
 
 export async function fetchVehicles(): Promise<Vehicle[]> {

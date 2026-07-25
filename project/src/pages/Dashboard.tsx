@@ -10,24 +10,28 @@ import {
   Clock,
   ArrowRight,
   FileWarning,
+  ShieldAlert,
   Activity,
 } from "lucide-react";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
-import { Badge, StatusBadge, AgeingBadge } from "@/components/ui/Badge";
+import { Badge, StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts } from "@/lib/queries";
-import type { Vehicle, VehicleFinancialSummary, Alert } from "@/lib/types";
-import type { PageKey } from "@/components/Layout";
+import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
+import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
+import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface DashboardProps {
-  onNavigate: (page: PageKey, params?: { vehicleId?: string }) => void;
+  onNavigate: (page: PageKey, params?: NavigateParams) => void;
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
+  const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
+  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,15 +39,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     let cancelled = false;
     (async () => {
       try {
-        const [v, s, a] = await Promise.all([
+        await syncAllVehiclesCompliance().catch(() => {});
+        const [v, s, a, c, p] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
+          fetchComplianceStatuses(),
+          fetchCompliancePolicies(),
         ]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
         setAlerts(a);
+        setComplianceStatuses(c);
+        setPolicies(p);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
       } finally {
@@ -55,8 +64,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     };
   }, []);
 
+  const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
+
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
+    const complianceMap = new Map(complianceStatuses.map((c) => [c.vehicle_id, c]));
+    const complianceIssues = complianceStatuses.filter((c) => c.violation_count > 0).length;
     const inStock = vehicles.filter(
       (v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status),
     );
@@ -113,9 +126,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       openAlerts: openAlerts.length,
       inStock,
       summaryMap,
+      complianceMap,
+      complianceIssues,
       openAlertList: openAlerts.slice(0, 5),
     };
-  }, [vehicles, summaries, alerts]);
+  }, [vehicles, summaries, alerts, complianceStatuses]);
 
   if (loading) {
     return (
@@ -185,6 +200,17 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         />
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard
+          label="Compliance Issues"
+          value={stats.complianceIssues}
+          icon={<ShieldAlert size={20} />}
+          color={stats.complianceIssues > 0 ? "orange" : "emerald"}
+          hint="Vehicles missing required documents or evidence"
+          onClick={() => onNavigate("alerts")}
+        />
+      </div>
+
       {/* Secondary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard label="Bought This Month" value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
@@ -240,6 +266,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                   <div className="flex items-center gap-3 ml-3">
                     <StatusBadge status={v.current_status} />
                     <AgeingBadge days={days} />
+                    <ComplianceBadge
+                      violationCount={stats.complianceMap.get(v.id)?.violation_count ?? 0}
+                      maxSeverityRank={stats.complianceMap.get(v.id)?.max_severity_rank ?? 0}
+                    />
                   </div>
                 </button>
               ))}
@@ -264,7 +294,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 return (
                   <button
                     key={a.id}
-                    onClick={() => a.vehicle && onNavigate("vehicle", { vehicleId: a.vehicle_id })}
+                    onClick={() => onNavigate("vehicle", { vehicleId: a.vehicle_id, ...resolveAlertDestination(a.policy_id ? policyMap.get(a.policy_id) : undefined), highlightPolicyId: a.policy_id ?? undefined })}
                     className="flex items-start gap-3 w-full text-left p-3 rounded-lg hover:bg-slate-50 transition-colors"
                   >
                     <div
@@ -284,6 +314,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                         <FileWarning size={14} />
                       ) : a.alert_type === "Repair" ? (
                         <Wrench size={14} />
+                      ) : a.alert_type === "Compliance" ? (
+                        <ShieldAlert size={14} />
                       ) : (
                         <AlertTriangle size={14} />
                       )}

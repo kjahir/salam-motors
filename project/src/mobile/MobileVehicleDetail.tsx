@@ -7,11 +7,12 @@ import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatDate, formatPercent, daysSince } from "@/lib/format";
 import { computeCostBreakdown, computeProfit, computeOverallScore, computePartnerFunding, documentCompleteness } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners } from "@/lib/queries";
+import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
+import { evaluateVehicleCompliance, findViolatingRecordIds } from "@/lib/compliance";
 import { ScoreRing } from "@/components/ui/ScoreRing";
-import { PAYMENT_METHODS } from "@/lib/constants";
-import type { VehicleWithRelations, Partner, InspectionItem } from "@/lib/types";
+import { PAYMENT_METHODS, SEVERITY_RANK } from "@/lib/constants";
+import type { VehicleWithRelations, Partner, InspectionItem, CompliancePolicy } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 import { MobileDocumentsTab } from "./MobileDocumentsTab";
 import { MobileExpensesTab } from "./MobileExpensesTab";
@@ -19,12 +20,23 @@ import { MobileInspectionTab } from "./MobileInspectionTab";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
 
-export function MobileVehicleDetail({ vehicleId, onNavigate, onBack }: { vehicleId: string; onNavigate: MobileNavigate; onBack: () => void }) {
+export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab, highlightPolicyId }: {
+  vehicleId: string;
+  onNavigate: MobileNavigate;
+  onBack: () => void;
+  initialTab?: string;
+  highlightPolicyId?: string;
+}) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [showDelete, setShowDelete] = useState(false);
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab, highlightPolicyId, vehicleId]);
 
   const reload = async () => {
     const v = await fetchVehicleFull(vehicleId);
@@ -35,10 +47,11 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack }: { vehicle
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [v, p] = await Promise.all([fetchVehicleFull(vehicleId), fetchPartners()]);
+      const [v, p, pol] = await Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies()]);
       if (cancelled) return;
       setVehicle(v);
       setPartners(p);
+      setPolicies(pol);
       setLoading(false);
     })();
     return () => {
@@ -53,6 +66,16 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack }: { vehicle
   const inspectionItems = useMemo(() => latestInspection?.items ?? [], [latestInspection]);
   const overallScore = useMemo(() => computeOverallScore(inspectionItems), [inspectionItems]);
   const docCompleteness = useMemo(() => documentCompleteness(vehicle?.documents ?? []), [vehicle]);
+  const complianceViolations = useMemo(
+    () => (vehicle ? evaluateVehicleCompliance(vehicle, policies) : []),
+    [vehicle, policies],
+  );
+  const highlightRecordIds = useMemo(() => {
+    if (!vehicle || !highlightPolicyId) return [];
+    const policy = policies.find((p) => p.id === highlightPolicyId);
+    if (!policy) return [];
+    return findViolatingRecordIds(vehicle, policy);
+  }, [vehicle, policies, highlightPolicyId]);
 
   if (loading || !vehicle) {
     return (
@@ -132,13 +155,14 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack }: { vehicle
             overallScore={overallScore}
             docCompleteness={docCompleteness}
             funding={funding}
+            complianceViolations={complianceViolations}
             partners={partners}
             onChanged={reload}
             onNavigate={onNavigate}
           />
         )}
-        {tab === "documents" && <MobileDocumentsTab vehicle={vehicle} onChanged={reload} />}
-        {tab === "expenses" && <MobileExpensesTab vehicle={vehicle} onChanged={reload} />}
+        {tab === "documents" && <MobileDocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
+        {tab === "expenses" && <MobileExpensesTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
         {tab === "inspection" && <MobileInspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
       </div>
 
@@ -149,13 +173,14 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack }: { vehicle
   );
 }
 
-function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, partners, onChanged, onNavigate }: {
+function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, funding, complianceViolations, partners, onChanged, onNavigate }: {
   vehicle: VehicleWithRelations;
   cost: ReturnType<typeof computeCostBreakdown>;
   profit: ReturnType<typeof computeProfit> | null;
   overallScore: number | null;
   docCompleteness: ReturnType<typeof documentCompleteness>;
   funding: ReturnType<typeof computePartnerFunding>;
+  complianceViolations: ReturnType<typeof evaluateVehicleCompliance>;
   partners: Partner[];
   onChanged: () => void;
   onNavigate: MobileNavigate;
@@ -233,6 +258,23 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
         <div className="mt-3 pt-3 border-t border-mobile-border flex items-center justify-between text-xs">
           <span className="text-mobile-text-muted">Documents</span>
           <span className="font-medium text-mobile-text">{docCompleteness.verified}/{docCompleteness.total} verified</span>
+        </div>
+        <div className="mt-3 pt-3 border-t border-mobile-border">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="text-mobile-text-muted">Compliance</span>
+            <Tag color={complianceViolations.length === 0 ? "success" : complianceViolations.some((v) => (SEVERITY_RANK[v.severity] ?? 0) >= SEVERITY_RANK.High) ? "error" : "warning"}>
+              {complianceViolations.length === 0 ? "Compliant" : `${complianceViolations.length} issue${complianceViolations.length > 1 ? "s" : ""}`}
+            </Tag>
+          </div>
+          {complianceViolations.length > 0 && (
+            <ul className="space-y-1">
+              {complianceViolations.map((v) => (
+                <li key={v.policyId} className="text-xs text-mobile-text-muted flex items-start gap-1.5">
+                  <span className="text-mobile-border mt-0.5">•</span> {v.name}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </Card>
 
