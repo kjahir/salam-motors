@@ -158,6 +158,7 @@ export interface PurchasePayment {
   amount: number;
   payment_method: string;
   reference: string | null;
+  proof_urls: string[] | null;
   paid_at: string;
   notes: string | null;
 }

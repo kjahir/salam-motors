@@ -9,6 +9,8 @@ import { checkRegistrationUnique } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { VehicleFormFields, type VehicleCoreFormData } from "@/components/VehicleFormFields";
+import { MultiScreenshotUpload } from "@/components/MultiScreenshotUpload";
+import type { UploadedProof } from "@/components/ScreenshotUpload";
 import type { PageKey } from "@/components/Layout";
 
 interface AddVehicleProps {
@@ -69,6 +71,8 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
   const [showMorePurchase, setShowMorePurchase] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [paymentProofs, setPaymentProofs] = useState<UploadedProof[]>([]);
+  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -112,7 +116,10 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
     }
     setSubmitting(true);
     try {
-      const v = await createVehicle(form, user?.email ?? "Unknown");
+      const v = await createVehicle(
+        { ...form, payment_proof_paths: paymentProofs.map((p) => p.path) },
+        user?.email ?? "Unknown",
+      );
       setCreatedId(v.id);
       toast(`${v.stock_number} onboarded successfully`, "success");
     } catch (e) {
@@ -146,6 +153,8 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
               onClick={() => {
                 setForm(initialForm);
                 setCreatedId(null);
+                setPaymentProofs([]);
+                setUploadSessionId(crypto.randomUUID());
               }}
               className="btn-secondary"
             >
@@ -205,6 +214,14 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
               <Field label="Payment Reference">
                 <input className="input" value={form.payment_reference} onChange={(e) => update("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
               </Field>
+              <div className="sm:col-span-2">
+                <MultiScreenshotUpload
+                  bucket="finance-proofs"
+                  pathPrefix={`purchase-payments/${uploadSessionId}`}
+                  value={paymentProofs}
+                  onChange={setPaymentProofs}
+                />
+              </div>
               <Field label="Handover Location">
                 <input className="input" value={form.handover_location} onChange={(e) => update("handover_location", e.target.value)} placeholder="Chennai" />
               </Field>

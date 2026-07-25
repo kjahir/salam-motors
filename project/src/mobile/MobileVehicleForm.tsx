@@ -145,6 +145,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
           other_fee: "0",
           payment_method: "Cash",
           payment_reference: "",
+          payment_proof_paths: [],
           handover_location: "",
           odometer_at_purchase: form.odometer,
           keys_received: true,
