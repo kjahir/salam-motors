@@ -12,14 +12,28 @@ import {
   FileWarning,
   ShieldAlert,
   Activity,
+  Pencil,
 } from "lucide-react";
-import { PageHeader, Spinner } from "@/components/ui/Primitives";
+import { PageHeader, Spinner, Field } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 import { Badge, StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
-import { formatINR, formatDate, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies, fetchInvestments } from "@/lib/queries";
+import { useToast } from "@/components/ui/useToast";
+import { useAuth } from "@/lib/useAuth";
+import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
+import { computeEstimatedProfitRange } from "@/lib/calc";
+import {
+  fetchVehicles,
+  fetchFinancialSummaries,
+  fetchAlerts,
+  fetchComplianceStatuses,
+  fetchCompliancePolicies,
+  fetchInvestments,
+  fetchAppSettings,
+  updateAppSettings,
+} from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
-import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy, Investment } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy, Investment, AppSettings } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface DashboardProps {
@@ -33,6 +47,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [editingMargin, setEditingMargin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,13 +57,14 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p, inv] = await Promise.all([
+        const [v, s, a, c, p, inv, st] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
           fetchComplianceStatuses(),
           fetchCompliancePolicies(),
           fetchInvestments(),
+          fetchAppSettings(),
         ]);
         if (cancelled) return;
         setVehicles(v);
@@ -56,6 +73,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setComplianceStatuses(c);
         setPolicies(p);
         setInvestments(inv);
+        setSettings(st);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
       } finally {
@@ -94,9 +112,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       .reduce((s, i) => s + i.amount, 0);
     const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const totalAsking = inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0);
-    const estProfit = inStock.reduce((s, v) => {
-      const ep = summaryMap.get(v.id)?.estimated_profit;
-      return s + (ep ?? 0);
+    const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
+    const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+    const estProfitLow = inStock.reduce((s, v) => {
+      const cost = summaryMap.get(v.id)?.total_vehicle_cost ?? 0;
+      return s + computeEstimatedProfitRange(cost, marginLow, marginHigh).low;
+    }, 0);
+    const estProfitHigh = inStock.reduce((s, v) => {
+      const cost = summaryMap.get(v.id)?.total_vehicle_cost ?? 0;
+      return s + computeEstimatedProfitRange(cost, marginLow, marginHigh).high;
     }, 0);
 
     const realisedProfitThisMonth = soldThisMonth.reduce((s, v) => {
@@ -119,7 +143,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       totalInvestment,
       totalCost,
       totalAsking,
-      estProfit,
+      estProfitLow,
+      estProfitHigh,
+      marginLow,
+      marginHigh,
       boughtThisMonth: boughtThisMonth.length,
       soldThisMonth: soldThisMonth.length,
       realisedProfitThisMonth,
@@ -135,7 +162,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       complianceIssues,
       openAlertList: openAlerts.slice(0, 5),
     };
-  }, [vehicles, summaries, alerts, complianceStatuses, investments]);
+  }, [vehicles, summaries, alerts, complianceStatuses, investments, settings]);
 
   if (loading) {
     return (
@@ -190,10 +217,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         />
         <StatCard
           label="Estimated Profit"
-          value={formatINR(stats.estProfit, { compact: true })}
+          value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
           icon={<TrendingUp size={20} />}
           color="emerald"
-          hint="Across current stock at asking price"
+          hint={
+            <span className="inline-flex items-center gap-1">
+              {stats.marginLow}%–{stats.marginHigh}% margin over cost <Pencil size={11} className="opacity-60" />
+            </span>
+          }
+          onClick={() => setEditingMargin(true)}
         />
         <StatCard
           label="Compliance Issues"
@@ -376,7 +408,99 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </table>
         </div>
       </Card>
+
+      {editingMargin && settings && (
+        <EstimatedProfitMarginModal
+          settings={settings}
+          onClose={() => setEditingMargin(false)}
+          onSaved={(updated) => {
+            setSettings(updated);
+            setEditingMargin(false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function EstimatedProfitMarginModal({ settings, onClose, onSaved }: {
+  settings: AppSettings;
+  onClose: () => void;
+  onSaved: (settings: AppSettings) => void;
+}) {
+  const [low, setLow] = useState(String(settings.estimated_profit_margin_low_pct));
+  const [high, setHigh] = useState(String(settings.estimated_profit_margin_high_pct));
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  const lowNum = Number(low);
+  const highNum = Number(high);
+  const valid = low !== "" && high !== "" && !Number.isNaN(lowNum) && !Number.isNaN(highNum) && lowNum >= 0 && highNum >= lowNum;
+
+  const handleSave = async () => {
+    if (!valid) return;
+    setSaving(true);
+    try {
+      await updateAppSettings(
+        { estimated_profit_margin_low_pct: lowNum, estimated_profit_margin_high_pct: highNum },
+        user?.email ?? "Unknown",
+      );
+      toast("Estimated profit margin updated", "success");
+      onSaved({ ...settings, estimated_profit_margin_low_pct: lowNum, estimated_profit_margin_high_pct: highNum });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to update margin", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Estimated Profit Margin"
+      footer={
+        <>
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={handleSave} disabled={!valid || saving} className="btn-primary disabled:opacity-50">
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Estimated Profit is shown as a range: total vehicle cost × this margin. It applies to every vehicle across
+          Dashboard, Inventory, and Vehicle Detail — changing it here updates the range everywhere immediately.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Low margin %" required>
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={low}
+              onChange={(e) => setLow(e.target.value)}
+              className="input"
+            />
+          </Field>
+          <Field label="High margin %" required>
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={high}
+              onChange={(e) => setHigh(e.target.value)}
+              className="input"
+            />
+          </Field>
+        </div>
+        {!valid && (low !== "" || high !== "") && (
+          <p className="text-xs text-red-600">High margin must be greater than or equal to low margin, both ≥ 0.</p>
+        )}
+      </div>
+    </Modal>
   );
 }
 

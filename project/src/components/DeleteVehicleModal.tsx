@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/useToast";
+import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
 import type { Vehicle } from "@/lib/types";
 
@@ -19,6 +20,7 @@ export function DeleteVehicleModal({ vehicle, open, onClose, onDeleted }: Delete
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const blocked = BLOCKED_STATUSES.includes(vehicle.current_status);
   const canDelete = !blocked && confirmText.trim() === vehicle.stock_number;
@@ -27,8 +29,23 @@ export function DeleteVehicleModal({ vehicle, open, onClose, onDeleted }: Delete
     if (!canDelete) return;
     setDeleting(true);
     try {
-      const { error } = await supabase.from("vehicles").delete().eq("id", vehicle.id);
+      const { error } = await supabase
+        .from("vehicles")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", vehicle.id);
       if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({
+          entity_type: "vehicle",
+          entity_id: vehicle.id,
+          action: "deleted",
+          performed_by: user?.email ?? "Unknown",
+          reason: `Deleted ${vehicle.stock_number}: ${vehicle.manufacturer} ${vehicle.model}`,
+        })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log vehicle deletion", auditErr);
+        });
       toast(`${vehicle.stock_number} deleted`, "success");
       onDeleted();
       onClose();

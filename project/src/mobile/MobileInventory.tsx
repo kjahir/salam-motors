@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Bike, PlusCircle } from "lucide-react";
 import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs } from "./ui/primitives";
-import { formatINR, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchComplianceStatuses } from "@/lib/queries";
+import { formatINR, formatINRRange, daysSince } from "@/lib/format";
+import { computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicles, fetchFinancialSummaries, fetchComplianceStatuses, fetchAppSettings } from "@/lib/queries";
 import { SEVERITY_RANK } from "@/lib/constants";
-import type { Vehicle, VehicleFinancialSummary, VehicleComplianceStatus } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, VehicleComplianceStatus, AppSettings } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -19,6 +20,7 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"in-stock" | "sold">("in-stock");
@@ -27,11 +29,12 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
     let cancelled = false;
     (async () => {
       try {
-        const [v, s, c] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchComplianceStatuses()]);
+        const [v, s, c, st] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchComplianceStatuses(), fetchAppSettings()]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
         setComplianceStatuses(c);
+        setSettings(st);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -43,6 +46,8 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
   const complianceMap = useMemo(() => new Map(complianceStatuses.map((c) => [c.vehicle_id, c])), [complianceStatuses]);
+  const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
 
   const filtered = useMemo(() => {
     return vehicles
@@ -99,7 +104,7 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
           {filtered.map((v) => {
             const s = summaryMap.get(v.id);
             const days = daysSince(v.onboarded_at);
-            const estProfit = s?.estimated_profit ?? null;
+            const estRange = computeEstimatedProfitRange(s?.total_vehicle_cost ?? 0, marginLow, marginHigh);
             const compliance = complianceMap.get(v.id);
             return (
               <Card key={v.id} className="p-3.5" onClick={() => onNavigate("vehicle", { vehicleId: v.id })}>
@@ -124,9 +129,15 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-mobile-text-muted uppercase">{SOLD_STATUSES.includes(v.current_status) ? "Profit" : "Est. Profit"}</p>
-                    <p className={`text-sm font-semibold ${((SOLD_STATUSES.includes(v.current_status) ? s?.gross_profit : estProfit) ?? 0) >= 0 ? "text-mobile-success" : "text-mobile-error"}`}>
-                      {formatINR(SOLD_STATUSES.includes(v.current_status) ? s?.gross_profit : estProfit)}
-                    </p>
+                    {SOLD_STATUSES.includes(v.current_status) ? (
+                      <p className={`text-sm font-semibold ${(s?.gross_profit ?? 0) >= 0 ? "text-mobile-success" : "text-mobile-error"}`}>
+                        {formatINR(s?.gross_profit)}
+                      </p>
+                    ) : (
+                      <p className="text-sm font-semibold text-mobile-success whitespace-nowrap">
+                        {formatINRRange(estRange.low, estRange.high, { compact: true })}
+                      </p>
+                    )}
                   </div>
                 </div>
               </Card>

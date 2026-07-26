@@ -5,6 +5,7 @@ import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
+import { useAuth } from "@/lib/useAuth";
 import { fetchCompliancePolicies } from "@/lib/queries";
 import { syncAllVehiclesCompliance } from "@/lib/compliance";
 import { supabase } from "@/lib/supabase";
@@ -74,6 +75,7 @@ export function Policies() {
   const [submitting, setSubmitting] = useState(false);
   const [loadingDefaults, setLoadingDefaults] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const reload = async () => {
     try {
@@ -162,8 +164,23 @@ export function Policies() {
   const handleDelete = async (p: CompliancePolicy) => {
     if (!confirm(`Delete policy "${p.name}"? Any open alerts it created will be resolved.`)) return;
     try {
-      const { error } = await supabase.from("compliance_policies").delete().eq("id", p.id);
+      const { error } = await supabase
+        .from("compliance_policies")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", p.id);
       if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({
+          entity_type: "compliance_policy",
+          entity_id: p.id,
+          action: "deleted",
+          performed_by: user?.email ?? "Unknown",
+          reason: `Deleted policy "${p.name}"`,
+        })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log policy deletion", auditErr);
+        });
       toast("Policy removed", "success");
       await afterMutation();
     } catch (e) {

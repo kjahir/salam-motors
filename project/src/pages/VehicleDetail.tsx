@@ -27,15 +27,16 @@ import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { EditVehicleModal } from "@/components/EditVehicleModal";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
-import { formatINR, formatDate, daysSince, formatPercent } from "@/lib/format";
+import { formatINR, formatINRRange, formatDate, daysSince, formatPercent } from "@/lib/format";
 import {
   computeCostBreakdown,
   computeProfit,
   computeOverallScore,
   computePartnerFunding,
   documentCompleteness,
+  computeEstimatedProfitRange,
 } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners, fetchMechanics, fetchCompliancePolicies } from "@/lib/queries";
+import { fetchVehicleFull, fetchPartners, fetchMechanics, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
 import { supabase } from "@/lib/supabase";
 import { PartyPickerField } from "@/components/PartyPickerField";
@@ -58,7 +59,7 @@ import {
   SCORE_WEIGHTS,
   SEVERITY_RANK,
 } from "@/lib/constants";
-import type { VehicleWithRelations, Partner, Party, Expense, VehicleDocument, Inspection, InspectionItem, MechanicInspectionFeedback, CompliancePolicy } from "@/lib/types";
+import type { VehicleWithRelations, Partner, Party, Expense, VehicleDocument, Inspection, InspectionItem, MechanicInspectionFeedback, CompliancePolicy, AppSettings } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface VehicleDetailProps {
@@ -74,6 +75,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState("overview");
@@ -98,11 +100,17 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
     let cancelled = false;
     (async () => {
       try {
-        const [v, p, pol] = await Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies()]);
+        const [v, p, pol, st] = await Promise.all([
+          fetchVehicleFull(vehicleId),
+          fetchPartners(),
+          fetchCompliancePolicies(),
+          fetchAppSettings(),
+        ]);
         if (cancelled) return;
         setVehicle(v);
         setPartners(p);
         setPolicies(pol);
+        setSettings(st);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load vehicle");
       } finally {
@@ -132,6 +140,12 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   );
   const profit = useMemo(() => computeProfit(vehicle?.sale, cost), [vehicle, cost]);
   const funding = useMemo(() => computePartnerFunding(vehicle?.investments ?? []), [vehicle]);
+  const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+  const estRange = useMemo(
+    () => computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh),
+    [cost, marginLow, marginHigh],
+  );
 
   const latestInspection = (vehicle?.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
   const inspectionItems: InspectionItem[] = useMemo(() => latestInspection?.items ?? [], [latestInspection]);
@@ -225,9 +239,10 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         </Card>
         <Card className="p-4">
           <p className="stat-label">{isSold ? "Realised Profit" : "Est. Profit"}</p>
-          <p className={`stat-value mt-1.5 ${profit ? (profit.grossProfit >= 0 ? "text-emerald-600" : "text-red-600") : "text-slate-900"}`}>
-            {profit ? formatINR(profit.grossProfit) : formatINR(vehicle.asking_price ? vehicle.asking_price - cost.totalVehicleCost : null)}
+          <p className={`stat-value mt-1.5 ${profit ? (profit.grossProfit >= 0 ? "text-emerald-600" : "text-red-600") : "text-emerald-600"}`}>
+            {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: true })}
           </p>
+          {!profit && <p className="text-xs text-slate-400 mt-0.5">{marginLow}%–{marginHigh}% of cost</p>}
         </Card>
       </div>
 
@@ -250,7 +265,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         {tab === "expenses" && <ExpensesTab vehicle={vehicle} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
         {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
         {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
-        {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} onChanged={reload} />}
+        {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} onChanged={reload} />}
       </div>
     </div>
   );
@@ -263,6 +278,7 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
   );
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     setFiles(media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })));
@@ -285,9 +301,23 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
         if (error) throw error;
       }
       if (removed.length > 0) {
-        const { error } = await supabase.from("vehicle_media").delete().in("id", removed.map((m) => m.id));
+        const { error } = await supabase
+          .from("vehicle_media")
+          .update({ deleted_at: new Date().toISOString() })
+          .in("id", removed.map((m) => m.id));
         if (error) throw error;
-        await supabase.storage.from("vehicle-photos").remove(removed.map((m) => m.file_url!));
+        supabase
+          .from("audit_logs")
+          .insert({
+            entity_type: "vehicle_media",
+            entity_id: vehicle.id,
+            action: "deleted",
+            performed_by: user?.email ?? "Unknown",
+            reason: `Removed ${removed.length} photo${removed.length === 1 ? "" : "s"} from ${vehicle.stock_number}`,
+          })
+          .then(({ error: auditErr }) => {
+            if (auditErr) console.error("Failed to log photo deletion", auditErr);
+          });
       }
       onChanged();
     } catch (err) {
@@ -641,8 +671,14 @@ function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this expense?")) return;
     try {
-      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      const { error } = await supabase.from("expenses").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({ entity_type: "expense", entity_id: id, action: "deleted", performed_by: user?.email ?? "Unknown" })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log expense deletion", auditErr);
+        });
       toast("Expense removed", "success");
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
@@ -1398,10 +1434,23 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
   const handleDelete = async (d: VehicleDocument) => {
     if (!confirm("Delete this document record?")) return;
     try {
-      const paths = (d.file_urls?.length ? d.file_urls : d.file_url ? [d.file_url] : []).map(storagePathFor).filter(Boolean);
-      if (paths.length > 0) await supabase.storage.from("vehicle-documents").remove(paths);
-      const { error } = await supabase.from("vehicle_documents").delete().eq("id", d.id);
+      const { error } = await supabase
+        .from("vehicle_documents")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", d.id);
       if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({
+          entity_type: "vehicle_document",
+          entity_id: d.id,
+          action: "deleted",
+          performed_by: user?.email ?? "Unknown",
+          reason: `Deleted ${d.document_type} document`,
+        })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log document deletion", auditErr);
+        });
       toast("Document removed", "success");
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
@@ -1514,12 +1563,14 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
 }
 
 // ============ SALE & PROFIT ============
-function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
+function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHigh, onChanged }: {
   vehicle: VehicleWithRelations;
   cost: ReturnType<typeof computeCostBreakdown>;
   profit: ReturnType<typeof computeProfit> | null;
   funding: ReturnType<typeof computePartnerFunding>;
   partners: Partner[];
+  marginLow: number;
+  marginHigh: number;
   onChanged: () => void;
 }) {
   const [showBuyers, setShowBuyers] = useState(false);
@@ -1650,6 +1701,8 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
     );
   }
 
+  const estRange = computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh);
+
   return (
     <div className="space-y-5">
       <Card className="p-5">
@@ -1673,38 +1726,11 @@ function SaleTab({ vehicle, cost, profit, funding, partners, onChanged }: {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <Spec label="Asking Price" value={formatINR(vehicle.asking_price)} />
           <Spec label="Minimum Price" value={formatINR(vehicle.minimum_price)} />
-          {(() => {
-            const estProfitAsking = vehicle.asking_price ? vehicle.asking_price - cost.totalVehicleCost : null;
-            const estProfitMin = vehicle.minimum_price ? vehicle.minimum_price - cost.totalVehicleCost : null;
-            const colorFor = (p: number | null) => {
-              if (p === null || cost.totalVehicleCost <= 0) return "text-slate-900";
-              const pct = (p / cost.totalVehicleCost) * 100;
-              if (pct < 3) return "text-red-600";
-              if (pct <= 10) return "text-amber-600";
-              return "text-emerald-600";
-            };
-            const badgeFor = (p: number | null) => {
-              if (p === null || cost.totalVehicleCost <= 0) return null;
-              const pct = (p / cost.totalVehicleCost) * 100;
-              if (pct < 3) return <Badge color="red">Low (&lt;3%)</Badge>;
-              if (pct <= 10) return <Badge color="amber">Moderate (3-10%)</Badge>;
-              return <Badge color="emerald">Healthy (&gt;10%)</Badge>;
-            };
-            return (
-              <>
-                <div>
-                  <p className="text-xs text-slate-500">Est. Profit at Asking</p>
-                  <p className={`text-sm font-bold mt-0.5 ${colorFor(estProfitAsking)}`}>{formatINR(estProfitAsking)}</p>
-                  <div className="mt-1">{badgeFor(estProfitAsking)}</div>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Est. Profit at Minimum</p>
-                  <p className={`text-sm font-bold mt-0.5 ${colorFor(estProfitMin)}`}>{formatINR(estProfitMin)}</p>
-                  <div className="mt-1">{badgeFor(estProfitMin)}</div>
-                </div>
-              </>
-            );
-          })()}
+          <div>
+            <p className="text-xs text-slate-500">Estimated Profit Range</p>
+            <p className="text-sm font-bold mt-0.5 text-emerald-600">{formatINRRange(estRange.low, estRange.high)}</p>
+            <p className="text-xs text-slate-400 mt-1">{marginLow}%–{marginHigh}% of total cost</p>
+          </div>
         </div>
       </Card>
 

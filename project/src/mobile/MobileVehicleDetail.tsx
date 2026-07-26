@@ -6,16 +6,16 @@ import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
-import { formatINR, formatDate, formatPercent, daysSince } from "@/lib/format";
-import { computeCostBreakdown, computeProfit, computeOverallScore, computePartnerFunding, documentCompleteness } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies } from "@/lib/queries";
+import { formatINR, formatINRRange, formatDate, formatPercent, daysSince } from "@/lib/format";
+import { computeCostBreakdown, computeProfit, computeOverallScore, computePartnerFunding, documentCompleteness, computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
 import { evaluateVehicleCompliance, findViolatingRecordIds } from "@/lib/compliance";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { PAYMENT_METHODS, SEVERITY_RANK } from "@/lib/constants";
 import type { UploadedFile } from "@/lib/uploadedFile";
-import type { VehicleWithRelations, Partner, InspectionItem, CompliancePolicy } from "@/lib/types";
+import type { VehicleWithRelations, Partner, InspectionItem, CompliancePolicy, AppSettings } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 import { MobileDocumentsTab } from "./MobileDocumentsTab";
 import { MobileExpensesTab } from "./MobileExpensesTab";
@@ -33,6 +33,7 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [showDelete, setShowDelete] = useState(false);
@@ -50,11 +51,17 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [v, p, pol] = await Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies()]);
+      const [v, p, pol, st] = await Promise.all([
+        fetchVehicleFull(vehicleId),
+        fetchPartners(),
+        fetchCompliancePolicies(),
+        fetchAppSettings(),
+      ]);
       if (cancelled) return;
       setVehicle(v);
       setPartners(p);
       setPolicies(pol);
+      setSettings(st);
       setLoading(false);
     })();
     return () => {
@@ -64,6 +71,12 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
 
   const cost = useMemo(() => computeCostBreakdown(vehicle?.purchase, vehicle?.expenses ?? []), [vehicle]);
   const profit = useMemo(() => computeProfit(vehicle?.sale, cost), [vehicle, cost]);
+  const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+  const estRange = useMemo(
+    () => computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh),
+    [cost, marginLow, marginHigh],
+  );
   const funding = useMemo(() => computePartnerFunding(vehicle?.investments ?? []), [vehicle]);
   const latestInspection = (vehicle?.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
   const inspectionItems = useMemo(() => latestInspection?.items ?? [], [latestInspection]);
@@ -130,8 +143,8 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
         </Card>
         <Card className="p-3">
           <p className="text-[10px] text-mobile-text-muted uppercase">{isSold ? "Profit" : "Est. Profit"}</p>
-          <p className={`text-base font-poppins font-bold mt-1 ${profit ? (profit.grossProfit >= 0 ? "text-mobile-success" : "text-mobile-error") : "text-mobile-text"}`}>
-            {profit ? formatINR(profit.grossProfit) : formatINR(vehicle.asking_price ? vehicle.asking_price - cost.totalVehicleCost : null)}
+          <p className={`text-base font-poppins font-bold mt-1 ${profit ? (profit.grossProfit >= 0 ? "text-mobile-success" : "text-mobile-error") : "text-mobile-success"}`}>
+            {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: true })}
           </p>
         </Card>
       </div>
@@ -183,6 +196,7 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
   );
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     setFiles(media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })));
@@ -205,9 +219,23 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
         if (error) throw error;
       }
       if (removed.length > 0) {
-        const { error } = await supabase.from("vehicle_media").delete().in("id", removed.map((m) => m.id));
+        const { error } = await supabase
+          .from("vehicle_media")
+          .update({ deleted_at: new Date().toISOString() })
+          .in("id", removed.map((m) => m.id));
         if (error) throw error;
-        await supabase.storage.from("vehicle-photos").remove(removed.map((m) => m.file_url!));
+        supabase
+          .from("audit_logs")
+          .insert({
+            entity_type: "vehicle_media",
+            entity_id: vehicle.id,
+            action: "deleted",
+            performed_by: user?.email ?? "Unknown",
+            reason: `Removed ${removed.length} photo${removed.length === 1 ? "" : "s"} from ${vehicle.stock_number}`,
+          })
+          .then(({ error: auditErr }) => {
+            if (auditErr) console.error("Failed to log photo deletion", auditErr);
+          });
       }
       onChanged();
     } catch (err) {

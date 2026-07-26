@@ -68,6 +68,18 @@ export function computeProfit(sale: Sale | null | undefined, cost: CostBreakdown
   return { netSaleRevenue, totalVehicleCost: cost.totalVehicleCost, grossProfit, profitMarginPct, returnOnCostPct };
 }
 
+export interface EstimatedProfitRange {
+  low: number;
+  high: number;
+}
+
+export function computeEstimatedProfitRange(totalVehicleCost: number, marginLowPct: number, marginHighPct: number): EstimatedProfitRange {
+  return {
+    low: totalVehicleCost * (marginLowPct / 100),
+    high: totalVehicleCost * (marginHighPct / 100),
+  };
+}
+
 export function computeOverallScore(items: Pick<InspectionItem, "category" | "score" | "weight">[]): number | null {
   if (items.length === 0) return null;
   let weightedSum = 0;
