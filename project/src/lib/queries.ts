@@ -28,7 +28,25 @@ import type {
   VehicleComplianceStatus,
   VehicleComplianceViolation,
   VehicleMedia,
+  AppSettings,
 } from "./types";
+
+export async function fetchAppSettings(): Promise<AppSettings> {
+  const { data, error } = await supabase.from("app_settings").select("*").single();
+  if (error) throw error;
+  return data as AppSettings;
+}
+
+export async function updateAppSettings(
+  patch: Pick<AppSettings, "estimated_profit_margin_low_pct" | "estimated_profit_margin_high_pct">,
+  updatedBy: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("app_settings")
+    .update({ ...patch, updated_by: updatedBy })
+    .eq("id", true);
+  if (error) throw error;
+}
 
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
   const { data, error } = await supabase
@@ -57,7 +75,12 @@ export async function fetchFinancialSummary(vehicleId: string): Promise<VehicleF
 }
 
 export async function fetchCompliancePolicies(): Promise<CompliancePolicy[]> {
-  const { data, error } = await supabase.from("compliance_policies").select("*").order("category").order("name");
+  const { data, error } = await supabase
+    .from("compliance_policies")
+    .select("*")
+    .is("deleted_at", null)
+    .order("category")
+    .order("name");
   if (error) throw error;
   return (data ?? []) as CompliancePolicy[];
 }
@@ -79,13 +102,17 @@ export async function fetchVehicleComplianceViolations(vehicleId: string): Promi
 }
 
 export async function fetchVehicles(): Promise<Vehicle[]> {
-  const { data, error } = await supabase.from("vehicles").select("*").order("onboarded_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*")
+    .is("deleted_at", null)
+    .order("onboarded_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
 
 export async function fetchVehicle(id: string): Promise<Vehicle | null> {
-  const { data, error } = await supabase.from("vehicles").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await supabase.from("vehicles").select("*").eq("id", id).is("deleted_at", null).maybeSingle();
   if (error) throw error;
   return data as Vehicle | null;
 }
@@ -111,7 +138,12 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
     mediaRes,
   ] = await Promise.all([
     supabase.from("purchases").select("*").eq("vehicle_id", vehicleId).maybeSingle(),
-    supabase.from("expenses").select("*").eq("vehicle_id", vehicleId).order("expense_date", { ascending: false }),
+    supabase
+      .from("expenses")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .is("deleted_at", null)
+      .order("expense_date", { ascending: false }),
     supabase
       .from("investments")
       .select("*, partner:partners(*)")
@@ -126,6 +158,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
       .from("vehicle_documents")
       .select("*")
       .eq("vehicle_id", vehicleId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false }),
     supabase.from("sales").select("*").eq("vehicle_id", vehicleId).eq("status", "Completed").maybeSingle(),
     supabase
@@ -157,6 +190,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
       .from("vehicle_media")
       .select("*")
       .eq("vehicle_id", vehicleId)
+      .is("deleted_at", null)
       .order("uploaded_at", { ascending: false }),
   ]);
 
@@ -226,13 +260,13 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
 }
 
 export async function fetchPartners(): Promise<Partner[]> {
-  const { data, error } = await supabase.from("partners").select("*").order("name");
+  const { data, error } = await supabase.from("partners").select("*").is("deleted_at", null).order("name");
   if (error) throw error;
   return data ?? [];
 }
 
 export async function fetchParties(type?: string, subtype?: string): Promise<Party[]> {
-  let q = supabase.from("parties").select("*").order("full_name");
+  let q = supabase.from("parties").select("*").is("deleted_at", null).order("full_name");
   if (type) q = q.eq("party_type", type);
   if (subtype) q = q.eq("party_subtype", subtype);
   const { data, error } = await q;
@@ -289,6 +323,7 @@ export async function fetchAllExpenses(): Promise<(Expense & { vehicle?: Vehicle
   const { data, error } = await supabase
     .from("expenses")
     .select("*, vehicle:vehicles(*), partner:partners(*)")
+    .is("deleted_at", null)
     .order("expense_date", { ascending: false });
   if (error) throw error;
   return data ?? [];

@@ -139,8 +139,14 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds }: { vehicl
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this expense?")) return;
     try {
-      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      const { error } = await supabase.from("expenses").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({ entity_type: "expense", entity_id: id, action: "deleted", performed_by: user?.email ?? "Unknown" })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log expense deletion", auditErr);
+        });
       toast("Expense removed", "success");
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();

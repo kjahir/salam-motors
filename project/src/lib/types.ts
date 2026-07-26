@@ -8,6 +8,7 @@ export interface Partner {
   status: string;
   notes: string | null;
   created_at: string;
+  deleted_at: string | null;
 }
 
 export type PartySubtype = "individual" | "bank_auction" | "agent" | "company_mechanic";
@@ -29,6 +30,7 @@ export interface Party {
   consent: boolean;
   notes: string | null;
   created_at: string;
+  deleted_at: string | null;
 }
 
 export type VehicleStatus =
@@ -75,6 +77,7 @@ export interface Vehicle {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
 
 export interface VehicleDocument {
@@ -93,6 +96,7 @@ export interface VehicleDocument {
   version: number;
   notes: string | null;
   created_at: string;
+  deleted_at: string | null;
 }
 
 export interface Inspection {
@@ -181,6 +185,7 @@ export interface Expense {
   approved_at: string | null;
   notes: string | null;
   created_at: string;
+  deleted_at: string | null;
 }
 
 export interface Investment {
@@ -356,6 +361,7 @@ export interface CompliancePolicy {
   resolution_mode: string;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
 
 export interface VehicleComplianceViolation {
@@ -370,6 +376,13 @@ export interface VehicleComplianceStatus {
   violation_count: number;
   max_severity_rank: number;
   violations: VehicleComplianceViolation[];
+}
+
+export interface AppSettings {
+  estimated_profit_margin_low_pct: number;
+  estimated_profit_margin_high_pct: number;
+  updated_at: string;
+  updated_by: string | null;
 }
 
 export interface AuditLog {
@@ -424,6 +437,7 @@ export interface VehicleMedia {
   file_url: string | null;
   thumbnail_url: string | null;
   uploaded_at: string;
+  deleted_at: string | null;
 }
 
 export interface VehicleWithRelations extends Vehicle {

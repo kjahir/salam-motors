@@ -3,13 +3,13 @@ import { Search, Bike, PlusCircle, AlertTriangle, Download, X, Pencil, Trash2, B
 import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
-import { formatINR, formatDate, daysSince } from "@/lib/format";
-import { downloadCSV } from "@/lib/calc";
-import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts, fetchComplianceStatuses } from "@/lib/queries";
+import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
+import { downloadCSV, computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts, fetchComplianceStatuses, fetchAppSettings } from "@/lib/queries";
 import { VEHICLE_STATUSES, VEHICLE_CATEGORIES } from "@/lib/constants";
 import { EditVehicleModal } from "@/components/EditVehicleModal";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
-import type { Vehicle, VehicleFinancialSummary, Partner, VehicleComplianceStatus } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Partner, VehicleComplianceStatus, AppSettings } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface InventoryProps {
@@ -24,6 +24,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [openAlertCounts, setOpenAlertCounts] = useState<Map<string, number>>(new Map());
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,11 +38,19 @@ export function Inventory({ onNavigate }: InventoryProps) {
 
   const reload = async () => {
     try {
-      const [v, s, p, a, c] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchPartners(), fetchAlerts(), fetchComplianceStatuses()]);
+      const [v, s, p, a, c, st] = await Promise.all([
+        fetchVehicles(),
+        fetchFinancialSummaries(),
+        fetchPartners(),
+        fetchAlerts(),
+        fetchComplianceStatuses(),
+        fetchAppSettings(),
+      ]);
       setVehicles(v);
       setSummaries(s);
       setPartners(p);
       setComplianceStatuses(c);
+      setSettings(st);
       const counts = new Map<string, number>();
       for (const alert of a) {
         if (alert.status === "Open") counts.set(alert.vehicle_id, (counts.get(alert.vehicle_id) ?? 0) + 1);
@@ -60,6 +69,8 @@ export function Inventory({ onNavigate }: InventoryProps) {
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
   const complianceMap = useMemo(() => new Map(complianceStatuses.map((c) => [c.vehicle_id, c])), [complianceStatuses]);
+  const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
 
   const filtered = useMemo(() => {
     const soldStatuses = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -109,6 +120,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const handleExport = () => {
     const rows = filtered.map((v) => {
       const s = summaryMap.get(v.id);
+      const range = computeEstimatedProfitRange(s?.total_vehicle_cost ?? 0, marginLow, marginHigh);
       return {
         "Stock #": v.stock_number,
         "Reg #": v.registration_number ?? "",
@@ -121,7 +133,8 @@ export function Inventory({ onNavigate }: InventoryProps) {
         "Total Expense": s?.total_expense ?? 0,
         "Total Cost": s?.total_vehicle_cost ?? 0,
         "Asking Price": v.asking_price ?? 0,
-        "Estimated Profit": s?.estimated_profit ?? "",
+        "Estimated Profit (Low)": range.low,
+        "Estimated Profit (High)": range.high,
         "Total Invested": s?.total_invested ?? 0,
         Onboarded: formatDate(v.onboarded_at),
       };
@@ -258,8 +271,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                 {filtered.map((v) => {
                   const s = summaryMap.get(v.id);
                   const days = daysSince(v.onboarded_at);
-                  const estProfit = s?.estimated_profit ?? null;
-                  const profitColor = estProfit === null ? "text-slate-400" : estProfit >= 0 ? "text-emerald-600" : "text-red-600";
+                  const estRange = computeEstimatedProfitRange(s?.total_vehicle_cost ?? 0, marginLow, marginHigh);
                   return (
                     <tr
                       key={v.id}
@@ -286,7 +298,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(s?.total_vehicle_cost ?? 0)}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(v.asking_price)}</td>
-                      <td className={`px-4 py-3 text-right font-semibold ${profitColor}`}>{formatINR(estProfit)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-600 whitespace-nowrap">{formatINRRange(estRange.low, estRange.high, { compact: true })}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{formatINR(s?.total_invested ?? 0)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(v.onboarded_at)}</td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>

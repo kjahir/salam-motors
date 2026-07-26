@@ -115,11 +115,14 @@ export function Finance({ onNavigate }: FinanceProps) {
       .reduce((s, i) => s + i.amount, 0);
     const totalExpenses = expenses.filter((e) => e.approval_status === "Approved").reduce((s, e) => s + e.amount, 0);
     const pendingExpenses = expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft");
+    const totalPurchases = purchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
+    const totalPurchaseAndExpenses = totalPurchases + totalExpenses;
+    const totalSales = soldSales.reduce((s, sale) => s + sale.sale_price, 0);
     const totalProfit = distributions.reduce((s, d) => s + d.profit_share, 0);
     const totalSettled = distributions.reduce((s, d) => s + d.amount_paid, 0);
     const totalPayable = distributions.reduce((s, d) => s + d.balance_payable, 0);
-    return { totalInvested, totalExpenses, pendingExpenses, totalProfit, totalSettled, totalPayable };
-  }, [investments, expenses, distributions]);
+    return { totalInvested, totalExpenses, pendingExpenses, totalPurchases, totalPurchaseAndExpenses, totalSales, totalProfit, totalSettled, totalPayable };
+  }, [investments, expenses, distributions, purchases, soldSales]);
 
   const investmentRows = useMemo(() => {
     const filtered = investments.filter((i) => isWithinDateRange(i.investment_date, dateRange) && matches(i.vehicle));
@@ -217,8 +220,20 @@ export function Finance({ onNavigate }: FinanceProps) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard label="Total Invested" value={formatINR(totals.totalInvested, { compact: true })} icon={<IndianRupee size={18} />} color="brand" />
-        <StatCard label="Total Expenses" value={formatINR(totals.totalExpenses, { compact: true })} icon={<Receipt size={18} />} color="slate" />
-        <StatCard label="Total Profit" value={formatINR(totals.totalProfit, { compact: true })} icon={<TrendingUp size={18} />} color="emerald" />
+        <StatCard
+          label="Total Purchase and Expenses"
+          value={formatINR(totals.totalPurchaseAndExpenses, { compact: true })}
+          hint={`Purchases ${formatINR(totals.totalPurchases, { compact: true })} · Expenses ${formatINR(totals.totalExpenses, { compact: true })}`}
+          icon={<Receipt size={18} />}
+          color="slate"
+        />
+        <StatCard
+          label="Total Sales and Profit"
+          value={formatINR(totals.totalSales, { compact: true })}
+          hint={`Profit ${formatINR(totals.totalProfit, { compact: true })}`}
+          icon={<TrendingUp size={18} />}
+          color="emerald"
+        />
         <StatCard label="Payable to Partners" value={formatINR(totals.totalPayable, { compact: true })} icon={<Wallet size={18} />} color="amber" />
       </div>
 
@@ -314,6 +329,13 @@ export function Finance({ onNavigate }: FinanceProps) {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right">{formatINR(investmentRows.reduce((s, i) => s + i.amount, 0))}</td>
+                    <td className="px-4 py-3" colSpan={4}></td>
+                  </tr>
+                </tfoot>
               </TableWrapper>
             )}
           </Card>
@@ -366,6 +388,15 @@ export function Finance({ onNavigate }: FinanceProps) {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right">{formatINR(purchaseRows.reduce((s, p) => s + p.agreed_price, 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(purchaseRows.reduce((s, p) => s + p.broker_commission + p.other_fee, 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(purchaseRows.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0))}</td>
+                    <td className="px-4 py-3" colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </TableWrapper>
             )}
           </Card>
@@ -418,6 +449,13 @@ export function Finance({ onNavigate }: FinanceProps) {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right">{formatINR(expenseRows.reduce((s, e) => s + e.amount, 0))}</td>
+                    <td className="px-4 py-3" colSpan={4}></td>
+                  </tr>
+                </tfoot>
               </TableWrapper>
             )}
           </Card>
@@ -485,6 +523,15 @@ export function Finance({ onNavigate }: FinanceProps) {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right">{formatINR(saleRows.reduce((s, sale) => s + sale.sale_price, 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.total_vehicle_cost ?? 0), 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0))}</td>
+                    <td className="px-4 py-3" colSpan={4}></td>
+                  </tr>
+                </tfoot>
               </TableWrapper>
             )}
           </Card>
@@ -546,6 +593,16 @@ export function Finance({ onNavigate }: FinanceProps) {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.principal_return, 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.profit_share, 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.total_entitlement, 0))}</td>
+                    <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.amount_paid, 0))}</td>
+                    <td className="px-4 py-3" colSpan={3}></td>
+                  </tr>
+                </tfoot>
               </TableWrapper>
             )}
           </Card>

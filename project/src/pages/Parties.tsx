@@ -7,6 +7,7 @@ import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
+import { useAuth } from "@/lib/useAuth";
 import { formatDate, initials } from "@/lib/format";
 import { fetchParties, fetchPartyVehicles } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -77,6 +78,7 @@ export function Parties({ onNavigate }: PartiesProps) {
   const [partyVehicles, setPartyVehicles] = useState<Vehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const reload = async () => {
     try {
@@ -212,15 +214,25 @@ export function Parties({ onNavigate }: PartiesProps) {
       );
       return;
     }
-    if (!confirm(`Delete ${party.full_name}? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${party.full_name}?`)) return;
     try {
-      const { error } = await supabase.from("parties").delete().eq("id", party.id);
-      if (error) {
-        if (error.code === "23503") {
-          throw new Error(`${party.full_name} is linked to existing purchase or sale records and cannot be deleted.`);
-        }
-        throw error;
-      }
+      const { error } = await supabase
+        .from("parties")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", party.id);
+      if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({
+          entity_type: "party",
+          entity_id: party.id,
+          action: "deleted",
+          performed_by: user?.email ?? "Unknown",
+          reason: `Deleted ${party.full_name}`,
+        })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log party deletion", auditErr);
+        });
       toast("Party removed", "success");
       setDetailParty(null);
       reload();

@@ -5,6 +5,7 @@ import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
+import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatDate, formatPercent, initials } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
 import { fetchPartners, fetchInvestments, fetchProfitDistributions } from "@/lib/queries";
@@ -34,6 +35,7 @@ export function Partners({ onNavigate }: PartnersProps) {
   const [investingPartner, setInvestingPartner] = useState<Partner | null>(null);
   const [settlingDistribution, setSettlingDistribution] = useState<DistributionRow | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
   const proofLightbox = useProofLightbox("finance-proofs");
 
   const reload = async () => {
@@ -98,10 +100,16 @@ export function Partners({ onNavigate }: PartnersProps) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this partner? Related investments will remain but become unlinked.")) return;
+    if (!confirm("Delete this partner?")) return;
     try {
-      const { error } = await supabase.from("partners").delete().eq("id", id);
+      const { error } = await supabase.from("partners").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
+      supabase
+        .from("audit_logs")
+        .insert({ entity_type: "partner", entity_id: id, action: "deleted", performed_by: user?.email ?? "Unknown" })
+        .then(({ error: auditErr }) => {
+          if (auditErr) console.error("Failed to log partner deletion", auditErr);
+        });
       toast("Partner removed", "success");
       reload();
     } catch (e) {

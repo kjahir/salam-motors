@@ -10,6 +10,10 @@ export function formatINR(value: number | null | undefined, options?: { compact?
   return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
+export function formatINRRange(low: number, high: number, options?: { compact?: boolean }): string {
+  return `${formatINR(low, options)} – ${formatINR(high, options)}`;
+}
+
 export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return value.toLocaleString("en-IN");
