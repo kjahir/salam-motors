@@ -7,7 +7,7 @@ import { SettlementModal } from "@/components/SettlementModal";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { useProofLightbox } from "@/hooks/useProofLightbox";
 import { formatINR, formatDate, formatPercent } from "@/lib/format";
-import { downloadCSV } from "@/lib/calc";
+import { downloadCSV, isApproved } from "@/lib/calc";
 import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
 import {
   fetchInvestments,
@@ -113,7 +113,7 @@ export function Finance({ onNavigate }: FinanceProps) {
     const totalInvested = investments
       .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
       .reduce((s, i) => s + i.amount, 0);
-    const totalExpenses = expenses.filter((e) => e.approval_status === "Approved").reduce((s, e) => s + e.amount, 0);
+    const totalExpenses = expenses.filter(isApproved).reduce((s, e) => s + e.amount, 0);
     const pendingExpenses = expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft");
     const totalPurchases = purchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
     const totalPurchaseAndExpenses = totalPurchases + totalExpenses;

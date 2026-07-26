@@ -26,7 +26,7 @@ const LOGISTICS_CATEGORIES = new Set(["Transportation", "Fuel", "Test ride"]);
 const DOCS_SELLING_CATEGORIES = new Set(["Document transfer", "Insurance", "PUC", "Advertisement", "Broker commission"]);
 const OTHER_CATEGORIES = new Set(["Penalty or fine", "Other"]);
 
-function isApproved(e: Expense): boolean {
+export function isApproved(e: Expense): boolean {
   return e.approval_status === "Approved" || e.approval_status === "Paid";
 }
 
