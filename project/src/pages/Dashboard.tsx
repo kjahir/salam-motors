@@ -14,7 +14,7 @@ import {
   Activity,
   Pencil,
 } from "lucide-react";
-import { PageHeader, Spinner, Field } from "@/components/ui/Primitives";
+import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Badge, StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
@@ -31,9 +31,21 @@ import {
   fetchInvestments,
   fetchAppSettings,
   updateAppSettings,
+  fetchPartners,
+  fetchProfitDistributions,
 } from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
-import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy, Investment, AppSettings } from "@/lib/types";
+import type {
+  Vehicle,
+  VehicleFinancialSummary,
+  Alert,
+  VehicleComplianceStatus,
+  CompliancePolicy,
+  Investment,
+  AppSettings,
+  Partner,
+  ProfitDistribution,
+} from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface DashboardProps {
@@ -49,6 +61,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [editingMargin, setEditingMargin] = useState(false);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +71,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p, inv, st] = await Promise.all([
+        const [v, s, a, c, p, inv, st, pt, dist] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
@@ -65,6 +79,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           fetchCompliancePolicies(),
           fetchInvestments(),
           fetchAppSettings(),
+          fetchPartners(),
+          fetchProfitDistributions(),
         ]);
         if (cancelled) return;
         setVehicles(v);
@@ -74,6 +90,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setPolicies(p);
         setInvestments(inv);
         setSettings(st);
+        setPartners(pt);
+        setDistributions(dist);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
       } finally {
@@ -90,7 +108,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
     const complianceMap = new Map(complianceStatuses.map((c) => [c.vehicle_id, c]));
-    const complianceIssues = complianceStatuses.filter((c) => c.violation_count > 0).length;
     const inStock = vehicles.filter(
       (v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status),
     );
@@ -112,6 +129,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       .reduce((s, i) => s + i.amount, 0);
     const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const totalAsking = inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0);
+
+    // All-time (not just current stock) — for the Financial Overview widget
+    const totalCostAllTime = summaries.reduce((s, x) => s + x.total_vehicle_cost, 0);
+    const totalSalesAllTime = summaries.reduce((s, x) => s + x.sale_price, 0);
+    const totalProfitAllTime = summaries.reduce((s, x) => s + (x.gross_profit ?? 0), 0);
     const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
     const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
     const estProfitLow = inStock.reduce((s, v) => {
@@ -137,12 +159,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const readyForSale = inStock.filter((v) => v.current_status === "READY_FOR_SALE").length;
 
     const openAlerts = alerts.filter((a) => a.status === "Open");
+    const openAlertVehicleCount = new Set(openAlerts.map((a) => a.vehicle_id).filter(Boolean)).size;
 
     return {
       inStockCount: inStock.length,
       totalInvestment,
       totalCost,
       totalAsking,
+      totalCostAllTime,
+      totalSalesAllTime,
+      totalProfitAllTime,
       estProfitLow,
       estProfitHigh,
       marginLow,
@@ -156,13 +182,23 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       underRepair,
       readyForSale,
       openAlerts: openAlerts.length,
+      openAlertVehicleCount,
       inStock,
       summaryMap,
       complianceMap,
-      complianceIssues,
       openAlertList: openAlerts.slice(0, 5),
     };
   }, [vehicles, summaries, alerts, complianceStatuses, investments, settings]);
+
+  const partnerShares = useMemo(() => {
+    const byPartner = new Map<string, number>();
+    for (const d of distributions) {
+      byPartner.set(d.partner_id, (byPartner.get(d.partner_id) ?? 0) + d.profit_share);
+    }
+    return partners
+      .map((p) => ({ id: p.id, name: p.name, amount: byPartner.get(p.id) ?? 0 }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [partners, distributions]);
 
   if (loading) {
     return (
@@ -198,61 +234,90 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         }
       />
 
-      {/* Primary KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Vehicles in Stock"
-          value={stats.inStockCount}
-          icon={<Bike size={20} />}
-          color="brand"
-          hint={`${stats.readyForSale} ready for sale · ${stats.underRepair} under repair`}
-          onClick={() => onNavigate("inventory")}
-        />
-        <StatCard
-          label="Total Inventory Cost"
-          value={formatINR(stats.totalCost, { compact: true })}
-          icon={<Wallet size={20} />}
-          color="slate"
-          hint={`Asking value ${formatINR(stats.totalAsking, { compact: true })}`}
-        />
-        <StatCard
-          label="Estimated Profit"
-          value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
-          icon={<TrendingUp size={20} />}
-          color="emerald"
-          hint={
-            <span className="inline-flex items-center gap-1">
-              {stats.marginLow}%–{stats.marginHigh}% margin over cost <Pencil size={11} className="opacity-60" />
-            </span>
-          }
-          onClick={() => setEditingMargin(true)}
-        />
-        <StatCard
-          label="Compliance Issues"
-          value={stats.complianceIssues}
-          icon={<ShieldAlert size={20} />}
-          color={stats.complianceIssues > 0 ? "orange" : "emerald"}
-          hint="Vehicles missing required documents or evidence"
-          onClick={() => onNavigate("alerts")}
-        />
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Left: As of Today + This Month, stacked */}
+        <div className="lg:col-span-2 space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">As of Today</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <StatCard
+                label="Vehicles in Stock"
+                value={stats.inStockCount}
+                icon={<Bike size={20} />}
+                color="brand"
+                hint={`${stats.readyForSale} ready for sale · ${stats.underRepair} under repair`}
+                onClick={() => onNavigate("inventory")}
+              />
+              <StatCard
+                label="Total Inventory Cost"
+                value={formatINR(stats.totalCost, { compact: true })}
+                icon={<Wallet size={20} />}
+                color="slate"
+                hint={`Asking value ${formatINR(stats.totalAsking, { compact: true })}`}
+              />
+              <StatCard
+                label="Estimated Profit"
+                value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
+                icon={<TrendingUp size={20} />}
+                color="emerald"
+                hint={
+                  <span className="inline-flex items-center gap-1">
+                    {stats.marginLow}%–{stats.marginHigh}% margin over cost <Pencil size={11} className="opacity-60" />
+                  </span>
+                }
+                onClick={() => setEditingMargin(true)}
+              />
+            </div>
+          </div>
 
-      {/* Secondary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Bought This Month" value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
-        <StatCard label="Sold This Month" value={stats.soldThisMonth} icon={<CheckCircle2 size={18} />} color="emerald" />
-        <StatCard
-          label="Realised Profit (Month)"
-          value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
-          icon={<IndianRupee size={18} />}
-          color="emerald"
-        />
-        <StatCard
-          label="Total Invested"
-          value={formatINR(stats.totalInvestment, { compact: true })}
-          icon={<Wallet size={18} />}
-          color="slate"
-        />
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">This Month</h3>
+              <button onClick={() => onNavigate("finance")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
+                View all <ArrowRight size={14} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <StatCard label="Bought This Month" value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
+              <StatCard label="Sold This Month" value={stats.soldThisMonth} icon={<CheckCircle2 size={18} />} color="emerald" />
+              <StatCard
+                label="Realised Profit (Month)"
+                value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
+                icon={<IndianRupee size={18} />}
+                color="emerald"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Financial Overview, spanning the height of both rows on the left */}
+        <Card className="p-5 h-full">
+          <h3 className="font-semibold text-slate-900 mb-4">Financial Overview</h3>
+          <div className="space-y-3">
+            <FinancialStatRow label="Total Invested" value={formatINR(stats.totalInvestment, { compact: true })} color="text-slate-900" />
+            <FinancialStatRow label="Total Cost" value={formatINR(stats.totalCostAllTime, { compact: true })} color="text-slate-900" />
+            <FinancialStatRow label="Total Sales" value={formatINR(stats.totalSalesAllTime, { compact: true })} color="text-slate-900" />
+            <FinancialStatRow
+              label="Total Profit"
+              value={formatINR(stats.totalProfitAllTime, { compact: true })}
+              color={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
+            />
+          </div>
+          <div className="pt-4 mt-4 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Profit Share by Partner</p>
+            {partnerShares.length === 0 ? (
+              <p className="text-sm text-slate-400">No partners configured yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {partnerShares.map((p) => (
+                  <FinancialStatRow key={p.id} label={p.name} value={formatINR(p.amount, { compact: true })} color="text-emerald-600" />
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -305,7 +370,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         {/* Open alerts */}
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900">Recent Alerts list ({stats.openAlerts} open alert{stats.openAlerts !== 1 ? "s" : ""})</h3>
+            <h3 className="font-semibold text-slate-900">
+              Recent Alerts List ({stats.openAlerts} open alert{stats.openAlerts !== 1 ? "s" : ""} from {stats.openAlertVehicleCount} vehicle{stats.openAlertVehicleCount !== 1 ? "s" : ""})
+            </h3>
             <button onClick={() => onNavigate("alerts")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
               All <ArrowRight size={14} />
             </button>
@@ -412,6 +479,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       {editingMargin && settings && (
         <EstimatedProfitMarginModal
           settings={settings}
+          totalCost={stats.totalCost}
           onClose={() => setEditingMargin(false)}
           onSaved={(updated) => {
             setSettings(updated);
@@ -423,31 +491,39 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   );
 }
 
-function EstimatedProfitMarginModal({ settings, onClose, onSaved }: {
+function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   settings: AppSettings;
+  totalCost: number;
   onClose: () => void;
   onSaved: (settings: AppSettings) => void;
 }) {
-  const [low, setLow] = useState(String(settings.estimated_profit_margin_low_pct));
-  const [high, setHigh] = useState(String(settings.estimated_profit_margin_high_pct));
+  const [low, setLow] = useState(settings.estimated_profit_margin_low_pct);
+  const [high, setHigh] = useState(settings.estimated_profit_margin_high_pct);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const lowNum = Number(low);
-  const highNum = Number(high);
-  const valid = low !== "" && high !== "" && !Number.isNaN(lowNum) && !Number.isNaN(highNum) && lowNum >= 0 && highNum >= lowNum;
+  const handleLowChange = (v: number) => {
+    setLow(v);
+    if (v > high) setHigh(v);
+  };
+  const handleHighChange = (v: number) => {
+    setHigh(v);
+    if (v < low) setLow(v);
+  };
+
+  const previewLow = totalCost * (low / 100);
+  const previewHigh = totalCost * (high / 100);
 
   const handleSave = async () => {
-    if (!valid) return;
     setSaving(true);
     try {
       await updateAppSettings(
-        { estimated_profit_margin_low_pct: lowNum, estimated_profit_margin_high_pct: highNum },
+        { estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high },
         user?.email ?? "Unknown",
       );
       toast("Estimated profit margin updated", "success");
-      onSaved({ ...settings, estimated_profit_margin_low_pct: lowNum, estimated_profit_margin_high_pct: highNum });
+      onSaved({ ...settings, estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high });
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to update margin", "error");
     } finally {
@@ -463,44 +539,83 @@ function EstimatedProfitMarginModal({ settings, onClose, onSaved }: {
       footer={
         <>
           <button onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={handleSave} disabled={!valid || saving} className="btn-primary disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="btn-primary disabled:opacity-50">
             {saving ? "Saving…" : "Save"}
           </button>
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         <p className="text-sm text-slate-600">
-          Estimated Profit is shown as a range: total vehicle cost × this margin. It applies to every vehicle across
-          Dashboard, Inventory, and Vehicle Detail — changing it here updates the range everywhere immediately.
+          Estimated Profit = current in-stock cost × margin. Drag the sliders to preview instantly — saving applies
+          the new range across Dashboard, Inventory, and Vehicle Detail.
         </p>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Low margin %" required>
-            <input
-              type="number"
-              min={0}
-              step="0.5"
-              value={low}
-              onChange={(e) => setLow(e.target.value)}
-              className="input"
-            />
-          </Field>
-          <Field label="High margin %" required>
-            <input
-              type="number"
-              min={0}
-              step="0.5"
-              value={high}
-              onChange={(e) => setHigh(e.target.value)}
-              className="input"
-            />
-          </Field>
+
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
+          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Estimated Profit Preview</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">{formatINRRange(previewLow, previewHigh, { compact: true })}</p>
+          <p className="text-xs text-emerald-600 mt-0.5">Across current in-stock cost of {formatINR(totalCost, { compact: true })}</p>
         </div>
-        {!valid && (low !== "" || high !== "") && (
-          <p className="text-xs text-red-600">High margin must be greater than or equal to low margin, both ≥ 0.</p>
-        )}
+
+        <div className="px-1 py-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold text-amber-600 tabular-nums">Low {low}%</span>
+            <span className="text-sm font-bold text-emerald-600 tabular-nums">High {high}%</span>
+          </div>
+          <DualRangeSlider low={low} high={high} onLowChange={handleLowChange} onHighChange={handleHighChange} />
+        </div>
       </div>
     </Modal>
+  );
+}
+
+function DualRangeSlider({ low, high, onLowChange, onHighChange, min = 0, max = 100 }: {
+  low: number;
+  high: number;
+  onLowChange: (value: number) => void;
+  onHighChange: (value: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  const thumbClass =
+    "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer " +
+    "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:shadow [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-none";
+
+  return (
+    <div className="relative h-6 flex items-center">
+      <div className="absolute inset-x-0 h-1.5 rounded-full bg-slate-200" />
+      <div
+        className="absolute h-1.5 rounded-full bg-emerald-400"
+        style={{ left: `${low}%`, right: `${100 - high}%` }}
+      />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={low}
+        onChange={(e) => onLowChange(Number(e.target.value))}
+        className={`absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:border-amber-500 [&::-moz-range-thumb]:border-amber-500 ${thumbClass}`}
+      />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={high}
+        onChange={(e) => onHighChange(Number(e.target.value))}
+        className={`absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:border-emerald-600 [&::-moz-range-thumb]:border-emerald-600 ${thumbClass}`}
+      />
+    </div>
+  );
+}
+
+function FinancialStatRow({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-sm text-slate-500 truncate">{label}</p>
+      <p className={`text-sm font-bold shrink-0 ${color}`}>{value}</p>
+    </div>
   );
 }
 
