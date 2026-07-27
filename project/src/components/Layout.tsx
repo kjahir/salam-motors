@@ -13,8 +13,11 @@ import {
   ShieldCheck,
   LayoutDashboard,
   FileBarChart,
+  UserCog,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
+import { usePermissions } from "@/lib/usePermissions";
+import { ROLE_LABELS } from "@/lib/constants";
 
 export type PageKey =
   | "dashboard"
@@ -27,7 +30,8 @@ export type PageKey =
   | "alerts"
   | "passport"
   | "history"
-  | "policies";
+  | "policies"
+  | "team";
 
 export interface NavigateParams {
   vehicleId?: string;
@@ -54,16 +58,19 @@ const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
   { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
   { key: "history", label: "History", icon: <History size={18} /> },
   { key: "policies", label: "Policies", icon: <ShieldCheck size={18} /> },
+  { key: "team", label: "Team", icon: <UserCog size={18} /> },
 ];
 
 const navSections: { key: PageKey }[][] = [
   [{ key: "dashboard" }, { key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
-  [{ key: "alerts" }, { key: "history" }, { key: "policies" }],
+  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }],
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { canAccessPage } = usePermissions();
+  const { orgName } = useAuth();
 
   const isActive = (key: PageKey) => {
     if (key === "inventory" && (current === "vehicle" || current === "parties")) return true;
@@ -75,20 +82,24 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
     setMobileOpen(false);
   };
 
+  const visibleNavSections = navSections
+    .map((section) => section.filter(({ key }) => canAccessPage(key)))
+    .filter((section) => section.length > 0);
+
   const sidebar = (
     <div className="flex h-full flex-col bg-slate-900 text-slate-300">
       <div className="flex items-center gap-2.5 px-5 h-16 border-b border-slate-800">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white">
           <Bike size={20} />
         </div>
-        <div>
-          <p className="text-sm font-semibold text-white leading-tight">Salam Motors</p>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white leading-tight truncate">{orgName ?? "VahanExchange Dealer"}</p>
           <p className="text-[11px] text-slate-400 leading-tight">Dealer Operating System</p>
         </div>
       </div>
 
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        {navSections.map((section, sectionIndex) => (
+        {visibleNavSections.map((section, sectionIndex) => (
           <div
             key={sectionIndex}
             className={`space-y-0.5 ${sectionIndex > 0 ? "mt-4 pt-4 border-t border-slate-800" : ""}`}
@@ -144,9 +155,9 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
           <button onClick={() => setMobileOpen(true)} className="btn-ghost btn-sm" aria-label="Open menu">
             <Menu size={20} />
           </button>
-          <div className="flex items-center gap-2">
-            <Bike size={18} className="text-brand-600" />
-            <span className="text-sm font-semibold">Salam Motors</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <Bike size={18} className="text-brand-600 shrink-0" />
+            <span className="text-sm font-semibold truncate">{orgName ?? "VahanExchange Dealer"}</span>
           </div>
           <div className="w-8" />
         </div>
@@ -169,7 +180,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
 }
 
 function UserMenu() {
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const email = user?.email ?? "";
 
@@ -184,7 +195,7 @@ function UserMenu() {
         </div>
         <div className="flex-1 min-w-0 text-left">
           <p className="text-xs font-medium text-white truncate">{email || "User"}</p>
-          <p className="text-[10px] text-slate-400 truncate">Signed in</p>
+          <p className="text-[10px] text-slate-400 truncate">{role ? ROLE_LABELS[role] : "Signed in"}</p>
         </div>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

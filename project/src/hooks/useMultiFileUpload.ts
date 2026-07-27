@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/useToast";
+import { useAuth } from "@/lib/useAuth";
 import type { UploadedFile } from "@/lib/uploadedFile";
 
 interface UseMultiFileUploadOptions {
@@ -17,11 +18,17 @@ export function useMultiFileUpload({ bucket, pathPrefix, value, onChange, maxSiz
   const libraryRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { orgId } = useAuth();
 
   const uploadFiles = async (fileList: FileList | null, inputEl: HTMLInputElement | null) => {
     const files = Array.from(fileList ?? []);
     if (inputEl) inputEl.value = "";
     if (files.length === 0) return;
+
+    if (!orgId) {
+      toast("No active organization for this account", "error");
+      return;
+    }
 
     const oversized = files.find((f) => f.size > maxSizeMB * 1024 * 1024);
     if (oversized) {
@@ -34,7 +41,7 @@ export function useMultiFileUpload({ bucket, pathPrefix, value, onChange, maxSiz
       const uploaded: UploadedFile[] = [];
       for (const file of files) {
         const ext = file.name.split(".").pop() ?? "jpg";
-        const path = `${pathPrefix}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const path = `${orgId}/${pathPrefix}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error } = await supabase.storage.from(bucket).upload(path, file, { cacheControl: "3600", upsert: false });
         if (error) throw error;
         uploaded.push({ path, name: file.name, previewUrl: URL.createObjectURL(file) });
