@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Wallet, TrendingUp, IndianRupee, LogOut, Bike, AlertTriangle } from "lucide-react";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
@@ -19,6 +20,8 @@ export function PartnerPortal() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const proofLightbox = useProofLightbox("finance-proofs");
+  const { t } = useTranslation();
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value });
 
   useEffect(() => {
     if (!partner) return;
@@ -27,9 +30,9 @@ export function PartnerPortal() {
         setInvestments(i);
         setDistributions(d);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .catch((e) => setError(e instanceof Error ? e.message : t("partnerPortal.failedToLoad")))
       .finally(() => setLoading(false));
-  }, [partner]);
+  }, [partner, t]);
 
   const stats = useMemo(() => {
     const totalInvested = investments
@@ -45,34 +48,34 @@ export function PartnerPortal() {
       <div className="bg-slate-900 text-white">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold leading-tight">{orgName ?? "VahanExchange Dealer"}</p>
-            <p className="text-[11px] text-slate-400 leading-tight">Partner Portal</p>
+            <p className="text-sm font-semibold leading-tight">{orgName ?? t("partnerPortal.defaultOrg")}</p>
+            <p className="text-[11px] text-slate-400 leading-tight"> {t("partnerPortal.partnerPortal")}</p>
           </div>
           <button onClick={() => signOut()} className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white">
-            <LogOut size={16} /> Sign Out
+            <LogOut size={16} /> {t("partnerPortal.signOut")}
           </button>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto p-6">
-        <PageHeader title={`Welcome, ${partner?.name ?? "Partner"}`} description="Your capital and profit-share position, read-only" icon={<Wallet size={20} />} />
+        <PageHeader title={t("partnerPortal.welcome", { name: partner?.name ?? t("partnerPortal.partner") })} description={t("partnerPortal.description")} icon={<Wallet size={20} />} />
 
         {loading ? (
           <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
         ) : error ? (
-          <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+          <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("partnerPortal.failedToLoad")} description={error} /></Card>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <StatCard label="Total Invested" value={formatINR(stats.totalInvested)} icon={<Wallet size={18} />} color="brand" />
-              <StatCard label="Profit Earned" value={formatINR(stats.totalProfit)} icon={<TrendingUp size={18} />} color="emerald" />
-              <StatCard label="Balance Payable to You" value={formatINR(stats.balancePayable)} icon={<IndianRupee size={18} />} color="amber" />
+              <StatCard label={t("partnerPortal.totalInvested")} value={formatINR(stats.totalInvested)} icon={<Wallet size={18} />} color="brand" />
+              <StatCard label={t("partnerPortal.profitEarned")} value={formatINR(stats.totalProfit)} icon={<TrendingUp size={18} />} color="emerald" />
+              <StatCard label={t("partnerPortal.balancePayableToYou")} value={formatINR(stats.balancePayable)} icon={<IndianRupee size={18} />} color="amber" />
             </div>
 
             <Card className="p-5 mb-6">
-              <h3 className="font-semibold text-slate-900 mb-3">Investments</h3>
+              <h3 className="font-semibold text-slate-900 mb-3"> {t("partnerPortal.investments")}</h3>
               {investments.length === 0 ? (
-                <EmptyState icon={<Wallet size={24} />} title="No investments yet" description="Your capital contributions will appear here." />
+                <EmptyState icon={<Wallet size={24} />} title={t("partnerPortal.noInvestments")} description={t("partnerPortal.noInvestmentsDescription")} />
               ) : (
                 <div className="space-y-2">
                   {investments.map((i) => (
@@ -80,7 +83,7 @@ export function PartnerPortal() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-slate-900">{formatINR(i.amount)}</span>
-                          <Badge color="slate">{i.status}</Badge>
+                          <Badge color="slate">{trStatus(i.status)}</Badge>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                           {formatDate(i.investment_date)}
@@ -93,7 +96,7 @@ export function PartnerPortal() {
                       </div>
                       {i.proof_urls && i.proof_urls.length > 0 && (
                         <button onClick={() => proofLightbox.open(i.proof_urls ?? [])} className="text-xs text-brand-600 hover:text-brand-700 font-medium shrink-0">
-                          View proof
+                          {t("partnerPortal.viewProof")}
                         </button>
                       )}
                     </div>
@@ -103,24 +106,24 @@ export function PartnerPortal() {
             </Card>
 
             <Card className="p-5">
-              <h3 className="font-semibold text-slate-900 mb-3">Profit Distributions</h3>
+              <h3 className="font-semibold text-slate-900 mb-3"> {t("partnerPortal.profitDistributions")}</h3>
               {distributions.length === 0 ? (
-                <EmptyState icon={<TrendingUp size={24} />} title="No settlements yet" description="Profit distributions from completed sales will appear here." />
+                <EmptyState icon={<TrendingUp size={24} />} title={t("partnerPortal.noSettlements")} description={t("partnerPortal.noSettlementsDescription")} />
               ) : (
                 <div className="space-y-2">
                   {distributions.map((d) => (
                     <div key={d.id} className="rounded-lg border border-slate-200 p-3">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-slate-900">{d.vehicle?.stock_number ?? "Vehicle"}</span>
-                          <Badge color="slate">{d.status}</Badge>
+                          <span className="text-sm font-medium text-slate-900">{d.vehicle?.stock_number ?? t("partnerPortal.vehicle")}</span>
+                          <Badge color="slate">{trStatus(d.status)}</Badge>
                         </div>
-                        <span className="text-sm text-slate-600">{formatINR(d.total_entitlement)} entitled</span>
+                        <span className="text-sm text-slate-600">{t("partnerPortal.entitled", { amount: formatINR(d.total_entitlement) })}</span>
                       </div>
                       <div className="grid grid-cols-3 gap-3 mt-2 text-xs text-slate-500">
-                        <div>Principal: {formatINR(d.principal_return)}</div>
-                        <div>Profit: {formatINR(d.profit_share)}</div>
-                        <div>Balance: {formatINR(d.balance_payable)}</div>
+                        <div>{t("partnerPortal.principal", { amount: formatINR(d.principal_return) })}</div>
+                        <div>{t("partnerPortal.profit", { amount: formatINR(d.profit_share) })}</div>
+                        <div>{t("partnerPortal.balance", { amount: formatINR(d.balance_payable) })}</div>
                       </div>
                     </div>
                   ))}
@@ -142,3 +145,5 @@ export function PartnerPortal() {
     </div>
   );
 }
+
+

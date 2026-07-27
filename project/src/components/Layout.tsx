@@ -195,7 +195,7 @@ function UserMenu() {
         </div>
         <div className="flex-1 min-w-0 text-left">
           <p className="text-xs font-medium text-white truncate">{email || t("auth.user")}</p>
-          <p className="text-[10px] text-slate-400 truncate">{role ? ROLE_LABELS[role] : t("auth.signedIn")}</p>
+          <p className="text-[10px] text-slate-400 truncate">{role ? t("roles." + role, { defaultValue: ROLE_LABELS[role] }) : t("auth.signedIn")}</p>
         </div>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

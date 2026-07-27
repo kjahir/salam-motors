@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
 import { UserCog, Plus, AlertTriangle, Ban, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -26,22 +27,24 @@ export function Team() {
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const { orgId, role: myRole, user } = useAuth();
+  const { t } = useTranslation();
+  const roleLabel = (role: Role) => t("roles." + role, { defaultValue: ROLE_LABELS[role] });
   const isOwner = myRole === "owner";
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const m = await fetchMemberships();
       setMembers(m);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load team");
+      setError(e instanceof Error ? e.message : t("teamPage.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const resetForm = () => {
     setShowInvite(false);
@@ -50,11 +53,11 @@ export function Team() {
 
   const handleInvite = async () => {
     if (!form.email.trim()) {
-      toast("Enter an email address", "error");
+      toast(t("teamPage.enterEmail"), "error");
       return;
     }
     if (!orgId) {
-      toast("No active organization", "error");
+      toast(t("teamPage.noOrg"), "error");
       return;
     }
     setSubmitting(true);
@@ -70,11 +73,11 @@ export function Team() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast("Invite sent", "success");
+      toast(t("teamPage.inviteSent"), "success");
       resetForm();
       await reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to send invite", "error");
+      toast(e instanceof Error ? e.message : t("teamPage.inviteFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -84,10 +87,10 @@ export function Team() {
     try {
       const { error } = await supabase.from("memberships").update({ role }).eq("id", m.id);
       if (error) throw error;
-      toast("Role updated", "success");
+      toast(t("teamPage.roleUpdated"), "success");
       await reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update role", "error");
+      toast(e instanceof Error ? e.message : t("teamPage.roleFailed"), "error");
     }
   };
 
@@ -96,10 +99,10 @@ export function Team() {
     try {
       const { error } = await supabase.from("memberships").update({ status: nextStatus }).eq("id", m.id);
       if (error) throw error;
-      toast(nextStatus === "suspended" ? "Access suspended" : "Access restored", "success");
+      toast(nextStatus === "suspended" ? t("teamPage.accessSuspended") : t("teamPage.accessRestored"), "success");
       await reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update status", "error");
+      toast(e instanceof Error ? e.message : t("teamPage.statusFailed"), "error");
     }
   };
 
@@ -108,7 +111,7 @@ export function Team() {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Team" />
+        <PageHeader title={t("teamPage.title")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -117,8 +120,8 @@ export function Team() {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Team" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("teamPage.title")} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("teamPage.failedToLoadShort")} description={error} /></Card>
       </div>
     );
   }
@@ -126,13 +129,13 @@ export function Team() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <PageHeader
-        title="Team"
-        description="Who has access to this dealership, and what they can do"
+        title={t("teamPage.title")}
+        description={t("teamPage.description")}
         icon={<UserCog size={20} />}
         actions={
           isOwner ? (
             <button onClick={() => setShowInvite(true)} className="btn-primary">
-              <Plus size={16} /> Invite Team Member
+              <Plus size={16} /> {t("teamPage.inviteMember")}
             </button>
           ) : undefined
         }
@@ -140,7 +143,7 @@ export function Team() {
 
       {members.length === 0 ? (
         <Card className="p-6">
-          <EmptyState icon={<UserCog size={24} />} title="No team members yet" description="Invite your first staff member to get started." />
+          <EmptyState icon={<UserCog size={24} />} title={t("teamPage.noMembers")} description={t("teamPage.noMembersDescription")} />
         </Card>
       ) : (
         <Card className="p-5">
@@ -150,8 +153,8 @@ export function Team() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-slate-900">{m.display_name || m.email}</span>
-                    <Badge color={statusColor(m.status)}>{m.status}</Badge>
-                    {m.user_id === user?.id && <Badge color="slate">You</Badge>}
+                    <Badge color={statusColor(m.status)}>{t("status." + m.status, { defaultValue: m.status })}</Badge>
+                    {m.user_id === user?.id && <Badge color="slate">{t("teamPage.you")}</Badge>}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">{m.email}</p>
                 </div>
@@ -160,17 +163,17 @@ export function Team() {
                     <Select
                       value={m.role}
                       onChange={(v) => handleRoleChange(m, v as Role)}
-                      options={ROLES.filter((r) => r !== "owner").map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+                      options={ROLES.filter((r) => r !== "owner").map((r) => ({ value: r, label: roleLabel(r) }))}
                       className="w-44"
                     />
                   ) : (
-                    <span className="text-sm text-slate-600 w-44 text-right">{ROLE_LABELS[m.role]}</span>
+                    <span className="text-sm text-slate-600 w-44 text-right">{roleLabel(m.role)}</span>
                   )}
                   {isOwner && m.role !== "owner" && (
                     <button
                       onClick={() => handleToggleSuspend(m)}
                       className="text-slate-400 hover:text-red-600 p-1.5"
-                      title={m.status === "suspended" ? "Restore access" : "Suspend access"}
+                      title={m.status === "suspended" ? t("teamPage.restoreAccess") : t("teamPage.suspendAccess")}
                     >
                       {m.status === "suspended" ? <RotateCcw size={14} /> : <Ban size={14} />}
                     </button>
@@ -185,16 +188,16 @@ export function Team() {
       <Modal
         open={showInvite}
         onClose={resetForm}
-        title="Invite Team Member"
+        title={t("teamPage.inviteMember")}
         footer={
           <>
-            <button onClick={resetForm} className="btn-secondary">Cancel</button>
-            <button onClick={handleInvite} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Send Invite</button>
+            <button onClick={resetForm} className="btn-secondary"> {t("teamPage.cancel")}</button>
+            <button onClick={handleInvite} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} {t("teamPage.sendInvite")}</button>
           </>
         }
       >
         <div className="space-y-4">
-          <Field label="Email" required>
+          <Field label={t("teamPage.email")} required>
             <input
               className="input"
               type="email"
@@ -203,14 +206,14 @@ export function Team() {
               placeholder="teammate@example.com"
             />
           </Field>
-          <Field label="Name">
-            <input className="input" value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))} placeholder="Optional" />
+          <Field label={t("teamPage.name")}>
+            <input className="input" value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))} placeholder={t("teamPage.optional")} />
           </Field>
-          <Field label="Role" required>
+          <Field label={t("teamPage.role")} required>
             <Select
               value={form.role}
               onChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}
-              options={ROLES.filter((r) => r !== "owner").map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+              options={ROLES.filter((r) => r !== "owner").map((r) => ({ value: r, label: roleLabel(r) }))}
             />
           </Field>
         </div>
