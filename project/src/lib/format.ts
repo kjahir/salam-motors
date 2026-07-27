@@ -1,30 +1,41 @@
+import { getAppLocale } from "@/i18n";
+
+const EMPTY_VALUE = "--";
+
+function currentLocale() {
+  return getAppLocale();
+}
+
 export function formatINR(value: number | null | undefined, options?: { compact?: boolean }): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || Number.isNaN(value)) return EMPTY_VALUE;
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
   if (options?.compact) {
-    if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
-    if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)} L`;
-    if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}k`;
+    const currency = new Intl.NumberFormat(currentLocale(), { style: "currency", currency: "INR", maximumFractionDigits: 0 })
+      .formatToParts(abs)
+      .find((part) => part.type === "currency")?.value ?? "INR ";
+    if (abs >= 10000000) return `${sign}${currency}${(abs / 10000000).toFixed(2)} Cr`;
+    if (abs >= 100000) return `${sign}${currency}${(abs / 100000).toFixed(2)} L`;
+    if (abs >= 1000) return `${sign}${currency}${(abs / 1000).toFixed(1)}k`;
   }
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  return new Intl.NumberFormat(currentLocale(), { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 }
 
 export function formatINRRange(low: number, high: number, options?: { compact?: boolean }): string {
-  return `${formatINR(low, options)} – ${formatINR(high, options)}`;
+  return `${formatINR(low, options)} - ${formatINR(high, options)}`;
 }
 
 export function formatNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return value.toLocaleString("en-IN");
+  if (value === null || value === undefined || Number.isNaN(value)) return EMPTY_VALUE;
+  return value.toLocaleString(currentLocale());
 }
 
 export function formatDate(value: string | null | undefined, opts?: { withTime?: boolean }): string {
-  if (!value) return "—";
+  if (!value) return EMPTY_VALUE;
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return EMPTY_VALUE;
   if (opts?.withTime) {
-    return d.toLocaleString("en-IN", {
+    return d.toLocaleString(currentLocale(), {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -32,7 +43,7 @@ export function formatDate(value: string | null | undefined, opts?: { withTime?:
       minute: "2-digit",
     });
   }
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString(currentLocale(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function daysSince(value: string | null | undefined): number {
@@ -43,14 +54,14 @@ export function daysSince(value: string | null | undefined): number {
 }
 
 export function formatPercent(value: number | null | undefined, digits = 1): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || Number.isNaN(value)) return EMPTY_VALUE;
   return `${value.toFixed(digits)}%`;
 }
 
 export function maskString(value: string | null | undefined, visible = 4): string {
-  if (!value) return "—";
+  if (!value) return EMPTY_VALUE;
   if (value.length <= visible) return value;
-  return "•".repeat(Math.min(value.length - visible, 8)) + value.slice(-visible);
+  return "*".repeat(Math.min(value.length - visible, 8)) + value.slice(-visible);
 }
 
 export function initials(name: string): string {

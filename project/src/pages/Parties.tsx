@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   UserCircle, Plus, Search, Store, Building2, User, Briefcase, Trash2, Pencil, Bike, X, Wrench,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -79,21 +80,24 @@ export function Parties({ onNavigate }: PartiesProps) {
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const partyRoleLabel = (role: string) => role === "seller" ? t("partiesPage.seller") : role === "buyer" ? t("partiesPage.buyer") : t("partiesPage.mechanic");
+  const subtypeLabel = (subtype: string) => t("partiesPage.subtypes." + subtype, { defaultValue: PARTY_SUBTYPE_LABELS[subtype as PartySubtype] ?? subtype });
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const p = await fetchParties();
       setParties(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load parties");
+      setError(e instanceof Error ? e.message : t("partiesPage.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const filtered = useMemo(() => {
     return parties.filter((p) => {
@@ -126,7 +130,7 @@ export function Parties({ onNavigate }: PartiesProps) {
       const v = await fetchPartyVehicles(party.id, party.party_type);
       setPartyVehicles(v);
     } catch {
-      toast("Failed to load related vehicles", "error");
+      toast(t("partiesPage.relatedLoadFailed"), "error");
     } finally {
       setVehiclesLoading(false);
     }
@@ -161,11 +165,11 @@ export function Parties({ onNavigate }: PartiesProps) {
 
   const handleSave = async () => {
     if (!form.full_name.trim()) {
-      toast("Enter full name", "error");
+      toast(t("partiesPage.enterFullName"), "error");
       return;
     }
     if (!form.mobile.trim()) {
-      toast("Enter mobile number", "error");
+      toast(t("partiesPage.enterMobile"), "error");
       return;
     }
     setSubmitting(true);
@@ -189,18 +193,18 @@ export function Parties({ onNavigate }: PartiesProps) {
       if (editingId) {
         const { error } = await supabase.from("parties").update(payload).eq("id", editingId);
         if (error) throw error;
-        toast("Party updated", "success");
+        toast(t("partiesPage.partyUpdated"), "success");
       } else {
         const { error } = await supabase.from("parties").insert(payload);
         if (error) throw error;
-        toast("Party added", "success");
+        toast(t("partiesPage.partyAdded"), "success");
       }
       setShowForm(false);
       setEditingId(null);
       setForm(emptyForm);
       reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to save party", "error");
+      toast(e instanceof Error ? e.message : t("partiesPage.saveFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -209,12 +213,12 @@ export function Parties({ onNavigate }: PartiesProps) {
   const handleDelete = async (party: Party) => {
     if (partyVehicles.length > 0) {
       toast(
-        `${party.full_name} is linked to ${partyVehicles.length} vehicle${partyVehicles.length === 1 ? "" : "s"} and cannot be deleted. Remove or reassign those purchase/sale records first.`,
+        t("partiesPage.linkedDeleteBlocked", { name: party.full_name, count: partyVehicles.length }),
         "error",
       );
       return;
     }
-    if (!confirm(`Delete ${party.full_name}?`)) return;
+    if (!confirm(t("partiesPage.deleteConfirm", { name: party.full_name }))) return;
     try {
       const { error } = await supabase
         .from("parties")
@@ -228,16 +232,16 @@ export function Parties({ onNavigate }: PartiesProps) {
           entity_id: party.id,
           action: "deleted",
           performed_by: user?.email ?? "Unknown",
-          reason: `Deleted ${party.full_name}`,
+          reason: t("partiesPage.deletedReason", { name: party.full_name }),
         })
         .then(({ error: auditErr }) => {
           if (auditErr) console.error("Failed to log party deletion", auditErr);
         });
-      toast("Party removed", "success");
+      toast(t("partiesPage.partyRemoved"), "success");
       setDetailParty(null);
       reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to delete", "error");
+      toast(e instanceof Error ? e.message : t("partiesPage.deleteFailed"), "error");
     }
   };
 
@@ -256,7 +260,7 @@ export function Parties({ onNavigate }: PartiesProps) {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Parties" />
+        <PageHeader title={t("partiesPage.title")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -265,8 +269,8 @@ export function Parties({ onNavigate }: PartiesProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Parties" />
-        <Card className="p-6"><EmptyState title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("partiesPage.title")} />
+        <Card className="p-6"><EmptyState title={t("partiesPage.failedToLoadShort")} description={error} /></Card>
       </div>
     );
   }
@@ -274,17 +278,17 @@ export function Parties({ onNavigate }: PartiesProps) {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <PageHeader
-        title="Parties"
-        description="Sellers and buyers — individuals, banks, and agents"
+        title={t("partiesPage.title")}
+        description={t("partiesPage.description")}
         icon={<UserCircle size={20} />}
-        actions={<button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Party</button>}
+        actions={<button onClick={openAdd} className="btn-primary"><Plus size={16} /> {t("partiesPage.addParty")}</button>}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Parties" value={parties.length} icon={<UserCircle size={20} />} color="brand" />
-        <StatCard label="Sellers" value={sellers.length} hint={`${individualSellers} individual · ${bankSellers} bank`} icon={<Store size={20} />} color="slate" />
-        <StatCard label="Buyers" value={buyers.length} hint={`${buyers.length - agentBuyers} individual · ${agentBuyers} agent`} icon={<User size={20} />} color="emerald" />
-        <StatCard label="Mechanics" value={mechanics.length} icon={<Wrench size={20} />} color="amber" />
+        <StatCard label={t("partiesPage.totalParties")} value={parties.length} icon={<UserCircle size={20} />} color="brand" />
+        <StatCard label={t("partiesPage.sellers")} value={sellers.length} hint={t("partiesPage.individualBank", { individual: individualSellers, bank: bankSellers })} icon={<Store size={20} />} color="slate" />
+        <StatCard label={t("partiesPage.buyers")} value={buyers.length} hint={t("partiesPage.individualAgent", { individual: buyers.length - agentBuyers, agent: agentBuyers })} icon={<User size={20} />} color="emerald" />
+        <StatCard label={t("partiesPage.mechanics")} value={mechanics.length} icon={<Wrench size={20} />} color="amber" />
       </div>
 
       <Card className="p-4 mb-5">
@@ -293,7 +297,7 @@ export function Parties({ onNavigate }: PartiesProps) {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               className="input pl-9"
-              placeholder="Search by name, mobile, city, or email…"
+              placeholder={t("partiesPage.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -307,7 +311,7 @@ export function Parties({ onNavigate }: PartiesProps) {
                   roleFilter === r ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                 }`}
               >
-                {r === "all" ? "All" : r === "seller" ? "Sellers" : r === "buyer" ? "Buyers" : "Mechanics"}
+                {r === "all" ? t("partiesPage.all") : r === "seller" ? t("partiesPage.sellers") : r === "buyer" ? t("partiesPage.buyers") : t("partiesPage.mechanics")}
               </button>
             ))}
           </div>
@@ -318,9 +322,9 @@ export function Parties({ onNavigate }: PartiesProps) {
         <Card className="p-6">
           <EmptyState
             icon={<UserCircle size={24} />}
-            title={search ? "No parties match your search" : "No parties yet"}
-            description={search ? "Try a different search term or filter." : "Add sellers and buyers to manage all party relationships in one place."}
-            action={!search && <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Party</button>}
+            title={search ? t("partiesPage.noMatch") : t("partiesPage.noParties")}
+            description={search ? t("partiesPage.tryDifferent") : t("partiesPage.emptyDescription")}
+            action={!search && <button onClick={openAdd} className="btn-primary"><Plus size={16} /> {t("partiesPage.addParty")}</button>}
           />
         </Card>
       ) : (
@@ -338,15 +342,15 @@ export function Parties({ onNavigate }: PartiesProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-slate-900 truncate">{p.full_name}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">{p.mobile ?? "No mobile"}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{p.mobile ?? t("partiesPage.noMobile")}</p>
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       <Badge color={p.party_type === "seller" ? "blue" : p.party_type === "buyer" ? "emerald" : "amber"}>
-                        {p.party_type === "seller" ? "Seller" : p.party_type === "buyer" ? "Buyer" : "Mechanic"}
+                        {partyRoleLabel(p.party_type)}
                       </Badge>
                       {sub && (
                         <Badge color={sub.color}>
                           <SubIcon size={11} className="mr-1" />
-                          {PARTY_SUBTYPE_LABELS[p.party_subtype as PartySubtype]}
+                          {subtypeLabel(p.party_subtype as PartySubtype)}
                         </Badge>
                       )}
                     </div>
@@ -377,11 +381,11 @@ export function Parties({ onNavigate }: PartiesProps) {
                   <h2 className="font-semibold text-slate-900">{detailParty.full_name}</h2>
                   <div className="flex items-center gap-1.5 mt-1">
                     <Badge color={detailParty.party_type === "seller" ? "blue" : detailParty.party_type === "buyer" ? "emerald" : "amber"}>
-                      {detailParty.party_type === "seller" ? "Seller" : detailParty.party_type === "buyer" ? "Buyer" : "Mechanic"}
+                      {partyRoleLabel(detailParty.party_type)}
                     </Badge>
                     {detailParty.party_subtype && (
                       <Badge color={subtypeMeta[detailParty.party_subtype as PartySubtype].color}>
-                        {PARTY_SUBTYPE_LABELS[detailParty.party_subtype as PartySubtype]}
+                        {subtypeLabel(detailParty.party_subtype as PartySubtype)}
                       </Badge>
                     )}
                   </div>
@@ -392,39 +396,39 @@ export function Parties({ onNavigate }: PartiesProps) {
 
             <div className="p-5 space-y-5">
               <div>
-                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Contact</h3>
+                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3"> {t("partiesPage.contact")}</h3>
                 <div className="space-y-2.5 text-sm">
-                  <DetailRow label="Mobile" value={detailParty.mobile} />
-                  <DetailRow label="Alt. Mobile" value={detailParty.alternate_mobile} />
-                  <DetailRow label="Email" value={detailParty.email} />
-                  <DetailRow label="Address" value={[detailParty.address, detailParty.city, detailParty.state, detailParty.postal_code].filter(Boolean).join(", ") || null} />
+                  <DetailRow label={t("partiesPage.mobile")} value={detailParty.mobile} />
+                  <DetailRow label={t("partiesPage.altMobile")} value={detailParty.alternate_mobile} />
+                  <DetailRow label={t("partiesPage.email")} value={detailParty.email} />
+                  <DetailRow label={t("partiesPage.address")} value={[detailParty.address, detailParty.city, detailParty.state, detailParty.postal_code].filter(Boolean).join(", ") || null} />
                 </div>
               </div>
 
               <div>
-                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Identity</h3>
+                <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3"> {t("partiesPage.identity")}</h3>
                 <div className="space-y-2.5 text-sm">
-                  <DetailRow label="Type" value={detailParty.identity_type} />
-                  <DetailRow label="Number (masked)" value={detailParty.identity_number_masked} />
-                  <DetailRow label="Consent" value={detailParty.consent ? "Yes" : "No"} />
+                  <DetailRow label={t("partiesPage.type")} value={detailParty.identity_type} />
+                  <DetailRow label={t("partiesPage.numberMasked")} value={detailParty.identity_number_masked} />
+                  <DetailRow label={t("partiesPage.consent")} value={detailParty.consent ? t("partiesPage.yes") : t("partiesPage.no")} />
                 </div>
               </div>
 
               {detailParty.notes && (
                 <div>
-                  <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Notes</h3>
+                  <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2"> {t("partiesPage.notes")}</h3>
                   <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{detailParty.notes}</p>
                 </div>
               )}
 
               <div>
                 <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">
-                  Related Vehicles ({vehiclesLoading ? "…" : partyVehicles.length})
+                  {t("partiesPage.relatedVehicles", { count: vehiclesLoading ? "…" : partyVehicles.length })}
                 </h3>
                 {vehiclesLoading ? (
                   <div className="flex justify-center py-4"><Spinner size={20} /></div>
                 ) : partyVehicles.length === 0 ? (
-                  <p className="text-sm text-slate-400">No vehicles linked yet.</p>
+                  <p className="text-sm text-slate-400"> {t("partiesPage.noVehiclesLinked")}</p>
                 ) : (
                   <div className="space-y-2">
                     {partyVehicles.map((v) => (
@@ -447,18 +451,18 @@ export function Parties({ onNavigate }: PartiesProps) {
                 )}
               </div>
 
-              <p className="text-xs text-slate-400 pt-2">Added {formatDate(detailParty.created_at)}</p>
+              <p className="text-xs text-slate-400 pt-2">{t("partiesPage.added", { date: formatDate(detailParty.created_at) })}</p>
 
               <div className="flex gap-2 pt-3 border-t border-slate-200">
                 <button onClick={() => { openEdit(detailParty); setDetailParty(null); }} className="btn-secondary flex-1">
-                  <Pencil size={15} /> Edit
+                  <Pencil size={15} /> {t("partiesPage.edit")}
                 </button>
                 <button
                   onClick={() => handleDelete(detailParty)}
                   disabled={vehiclesLoading}
                   className="btn-secondary text-red-600 hover:bg-red-50 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Trash2 size={15} /> Delete
+                  <Trash2 size={15} /> {t("partiesPage.delete")}
                 </button>
               </div>
             </div>
@@ -470,30 +474,30 @@ export function Parties({ onNavigate }: PartiesProps) {
       <Modal
         open={showForm}
         onClose={() => { setShowForm(false); setEditingId(null); }}
-        title={editingId ? "Edit Party" : "Add Party"}
-        description={editingId ? "Update party details" : "Add a new seller or buyer"}
+        title={editingId ? t("partiesPage.editParty") : t("partiesPage.addParty")}
+        description={editingId ? t("partiesPage.updateDetails") : t("partiesPage.addDescription")}
         size="lg"
         footer={<>
-          <button onClick={() => { setShowForm(false); setEditingId(null); }} className="btn-secondary">Cancel</button>
+          <button onClick={() => { setShowForm(false); setEditingId(null); }} className="btn-secondary"> {t("partiesPage.cancel")}</button>
           <button onClick={handleSave} disabled={submitting} className="btn-primary">
-            {submitting ? <Spinner size={14} /> : null} {editingId ? "Save Changes" : "Add Party"}
+            {submitting ? <Spinner size={14} /> : null} {editingId ? t("partiesPage.saveChanges") : t("partiesPage.addParty")}
           </button>
         </>}
       >
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Role" required>
+            <Field label={t("partiesPage.role")} required>
               <Select
                 value={form.party_type}
                 onChange={onTypeChange}
-                options={[{ value: "seller", label: "Seller" }, { value: "buyer", label: "Buyer" }, { value: "mechanic", label: "Mechanic" }]}
+                options={[{ value: "seller", label: t("partiesPage.seller") }, { value: "buyer", label: t("partiesPage.buyer") }, { value: "mechanic", label: t("partiesPage.mechanic") }]}
               />
             </Field>
-            <Field label="Sub-type" required>
+            <Field label={t("partiesPage.subType")} required>
               <Select
                 value={form.party_subtype}
                 onChange={(v) => update("party_subtype", v)}
-                options={subtypeOptions.map((s) => ({ value: s.value, label: s.label }))}
+                options={subtypeOptions.map((s) => ({ value: s.value, label: subtypeLabel(s.value) }))}
               />
             </Field>
           </div>
@@ -503,52 +507,52 @@ export function Parties({ onNavigate }: PartiesProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Full Name" required>
+            <Field label={t("partiesPage.fullName")} required>
               <input className="input" value={form.full_name} onChange={(e) => update("full_name", e.target.value)} placeholder="Ramesh Kumar" />
             </Field>
-            <Field label="Mobile Number" required>
+            <Field label={t("partiesPage.mobileNumber")} required>
               <input className="input" value={form.mobile} onChange={(e) => update("mobile", e.target.value)} placeholder="9988776655" />
             </Field>
-            <Field label="Alternate Mobile">
-              <input className="input" value={form.alternate_mobile} onChange={(e) => update("alternate_mobile", e.target.value)} placeholder="Optional" />
+            <Field label={t("partiesPage.alternateMobile")}>
+              <input className="input" value={form.alternate_mobile} onChange={(e) => update("alternate_mobile", e.target.value)} placeholder={t("partiesPage.optional")} />
             </Field>
-            <Field label="Email">
+            <Field label={t("partiesPage.email")}>
               <input className="input" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="name@example.com" />
             </Field>
           </div>
 
-          <Field label="Address">
-            <input className="input" value={form.address} onChange={(e) => update("address", e.target.value)} placeholder="Street address" />
+          <Field label={t("partiesPage.address")}>
+            <input className="input" value={form.address} onChange={(e) => update("address", e.target.value)} placeholder={t("partiesPage.streetAddress")} />
           </Field>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="City">
+            <Field label={t("partiesPage.city")}>
               <input className="input" value={form.city} onChange={(e) => update("city", e.target.value)} placeholder="Chennai" />
             </Field>
-            <Field label="State">
+            <Field label={t("partiesPage.state")}>
               <Select value={form.state} onChange={(v) => update("state", v)} options={["", ...INDIAN_STATES]} />
             </Field>
-            <Field label="Postal Code">
+            <Field label={t("partiesPage.postalCode")}>
               <input className="input" value={form.postal_code} onChange={(e) => update("postal_code", e.target.value)} placeholder="600001" />
             </Field>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Identity Type">
+            <Field label={t("partiesPage.identityType")}>
               <Select value={form.identity_type} onChange={(v) => update("identity_type", v)} options={[...IDENTITY_TYPES]} />
             </Field>
-            <Field label="Identity Number (masked)" hint="Store only masked version for privacy">
+            <Field label={t("partiesPage.identityMasked")} hint={t("partiesPage.privacyHint")}>
               <input className="input" value={form.identity_number_masked} onChange={(e) => update("identity_number_masked", e.target.value)} placeholder="XXXX-XXXX-4321" />
             </Field>
           </div>
 
-          <Field label="Notes">
-            <textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} placeholder="Any additional notes" />
+          <Field label={t("partiesPage.notes")}>
+            <textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} placeholder={t("partiesPage.additionalNotes")} />
           </Field>
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={form.consent} onChange={(e) => update("consent", e.target.checked)} className="rounded border-slate-300" />
-            Party has given consent to store their information
+            {t("partiesPage.consentText")}
           </label>
         </div>
       </Modal>

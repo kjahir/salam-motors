@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/useToast";
@@ -86,6 +87,7 @@ function toPurchaseFormData(purchase: Purchase, payment: PurchasePayment | undef
 }
 
 export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicleModalProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<VehicleCoreFormData>(() => toFormData(vehicle));
   const [regChecking, setRegChecking] = useState(false);
   const [regAvailable, setRegAvailable] = useState<boolean | null>(true);
@@ -174,7 +176,7 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
 
   const handleSave = async () => {
     if (!isValid) {
-      toast("Please complete all required fields", "error");
+      toast(t("vehicleForm.requiredMissingShort"), "error");
       return;
     }
     setSubmitting(true);
@@ -253,7 +255,7 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
             minimum_price: minimumPrice,
           }).eq("id", listingId);
           if (listErr) {
-            toast("Vehicle saved, but syncing the public listing price failed: " + listErr.message, "error");
+            toast(t("vehicleForm.savedListingSyncFailed", { message: listErr.message }), "error");
             onSaved();
             onClose();
             return;
@@ -269,7 +271,7 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
             public_slug: generateSlug(slugBase) + "-" + vehicle.id.slice(0, 6),
           });
           if (listErr) {
-            toast("Vehicle saved, but creating the public listing failed: " + listErr.message, "error");
+            toast(t("vehicleForm.savedListingCreateFailed", { message: listErr.message }), "error");
             onSaved();
             onClose();
             return;
@@ -277,11 +279,11 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
         }
       }
 
-      toast("Vehicle updated", "success");
+      toast(t("vehicleForm.vehicleUpdated"), "success");
       onSaved();
       onClose();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update vehicle", "error");
+      toast(e instanceof Error ? e.message : t("vehicleForm.updateFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -291,13 +293,13 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
     <Modal
       open={open}
       onClose={onClose}
-      title={`Edit ${vehicle.stock_number}`}
+      title={t("vehicleForm.editTitle", { stock: vehicle.stock_number })}
       size="lg"
       footer={
         <>
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={onClose} className="btn-secondary">{t("vehicleForm.cancel")}</button>
           <button onClick={handleSave} disabled={submitting || !isValid} className="btn-primary">
-            {submitting ? <Spinner size={14} /> : null} Save Changes
+            {submitting ? <Spinner size={14} /> : null} {t("vehicleForm.saveChanges")}
           </button>
         </>
       }
@@ -306,44 +308,44 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
         <VehicleFormFields form={form} update={update} regChecking={regChecking} regAvailable={regAvailable} defaultShowMore />
 
         <div className="border-t border-slate-200 pt-5">
-          <h3 className="font-semibold text-slate-900 mb-4">Purchase</h3>
+          <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleForm.purchase")}</h3>
           {loadingPurchase ? (
             <div className="flex items-center justify-center py-8"><Spinner size={20} /></div>
           ) : !purchaseId ? (
-            <p className="text-sm text-slate-500">No purchase record exists for this vehicle yet.</p>
+            <p className="text-sm text-slate-500">{t("vehicleForm.noPurchaseRecord")}</p>
           ) : (
             <div className="space-y-4">
               <PartyPickerField partyType="seller" value={purchaseForm.seller_party_id} onChange={(v) => updatePurchase("seller_party_id", v)} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Purchase Price (₹)" required>
+                <Field label={t("vehicleForm.purchasePrice")} required>
                   <input className="input" type="number" value={purchaseForm.purchase_price} onChange={(e) => updatePurchase("purchase_price", e.target.value)} />
                 </Field>
-                <Field label="Broker Commission (₹)">
+                <Field label={t("vehicleForm.brokerCommission")}>
                   <input className="input" type="number" value={purchaseForm.broker_commission} onChange={(e) => updatePurchase("broker_commission", e.target.value)} />
                 </Field>
-                <Field label="Other Fees (₹)">
+                <Field label={t("vehicleForm.otherFees")}>
                   <input className="input" type="number" value={purchaseForm.other_fee} onChange={(e) => updatePurchase("other_fee", e.target.value)} />
                 </Field>
-                <Field label="Payment Method">
+                <Field label={t("vehicleForm.paymentMethod")}>
                   <Select value={purchaseForm.payment_method} onChange={(v) => updatePurchase("payment_method", v)} options={PAYMENT_METHODS} />
                 </Field>
-                <Field label="Payment Reference">
+                <Field label={t("vehicleForm.paymentReference")}>
                   <input className="input" value={purchaseForm.payment_reference} onChange={(e) => updatePurchase("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
                 </Field>
-                <Field label="Handover Location">
+                <Field label={t("vehicleForm.handoverLocation")}>
                   <input className="input" value={purchaseForm.handover_location} onChange={(e) => updatePurchase("handover_location", e.target.value)} placeholder="Chennai" />
                 </Field>
-                <Field label="Odometer at Purchase">
+                <Field label={t("vehicleForm.odometerAtPurchase")}>
                   <input className="input" type="number" value={purchaseForm.odometer_at_purchase} onChange={(e) => updatePurchase("odometer_at_purchase", e.target.value)} />
                 </Field>
                 <div className="flex items-center gap-6 pt-6">
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={purchaseForm.keys_received} onChange={(e) => updatePurchase("keys_received", e.target.checked)} className="rounded border-slate-300" />
-                    Keys received
+                    {t("vehicleForm.keysReceived")}
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={purchaseForm.documents_received} onChange={(e) => updatePurchase("documents_received", e.target.checked)} className="rounded border-slate-300" />
-                    Documents received
+                    {t("vehicleForm.documentsReceived")}
                   </label>
                 </div>
               </div>
@@ -353,8 +355,8 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
                 pathPrefix={`purchase-payments/${uploadSessionId}`}
                 value={proofFiles}
                 onChange={setProofFiles}
-                label="Payment Proof"
-                hint="Add one screenshot per transaction — useful for partial payments, broker fees, or other charges paid separately."
+                label={t("vehicleForm.paymentProof")}
+                hint={t("vehicleForm.paymentProofHint")}
               />
             </div>
           )}

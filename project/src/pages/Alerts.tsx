@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bell,
   Clock,
@@ -17,6 +18,7 @@ import { formatINR, formatDate } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
 import { fetchAlerts, fetchFinancialSummaries, fetchCompliancePolicies } from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
+import { translateAlertCopy } from "@/lib/i18nText";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/useToast";
 import type { Alert, Vehicle, VehicleFinancialSummary, CompliancePolicy } from "@/lib/types";
@@ -27,6 +29,7 @@ interface AlertsProps {
 }
 
 export function Alerts({ onNavigate }: AlertsProps) {
+  const { t } = useTranslation();
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
@@ -37,7 +40,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
   const [typeFilter, setTypeFilter] = useState("all");
   const { toast } = useToast();
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       await syncAllVehiclesCompliance().catch(() => {});
       const [a, s, p] = await Promise.all([fetchAlerts(), fetchFinancialSummaries(), fetchCompliancePolicies()]);
@@ -45,15 +48,15 @@ export function Alerts({ onNavigate }: AlertsProps) {
       setSummaries(s);
       setPolicies(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
+      setError(e instanceof Error ? e.message : t("alertsPage.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
   const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
@@ -84,31 +87,34 @@ export function Alerts({ onNavigate }: AlertsProps) {
         : { status: "Acknowledged", acknowledged_at: new Date().toISOString() };
       const { error } = await supabase.from("alerts").update(update).eq("id", id);
       if (error) throw error;
-      toast(`Alert ${action === "resolve" ? "resolved" : "acknowledged"}`, "success");
+      toast(action === "resolve" ? t("alertsPage.actionResolved") : t("alertsPage.actionAcknowledged"), "success");
       reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed", "error");
+      toast(e instanceof Error ? e.message : t("alertsPage.actionFailed"), "error");
     }
   };
 
   const handleExport = () => {
-    downloadCSV("alerts.csv", filtered.map((a) => ({
-      Vehicle: a.vehicle?.stock_number ?? "",
-      Type: a.alert_type,
-      Severity: a.severity,
-      Title: a.title,
-      Message: a.message ?? "",
-      "Days in Inventory": a.days_in_inventory ?? "",
-      Status: a.status,
-      "Assigned To": a.assigned_to ?? "",
-      Created: formatDate(a.created_at, { withTime: true }),
-    })));
+    downloadCSV("alerts.csv", filtered.map((a) => {
+      const copy = translateAlertCopy(t, a.title, a.message);
+      return {
+        Vehicle: a.vehicle?.stock_number ?? "",
+        Type: a.alert_type,
+        Severity: a.severity,
+        Title: copy.title,
+        Message: copy.message ?? "",
+        "Days in Inventory": a.days_in_inventory ?? "",
+        Status: a.status,
+        "Assigned To": a.assigned_to ?? "",
+        Created: formatDate(a.created_at, { withTime: true }),
+      };
+    }));
   };
 
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Alerts" />
+        <PageHeader title={t("alertsPage.title")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -117,8 +123,8 @@ export function Alerts({ onNavigate }: AlertsProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Alerts" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("alertsPage.title")} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("alertsPage.failedToLoad")} description={error} /></Card>
       </div>
     );
   }
@@ -134,47 +140,47 @@ export function Alerts({ onNavigate }: AlertsProps) {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <PageHeader
-        title="Alerts"
-        description="Inventory ageing, documents, and repair alerts"
+        title={t("alertsPage.title")}
+        description={t("alertsPage.description")}
         icon={<Bell size={20} />}
-        actions={<button onClick={handleExport} className="btn-secondary"><Download size={16} /> Export</button>}
+        actions={<button onClick={handleExport} className="btn-secondary"><Download size={16} /> {t("alertsPage.export")}</button>}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Alerts" value={stats.total} icon={<Bell size={18} />} color="slate" />
-        <StatCard label="Open" value={stats.open} icon={<AlertTriangle size={18} />} color="amber" />
-        <StatCard label="Critical" value={stats.critical} icon={<AlertTriangle size={18} />} color="red" />
-        <StatCard label="High Priority" value={stats.high} icon={<AlertTriangle size={18} />} color="orange" />
+        <StatCard label={t("alertsPage.totalAlerts")} value={stats.total} icon={<Bell size={18} />} color="slate" />
+        <StatCard label={t("alertsPage.open")} value={stats.open} icon={<AlertTriangle size={18} />} color="amber" />
+        <StatCard label={t("alertsPage.critical")} value={stats.critical} icon={<AlertTriangle size={18} />} color="red" />
+        <StatCard label={t("alertsPage.highPriority")} value={stats.high} icon={<AlertTriangle size={18} />} color="orange" />
       </div>
 
       <Card className="p-4 mb-5">
         <div className="flex flex-wrap gap-2 items-center">
           <Filter size={16} className="text-slate-400" />
           <Select value={statusFilter} onChange={setStatusFilter} options={[
-            { value: "all", label: "All statuses" },
-            { value: "Open", label: "Open" },
-            { value: "Acknowledged", label: "Acknowledged" },
-            { value: "Resolved", label: "Resolved" },
+            { value: "all", label: t("alertsPage.allStatuses") },
+            { value: "Open", label: t("status.Open") },
+            { value: "Acknowledged", label: t("status.Acknowledged") },
+            { value: "Resolved", label: t("status.Resolved") },
           ]} className="w-auto" />
           <Select value={severityFilter} onChange={setSeverityFilter} options={[
-            { value: "all", label: "All severities" },
-            { value: "Critical", label: "Critical" },
-            { value: "High", label: "High" },
-            { value: "Warning", label: "Warning" },
-            { value: "Info", label: "Info" },
+            { value: "all", label: t("alertsPage.allSeverities") },
+            { value: "Critical", label: t("status.Critical") },
+            { value: "High", label: t("status.High") },
+            { value: "Warning", label: t("status.Warning") },
+            { value: "Info", label: t("status.Info") },
           ]} className="w-auto" />
           <Select value={typeFilter} onChange={setTypeFilter} options={[
-            { value: "all", label: "All types" },
-            { value: "Ageing", label: "Ageing" },
-            { value: "Document", label: "Document" },
-            { value: "Repair", label: "Repair" },
-            { value: "Compliance", label: "Compliance" },
+            { value: "all", label: t("alertsPage.allTypes") },
+            { value: "Ageing", label: t("status.Ageing") },
+            { value: "Document", label: t("status.Document") },
+            { value: "Repair", label: t("status.Repair") },
+            { value: "Compliance", label: t("status.Compliance") },
           ]} className="w-auto" />
         </div>
       </Card>
 
       {filtered.length === 0 ? (
-        <Card className="p-6"><EmptyState icon={<CheckCircle2 size={24} />} title="No alerts match" description="All clear or adjust filters." /></Card>
+        <Card className="p-6"><EmptyState icon={<CheckCircle2 size={24} />} title={t("alertsPage.noMatch")} description={t("alertsPage.emptyDescription")} /></Card>
       ) : (
         <div className="space-y-3">
           {filtered.map((a) => {
@@ -185,6 +191,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
             const actionRequired = policy?.resolution_mode === "auto_only";
             const destination = resolveAlertDestination(policy);
             const goToIssue = () => onNavigate("vehicle", { vehicleId: a.vehicle_id, ...destination, highlightPolicyId: policy?.id });
+            const copy = translateAlertCopy(t, a.title, a.message);
             return (
               <Card key={a.id} hover onClick={goToIssue} className={`p-4 ${a.status === "Open" ? "" : "opacity-70"}`}>
                 <div className="flex items-start gap-3">
@@ -193,26 +200,26 @@ export function Alerts({ onNavigate }: AlertsProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{a.severity}</Badge>
-                      <Badge color="slate">{a.alert_type}</Badge>
-                      {actionRequired && a.status !== "Resolved" && <Badge color="purple">Requires action to resolve</Badge>}
-                      {a.status !== "Open" && <Badge color="emerald">{a.status}</Badge>}
+                      <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{t(`status.${a.severity}`, { defaultValue: a.severity })}</Badge>
+                      <Badge color="slate">{t(`status.${a.alert_type}`, { defaultValue: a.alert_type })}</Badge>
+                      {actionRequired && a.status !== "Resolved" && <Badge color="purple">{t("alertsPage.requiresAction")}</Badge>}
+                      {a.status !== "Open" && <Badge color="emerald">{t(`status.${a.status}`, { defaultValue: a.status })}</Badge>}
                     </div>
-                    <p className="text-sm font-medium text-slate-900">{a.title}</p>
-                    {a.message && <p className="text-sm text-slate-600 mt-1">{a.message}</p>}
+                    <p className="text-sm font-medium text-slate-900">{copy.title}</p>
+                    {copy.message && <p className="text-sm text-slate-600 mt-1">{copy.message}</p>}
                     <div className="flex items-center gap-3 mt-2 text-xs text-slate-400 flex-wrap">
                       <span className="font-mono text-brand-600">{a.vehicle?.stock_number}</span>
                       <span>{a.vehicle?.manufacturer} {a.vehicle?.model}</span>
-                      {s && <span>Cost {formatINR(s.total_vehicle_cost)}</span>}
-                      {a.vehicle?.asking_price && <span>Asking {formatINR(a.vehicle.asking_price)}</span>}
-                      {a.assigned_to && <span>· Assigned: {a.assigned_to}</span>}
+                      {s && <span>{t("alertsPage.cost", { value: formatINR(s.total_vehicle_cost) })}</span>}
+                      {a.vehicle?.asking_price && <span>{t("alertsPage.asking", { value: formatINR(a.vehicle.asking_price) })}</span>}
+                      {a.assigned_to && <span>· {t("alertsPage.assigned", { name: a.assigned_to })}</span>}
                       <span>{formatDate(a.created_at, { withTime: true })}</span>
                     </div>
                   </div>
                   {a.status === "Open" && !actionRequired && (
                     <div className="flex flex-col gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => handleAction(a.id, "acknowledge")} className="btn-ghost btn-sm">Acknowledge</button>
-                      <button onClick={() => handleAction(a.id, "resolve")} className="btn-secondary btn-sm">Resolve</button>
+                      <button onClick={() => handleAction(a.id, "acknowledge")} className="btn-ghost btn-sm">{t("alertsPage.acknowledge")}</button>
+                      <button onClick={() => handleAction(a.id, "resolve")} className="btn-secondary btn-sm">{t("alertsPage.resolve")}</button>
                     </div>
                   )}
                 </div>

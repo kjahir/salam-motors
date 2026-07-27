@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2, Banknote, Download } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PageHeader, Field, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -37,23 +38,25 @@ export function Partners({ onNavigate }: PartnersProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const proofLightbox = useProofLightbox("finance-proofs");
+  const { t } = useTranslation();
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value });
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [p, i, d] = await Promise.all([fetchPartners(), fetchInvestments(), fetchProfitDistributions()]);
       setPartners(p);
       setInvestments(i);
       setDistributions(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
+      setError(e instanceof Error ? e.message : t("partnersPage.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const partnerStats = useMemo(() => {
     return partners.map((p) => {
@@ -76,7 +79,7 @@ export function Partners({ onNavigate }: PartnersProps) {
 
   const handleAdd = async () => {
     if (!form.name) {
-      toast("Enter partner name", "error");
+      toast(t("partnersPage.enterName"), "error");
       return;
     }
     setSubmitting(true);
@@ -88,19 +91,19 @@ export function Partners({ onNavigate }: PartnersProps) {
         default_profit_share_pct: Number(form.default_profit_share_pct) || 0,
       });
       if (error) throw error;
-      toast("Partner added", "success");
+      toast(t("partnersPage.partnerAdded"), "success");
       setShowAdd(false);
       setForm({ name: "", mobile: "", email: "", default_profit_share_pct: "50" });
       reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to add partner", "error");
+      toast(e instanceof Error ? e.message : t("partnersPage.addFailed"), "error");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this partner?")) return;
+    if (!confirm(t("partnersPage.deleteConfirm"))) return;
     try {
       const { error } = await supabase.from("partners").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
@@ -110,17 +113,17 @@ export function Partners({ onNavigate }: PartnersProps) {
         .then(({ error: auditErr }) => {
           if (auditErr) console.error("Failed to log partner deletion", auditErr);
         });
-      toast("Partner removed", "success");
+      toast(t("partnersPage.partnerRemoved"), "success");
       reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to delete", "error");
+      toast(e instanceof Error ? e.message : t("partnersPage.deleteFailed"), "error");
     }
   };
 
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Partners" />
+        <PageHeader title={t("partnersPage.title")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -129,8 +132,8 @@ export function Partners({ onNavigate }: PartnersProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Partners" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("partnersPage.title")} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("partnersPage.failedToLoad")} description={error} /></Card>
       </div>
     );
   }
@@ -138,20 +141,20 @@ export function Partners({ onNavigate }: PartnersProps) {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <PageHeader
-        title="Partners"
-        description="Joint-venture partners, capital, and profit-share"
+        title={t("partnersPage.title")}
+        description={t("partnersPage.description")}
         icon={<Users size={20} />}
-        actions={<button onClick={() => setShowAdd(true)} className="btn-primary"><Plus size={16} /> Add Partner</button>}
+        actions={<button onClick={() => setShowAdd(true)} className="btn-primary"><Plus size={16} /> {t("partnersPage.addPartner")}</button>}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard label="Total Capital Invested" value={formatINR(totalInvestedAll, { compact: true })} icon={<Wallet size={20} />} color="brand" />
-        <StatCard label="Total Profit Earned" value={formatINR(totalProfitAll, { compact: true })} icon={<TrendingUp size={20} />} color="emerald" />
-        <StatCard label="Balance Payable" value={formatINR(totalPayableAll, { compact: true })} icon={<IndianRupee size={20} />} color="amber" />
+        <StatCard label={t("partnersPage.totalCapitalInvested")} value={formatINR(totalInvestedAll, { compact: true })} icon={<Wallet size={20} />} color="brand" />
+        <StatCard label={t("partnersPage.totalProfitEarned")} value={formatINR(totalProfitAll, { compact: true })} icon={<TrendingUp size={20} />} color="emerald" />
+        <StatCard label={t("partnersPage.balancePayable")} value={formatINR(totalPayableAll, { compact: true })} icon={<IndianRupee size={20} />} color="amber" />
       </div>
 
       {partnerStats.length === 0 ? (
-        <Card className="p-6"><EmptyState icon={<Users size={24} />} title="No partners" description="Add joint-venture partners to track investments and profit sharing." /></Card>
+        <Card className="p-6"><EmptyState icon={<Users size={24} />} title={t("partnersPage.noPartners")} description={t("partnersPage.noPartnersDescription")} /></Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {partnerStats.map(({ partner: p, totalInvested, totalProfit, totalPaid, balancePayable, activeVehicles, investmentCount }) => (
@@ -163,46 +166,46 @@ export function Partners({ onNavigate }: PartnersProps) {
                   </div>
                   <div>
                     <h3 className="font-semibold text-slate-900">{p.name}</h3>
-                    <p className="text-xs text-slate-500">{p.mobile ?? "No mobile"} · Joined {formatDate(p.joining_date)}</p>
+                    <p className="text-xs text-slate-500">{p.mobile ?? t("partnersPage.noMobile")} Â· {t("partnersPage.joined", { date: formatDate(p.joining_date) })}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge color={p.status === "active" ? "emerald" : "slate"}>{p.status}</Badge>
-                  <button onClick={() => setInvestingPartner(p)} className="btn-secondary btn-sm"><Plus size={13} /> Investment</button>
+                  <Badge color={p.status === "active" ? "emerald" : "slate"}>{trStatus(p.status)}</Badge>
+                  <button onClick={() => setInvestingPartner(p)} className="btn-secondary btn-sm"><Plus size={13} /> {t("partnersPage.investment")}</button>
                   <button onClick={() => handleDelete(p.id)} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-4">
                 <div>
-                  <p className="text-xs text-slate-500">Default Profit Share</p>
+                  <p className="text-xs text-slate-500"> {t("partnersPage.defaultProfitShare")}</p>
                   <p className="text-sm font-semibold text-slate-900 mt-0.5">{formatPercent(p.default_profit_share_pct, 0)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Active Vehicles</p>
+                  <p className="text-xs text-slate-500"> {t("partnersPage.activeVehicles")}</p>
                   <p className="text-sm font-semibold text-slate-900 mt-0.5">{activeVehicles}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Capital Invested</p>
+                  <p className="text-xs text-slate-500"> {t("partnersPage.capitalInvested")}</p>
                   <p className="text-sm font-semibold text-slate-900 mt-0.5">{formatINR(totalInvested)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Profit Earned</p>
+                  <p className="text-xs text-slate-500"> {t("partnersPage.profitEarned")}</p>
                   <p className="text-sm font-semibold text-emerald-600 mt-0.5">{formatINR(totalProfit)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Amount Paid</p>
+                  <p className="text-xs text-slate-500"> {t("partnersPage.amountPaid")}</p>
                   <p className="text-sm font-semibold text-slate-900 mt-0.5">{formatINR(totalPaid)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Balance Payable</p>
+                  <p className="text-xs text-slate-500"> {t("partnersPage.balancePayable")}</p>
                   <p className="text-sm font-semibold text-amber-600 mt-0.5">{formatINR(balancePayable)}</p>
                 </div>
               </div>
 
               {/* Recent investments */}
               <div className="pt-4 border-t border-slate-100">
-                <p className="text-xs font-medium text-slate-500 mb-2">Recent Investments ({investmentCount})</p>
+                <p className="text-xs font-medium text-slate-500 mb-2">{t("partnersPage.recentInvestments", { count: investmentCount })}</p>
                 {investments.filter((i) => i.partner_id === p.id).slice(0, 3).map((inv) => (
                   <div key={inv.id} className="flex items-center justify-between w-full p-2 rounded hover:bg-slate-50 text-sm">
                     <button
@@ -210,7 +213,7 @@ export function Partners({ onNavigate }: PartnersProps) {
                       className="text-left flex-1 min-w-0"
                       disabled={!inv.vehicle_id}
                     >
-                      <span className="text-slate-700">{inv.vehicle ? `${inv.vehicle.manufacturer} ${inv.vehicle.model}` : "General capital"}</span>
+                      <span className="text-slate-700">{inv.vehicle ? `${inv.vehicle.manufacturer} ${inv.vehicle.model}` : t("partnersPage.generalCapital")}</span>
                       {inv.vehicle && <span className="text-xs text-slate-400 ml-1.5">{inv.vehicle.stock_number}</span>}
                     </button>
                     <div className="flex items-center gap-2 shrink-0">
@@ -219,14 +222,14 @@ export function Partners({ onNavigate }: PartnersProps) {
                         const paths = inv.proof_urls?.length ? inv.proof_urls : inv.proof_url ? [inv.proof_url] : [];
                         return paths.length > 0 ? (
                           <button onClick={() => proofLightbox.open(paths)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
-                            Proof{paths.length > 1 ? ` (${paths.length})` : ""}
+                            {paths.length > 1 ? t("partnersPage.proofWithCount", { count: paths.length }) : t("partnersPage.proof")}
                           </button>
                         ) : null;
                       })()}
                     </div>
                   </div>
                 ))}
-                {investmentCount === 0 && <p className="text-xs text-slate-400">No investments yet.</p>}
+                {investmentCount === 0 && <p className="text-xs text-slate-400"> {t("partnersPage.noInvestmentsYet")}</p>}
               </div>
 
               {/* Pending settlements */}
@@ -237,10 +240,10 @@ export function Partners({ onNavigate }: PartnersProps) {
                 return (
                   <div className="pt-4 mt-4 border-t border-slate-100">
                     <p className="text-xs font-medium text-slate-500 mb-2">
-                      Pending Settlements ({pending.length}){settledCount > 0 && <span className="text-slate-400"> · {settledCount} settled</span>}
+                      {t("partnersPage.pendingSettlements", { count: pending.length })}{settledCount > 0 && <span className="text-slate-400"> Â· {t("partnersPage.settledCount", { count: settledCount })}</span>}
                     </p>
                     {pending.length === 0 ? (
-                      <p className="text-xs text-slate-400">Nothing pending.</p>
+                      <p className="text-xs text-slate-400"> {t("partnersPage.nothingPending")}</p>
                     ) : (
                       <div className="space-y-2">
                         {pending.map((d) => (
@@ -249,11 +252,11 @@ export function Partners({ onNavigate }: PartnersProps) {
                               onClick={() => d.vehicle_id && onNavigate("vehicle", { vehicleId: d.vehicle_id })}
                               className="text-left flex-1 min-w-0"
                             >
-                              <span className="text-slate-700">{d.vehicle?.stock_number ?? "—"}</span>
-                              <span className="text-xs text-slate-400 ml-1.5">{formatINR(d.balance_payable)} due of {formatINR(d.total_entitlement)}</span>
+                              <span className="text-slate-700">{d.vehicle?.stock_number ?? "â€”"}</span>
+                              <span className="text-xs text-slate-400 ml-1.5">{t("partnersPage.dueOf", { due: formatINR(d.balance_payable), total: formatINR(d.total_entitlement) })}</span>
                             </button>
                             <button onClick={() => setSettlingDistribution(d)} className="btn-primary btn-sm shrink-0">
-                              <Banknote size={13} /> Settle
+                              <Banknote size={13} /> {t("partnersPage.settle")}
                             </button>
                           </div>
                         ))}
@@ -276,26 +279,26 @@ export function Partners({ onNavigate }: PartnersProps) {
       {/* Profit-share allocations note */}
       <Card className="p-4 mt-5 bg-slate-50/50">
         <p className="text-xs text-slate-600">
-          <strong className="font-medium">Profit-sharing model:</strong> Each vehicle uses the default partnership percentage ({partners.map((p) => `${p.default_profit_share_pct}%`).join(" / ")}) unless overridden on the vehicle. Capital is returned first, then profit is split per the agreed percentage.
+          <strong className="font-medium">{t("partnersPage.profitModelLabel")}</strong> {t("partnersPage.profitModel", { percentages: partners.map((p) => `${p.default_profit_share_pct}%`).join(" / ") })}
         </p>
       </Card>
 
       <Modal
         open={showAdd}
         onClose={() => setShowAdd(false)}
-        title="Add Partner"
+        title={t("partnersPage.addPartner")}
         footer={<>
-          <button onClick={() => setShowAdd(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add Partner</button>
+          <button onClick={() => setShowAdd(false)} className="btn-secondary"> {t("partnersPage.cancel")}</button>
+          <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} {t("partnersPage.addPartner")}</button>
         </>}
       >
         <div className="space-y-4">
-          <Field label="Full Name" required><input className="input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Arjun Mehta" /></Field>
+          <Field label={t("partnersPage.fullName")} required><input className="input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Arjun Mehta" /></Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Mobile"><input className="input" value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} placeholder="9876543210" /></Field>
-            <Field label="Email"><input className="input" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="arjun@example.com" /></Field>
+            <Field label={t("partnersPage.mobile")}><input className="input" value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} placeholder="9876543210" /></Field>
+            <Field label={t("partnersPage.email")}><input className="input" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="arjun@example.com" /></Field>
           </div>
-          <Field label="Default Profit Share %" hint="Sum of all partner percentages should equal 100%"><input className="input" type="number" value={form.default_profit_share_pct} onChange={(e) => setForm((f) => ({ ...f, default_profit_share_pct: e.target.value }))} /></Field>
+          <Field label={t("partnersPage.defaultShare")} hint={t("partnersPage.defaultShareHint")}><input className="input" type="number" value={form.default_profit_share_pct} onChange={(e) => setForm((f) => ({ ...f, default_profit_share_pct: e.target.value }))} /></Field>
         </div>
       </Modal>
 
@@ -332,6 +335,7 @@ function PartnerLedgerReport({ partners, investments, distributions }: {
   investments: (Investment & { partner: Partner | null; vehicle: Vehicle | null })[];
   distributions: (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null })[];
 }) {
+  const { t } = useTranslation();
   const rows = partners.map((p) => {
     const inv = investments.filter((i) => i.partner_id === p.id);
     const dist = distributions.filter((d) => d.partner_id === p.id);
@@ -360,20 +364,20 @@ function PartnerLedgerReport({ partners, investments, distributions }: {
   return (
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between p-4 border-b border-slate-100">
-        <h3 className="font-semibold text-slate-900">Partner Capital Ledger</h3>
-        <button onClick={exportCsv} className="btn-secondary btn-sm"><Download size={14} /> Export CSV</button>
+        <h3 className="font-semibold text-slate-900"> {t("partnersPage.ledgerTitle")}</h3>
+        <button onClick={exportCsv} className="btn-secondary btn-sm"><Download size={14} /> {t("partnersPage.exportCsv")}</button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr className="text-left text-xs text-slate-600">
-              <th className="px-4 py-3 font-medium">Partner</th>
-              <th className="px-4 py-3 font-medium text-right">Invested</th>
-              <th className="px-4 py-3 font-medium text-right">Principal Returned</th>
-              <th className="px-4 py-3 font-medium text-right">Profit Credited</th>
-              <th className="px-4 py-3 font-medium text-right">Paid</th>
-              <th className="px-4 py-3 font-medium text-right">Balance</th>
-              <th className="px-4 py-3 font-medium text-right">Closing</th>
+              <th className="px-4 py-3 font-medium"> {t("financePage.columns.partner")}</th>
+              <th className="px-4 py-3 font-medium text-right"> {t("partnersPage.invested")}</th>
+              <th className="px-4 py-3 font-medium text-right"> {t("partnersPage.principalReturned")}</th>
+              <th className="px-4 py-3 font-medium text-right"> {t("partnersPage.profitCredited")}</th>
+              <th className="px-4 py-3 font-medium text-right"> {t("partnersPage.paid")}</th>
+              <th className="px-4 py-3 font-medium text-right"> {t("partnersPage.balance")}</th>
+              <th className="px-4 py-3 font-medium text-right"> {t("partnersPage.closing")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -391,7 +395,7 @@ function PartnerLedgerReport({ partners, investments, distributions }: {
           </tbody>
           <tfoot className="bg-slate-50 border-t-2 border-slate-200">
             <tr className="font-semibold">
-              <td className="px-4 py-3">Total</td>
+              <td className="px-4 py-3"> {t("partnersPage.total")}</td>
               <td className="px-4 py-3 text-right">{formatINR(rows.reduce((s, r) => s + r.totalInvested, 0))}</td>
               <td className="px-4 py-3 text-right">{formatINR(rows.reduce((s, r) => s + r.principalReturned, 0))}</td>
               <td className="px-4 py-3 text-right text-emerald-600">{formatINR(rows.reduce((s, r) => s + r.profitCredited, 0))}</td>
@@ -405,3 +409,4 @@ function PartnerLedgerReport({ partners, investments, distributions }: {
     </Card>
   );
 }
+

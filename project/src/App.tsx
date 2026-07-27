@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Layout, type PageKey, type NavigateParams } from "@/components/Layout";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth";
@@ -20,6 +21,7 @@ import { Policies } from "@/pages/Policies";
 import { fetchAlerts } from "@/lib/queries";
 
 function AppContent() {
+  const { t } = useTranslation();
   const { session, loading } = useAuth();
   const isMobile = useIsMobileViewport();
   const [page, setPage] = useState<PageKey>("dashboard");
@@ -102,7 +104,7 @@ function AppContent() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-pulse text-slate-400 text-sm">Loading…</div>
+        <div className="animate-pulse text-slate-400 text-sm">{t("common.loading")}</div>
       </div>
     );
   }

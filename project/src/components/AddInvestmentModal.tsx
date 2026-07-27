@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/useToast";
@@ -20,18 +21,21 @@ interface AddInvestmentModalProps {
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInvestmentModalProps) {
+  const { t } = useTranslation();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState("");
   const [amount, setAmount] = useState("");
   const [investmentDate, setInvestmentDate] = useState(todayISO());
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
   const [reference, setReference] = useState("");
-  const [purpose, setPurpose] = useState("Capital contribution");
+  const [purpose, setPurpose] = useState(() => t("financeModals.capitalContribution"));
   const [status, setStatus] = useState("Received");
   const [notes, setNotes] = useState("");
   const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value });
 
   useEffect(() => {
     if (!open) return;
@@ -44,7 +48,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     setInvestmentDate(todayISO());
     setPaymentMethod("Bank transfer");
     setReference("");
-    setPurpose("Capital contribution");
+    setPurpose(t("financeModals.capitalContribution"));
     setStatus("Received");
     setNotes("");
     setProofFiles([]);
@@ -59,7 +63,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
 
   const handleSubmit = async () => {
     if (!isValid) {
-      toast("Enter a valid amount and date", "error");
+      toast(t("financeModals.validAmountDate"), "error");
       return;
     }
     setSubmitting(true);
@@ -79,12 +83,12 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
         proof_urls: proofUrls,
       });
       if (error) throw error;
-      toast("Investment recorded", "success");
+      toast(t("financeModals.investmentRecorded"), "success");
       if (vehicleId) syncVehicleAlerts(vehicleId).catch(() => {});
       onSaved();
       handleClose();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to record investment", "error");
+      toast(e instanceof Error ? e.message : t("financeModals.investmentFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -94,56 +98,56 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     <Modal
       open={open}
       onClose={handleClose}
-      title={`Add Investment — ${partner.name}`}
+      title={t("financeModals.addInvestmentTitle", { partner: partner.name })}
       size="lg"
       footer={
         <>
-          <button onClick={handleClose} className="btn-secondary">Cancel</button>
+          <button onClick={handleClose} className="btn-secondary">{t("financeModals.cancel")}</button>
           <button onClick={handleSubmit} disabled={submitting || !isValid} className="btn-primary">
-            {submitting ? <Spinner size={14} /> : null} Record Investment
+            {submitting ? <Spinner size={14} /> : null} {t("financeModals.recordInvestment")}
           </button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Amount (₹)" required>
+          <Field label={t("financeModals.amount")} required>
             <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50000" />
           </Field>
-          <Field label="Date" required>
+          <Field label={t("financeModals.date")} required>
             <input className="input" type="date" value={investmentDate} onChange={(e) => setInvestmentDate(e.target.value)} />
           </Field>
-          <Field label="Vehicle (optional)" hint="Leave blank for general business capital">
+          <Field label={t("financeModals.vehicleOptional")} hint={t("financeModals.vehicleHint")}>
             <Select
               value={vehicleId}
               onChange={setVehicleId}
-              placeholder="General — not vehicle-specific"
+              placeholder={t("financeModals.vehiclePlaceholder")}
               options={vehicles.map((v) => ({ value: v.id, label: `${v.stock_number} · ${v.manufacturer} ${v.model}` }))}
             />
           </Field>
-          <Field label="Status">
-            <Select value={status} onChange={setStatus} options={INVESTMENT_STATUSES} />
+          <Field label={t("financeModals.status")}>
+            <Select value={status} onChange={setStatus} options={INVESTMENT_STATUSES.map((s) => ({ value: s, label: trStatus(s) }))} />
           </Field>
-          <Field label="Payment Method">
-            <Select value={paymentMethod} onChange={setPaymentMethod} options={PAYMENT_METHODS} />
+          <Field label={t("financeModals.paymentMethod")}>
+            <Select value={paymentMethod} onChange={setPaymentMethod} options={PAYMENT_METHODS.map((method) => ({ value: method, label: trStatus(method) }))} />
           </Field>
-          <Field label="Reference">
+          <Field label={t("financeModals.reference")}>
             <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI/XXXX" />
           </Field>
         </div>
-        <Field label="Purpose">
-          <input className="input" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Capital contribution" />
+        <Field label={t("financeModals.purpose")}>
+          <input className="input" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder={t("financeModals.capitalContribution")} />
         </Field>
-        <Field label="Notes">
-          <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+        <Field label={t("financeModals.notes")}>
+          <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("financeModals.optionalNotes")} />
         </Field>
         <FileUploadGrid
           bucket="finance-proofs"
           pathPrefix={`investments/${partner.id}`}
           value={proofFiles}
           onChange={setProofFiles}
-          label="Payment Proof"
-          hint="Add one or more screenshots or receipts (max 10MB each)"
+          label={t("financeModals.paymentProof")}
+          hint={t("financeModals.proofHint")}
         />
       </div>
     </Modal>

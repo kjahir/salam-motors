@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, Spinner, Tag, EmptyState, Sheet, Button } from "./ui/primitives";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { useToast } from "@/components/ui/useToast";
@@ -26,6 +27,9 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
   const [saving, setSaving] = useState(false);
   const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const { t } = useTranslation();
+
+  const docLabel = (type: string) => t("mobileDocuments.core." + type, { defaultValue: CORE_DOCUMENTS.find((c) => c.type === type)?.label ?? type });
 
   useEffect(() => {
     if (!highlightIds || highlightIds.length === 0) return;
@@ -54,7 +58,7 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
         if (error) throw error;
         onChanged();
       } catch {
-        toast("Failed to prepare document checklist", "error");
+        toast(t("mobileDocuments.prepFailed"), "error");
       } finally {
         setSeeding(false);
       }
@@ -91,7 +95,7 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save document", "error");
+      toast(err instanceof Error ? err.message : t("mobileDocuments.saveFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -106,7 +110,7 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
   return (
     <div className="space-y-2.5 pt-3">
       {documents.length === 0 ? (
-        <Card className="p-5"><EmptyState icon={<FileText size={20} />} title="No documents" /></Card>
+        <Card className="p-5"><EmptyState icon={<FileText size={20} />} title={t("mobileDocuments.noDocuments")} /></Card>
       ) : (
         documents.map((d) => {
           const fileCount = d.file_urls?.length ?? (d.file_url ? 1 : 0);
@@ -119,12 +123,12 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-mobile-text truncate">{CORE_DOCUMENTS.find((c) => c.type === d.document_type)?.label ?? d.document_type}</p>
+                  <p className="text-sm font-medium text-mobile-text truncate">{docLabel(d.document_type)}</p>
                   <div className="mt-1 flex items-center gap-2">
                     <Tag color={d.verification_status === "Verified" ? "success" : d.verification_status === "Not uploaded" ? "neutral" : "primary"}>
-                      {d.verification_status}
+                      {t("status." + d.verification_status, { defaultValue: d.verification_status })}
                     </Tag>
-                    {fileCount > 1 && <span className="text-[11px] text-mobile-text-muted">{fileCount} files</span>}
+                    {fileCount > 1 && <span className="text-[11px] text-mobile-text-muted">{t("mobileDocuments.fileCount", { count: fileCount })}</span>}
                   </div>
                 </div>
               </div>
@@ -135,15 +139,15 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
       {documents.some((d) => d.verification_status !== "Not uploaded") && (
         <div className="flex items-center gap-2 text-xs text-mobile-text-muted px-1 pt-1">
           <CheckCircle2 size={13} className="text-mobile-success" />
-          {documents.filter((d) => d.verification_status !== "Not uploaded").length}/{documents.length} uploaded
+          {t("mobileDocuments.uploadedCount", { uploaded: documents.filter((d) => d.verification_status !== "Not uploaded").length, total: documents.length })}
         </div>
       )}
 
       <Sheet
         open={activeDoc !== null}
         onClose={closeSheet}
-        title={activeDoc ? CORE_DOCUMENTS.find((c) => c.type === activeDoc.document_type)?.label ?? activeDoc.document_type : ""}
-        footer={<Button onClick={closeSheet} className="w-full">Done</Button>}
+        title={activeDoc ? docLabel(activeDoc.document_type) : ""}
+        footer={<Button onClick={closeSheet} className="w-full">{t("mobileDocuments.done")}</Button>}
       >
         {activeDoc && (
           <FileUploadGrid
@@ -151,7 +155,7 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds }: { vehic
             pathPrefix={vehicle.id}
             value={docFiles}
             onChange={handleFilesChange}
-            hint={saving ? "Saving…" : "Add a photo or scan — you can attach multiple pages"}
+            hint={saving ? t("mobileDocuments.saving") : t("mobileDocuments.hint")}
           />
         )}
       </Sheet>

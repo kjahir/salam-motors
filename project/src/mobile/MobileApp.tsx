@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LayoutDashboard, Bike, FileBarChart, Plus } from "lucide-react";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
 import { MobileVehicleDetail } from "./MobileVehicleDetail";
@@ -19,6 +21,7 @@ export interface MobileNavigate {
 }
 
 export function MobileApp() {
+  const { t } = useTranslation();
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
@@ -33,8 +36,6 @@ export function MobileApp() {
     setScreen(next);
   };
 
-  // Reset scroll position on every screen change so navigating never leaves the
-  // viewport mid-scroll on the new screen.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
@@ -81,6 +82,10 @@ export function MobileApp() {
 
   return (
     <div className="mobile-shell min-h-screen">
+      <div className="fixed right-3 top-3 z-30">
+        <LanguageSwitcher variant="mobile" />
+      </div>
+
       <div className={showBottomNav ? "pb-20" : ""}>{renderScreen()}</div>
 
       {showBottomNav && (
@@ -89,29 +94,29 @@ export function MobileApp() {
             <NavButton
               active={isTabActive("dashboard")}
               icon={<LayoutDashboard size={20} />}
-              label="Dashboard"
+              label={t("nav.dashboard")}
               onClick={() => navigate("dashboard")}
             />
             <NavButton
               active={isTabActive("inventory")}
               icon={<Bike size={20} />}
-              label="Inventory"
+              label={t("nav.inventory")}
               onClick={() => navigate("inventory")}
             />
             <button
               onClick={() => navigate("add-vehicle")}
               className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
-              aria-label="Add vehicle"
+              aria-label={t("nav.addVehicle")}
             >
               <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-mobile-primary text-white">
                 <Plus size={18} />
               </span>
-              <span className="text-[11px] font-semibold leading-none text-mobile-primary">Add</span>
+              <span className="text-[11px] font-semibold leading-none text-mobile-primary">{t("common.add")}</span>
             </button>
             <NavButton
               active={isTabActive("reports")}
               icon={<FileBarChart size={20} />}
-              label="Reports"
+              label={t("nav.reports")}
               onClick={() => navigate("reports")}
             />
           </div>

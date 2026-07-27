@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bike,
   Users,
@@ -14,6 +15,7 @@ import {
   LayoutDashboard,
   FileBarChart,
 } from "lucide-react";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/lib/useAuth";
 
 export type PageKey =
@@ -44,16 +46,16 @@ interface LayoutProps {
   alertCount?: number;
 }
 
-const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
-  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-  { key: "add-vehicle", label: "Add Vehicle", icon: <PlusCircle size={18} /> },
-  { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },
-  { key: "finance", label: "Reports", icon: <FileBarChart size={18} /> },
-  { key: "parties", label: "Parties", icon: <UserCircle size={18} /> },
-  { key: "partners", label: "Partners", icon: <Users size={18} /> },
-  { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
-  { key: "history", label: "History", icon: <History size={18} /> },
-  { key: "policies", label: "Policies", icon: <ShieldCheck size={18} /> },
+const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
+  { key: "dashboard", labelKey: "nav.dashboard", icon: <LayoutDashboard size={18} /> },
+  { key: "add-vehicle", labelKey: "nav.addVehicle", icon: <PlusCircle size={18} /> },
+  { key: "inventory", labelKey: "nav.inventory", icon: <Bike size={18} /> },
+  { key: "finance", labelKey: "nav.reports", icon: <FileBarChart size={18} /> },
+  { key: "parties", labelKey: "nav.parties", icon: <UserCircle size={18} /> },
+  { key: "partners", labelKey: "nav.partners", icon: <Users size={18} /> },
+  { key: "alerts", labelKey: "nav.alerts", icon: <Bell size={18} /> },
+  { key: "history", labelKey: "nav.history", icon: <History size={18} /> },
+  { key: "policies", labelKey: "nav.policies", icon: <ShieldCheck size={18} /> },
 ];
 
 const navSections: { key: PageKey }[][] = [
@@ -63,6 +65,7 @@ const navSections: { key: PageKey }[][] = [
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
+  const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isActive = (key: PageKey) => {
@@ -82,8 +85,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
           <Bike size={20} />
         </div>
         <div>
-          <p className="text-sm font-semibold text-white leading-tight">Salam Motors</p>
-          <p className="text-[11px] text-slate-400 leading-tight">Dealer Operating System</p>
+          <p className="text-sm font-semibold text-white leading-tight">{t("app.brand")}</p>
+          <p className="text-[11px] text-slate-400 leading-tight">{t("app.tagline")}</p>
         </div>
       </div>
 
@@ -105,7 +108,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
                   }`}
                 >
                   {item.icon}
-                  <span className="flex-1 text-left">{item.label}</span>
+                  <span className="flex-1 text-left">{t(item.labelKey)}</span>
                   {item.key === "alerts" && alertCount > 0 && (
                     <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                       {alertCount}
@@ -118,7 +121,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         ))}
       </nav>
 
-      <div className="px-3 py-4 border-t border-slate-800">
+      <div className="space-y-3 px-3 py-4 border-t border-slate-800">
+        <LanguageSwitcher />
         <UserMenu />
       </div>
     </div>
@@ -126,10 +130,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 shrink-0">{sidebar}</aside>
 
-      {/* Mobile sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/60" onClick={() => setMobileOpen(false)} />
@@ -137,16 +139,14 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         </div>
       )}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile top bar */}
         <div className="lg:hidden flex items-center justify-between h-14 px-4 bg-white border-b border-slate-200">
           <button onClick={() => setMobileOpen(true)} className="btn-ghost btn-sm" aria-label="Open menu">
             <Menu size={20} />
           </button>
           <div className="flex items-center gap-2">
             <Bike size={18} className="text-brand-600" />
-            <span className="text-sm font-semibold">Salam Motors</span>
+            <span className="text-sm font-semibold">{t("app.brand")}</span>
           </div>
           <div className="w-8" />
         </div>
@@ -154,7 +154,6 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         <main className="flex-1 overflow-y-auto bg-slate-50">{children}</main>
       </div>
 
-      {/* Mobile close overlay handler */}
       {mobileOpen && (
         <button
           className="fixed top-2 right-2 z-50 lg:hidden text-white p-1"
@@ -169,6 +168,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
 }
 
 function UserMenu() {
+  const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const email = user?.email ?? "";
@@ -183,8 +183,8 @@ function UserMenu() {
           {email.charAt(0).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-xs font-medium text-white truncate">{email || "User"}</p>
-          <p className="text-[10px] text-slate-400 truncate">Signed in</p>
+          <p className="text-xs font-medium text-white truncate">{email || t("auth.user")}</p>
+          <p className="text-[10px] text-slate-400 truncate">{t("auth.signedIn")}</p>
         </div>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -200,7 +200,7 @@ function UserMenu() {
               className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <LogOut size={14} />
-              Sign Out
+              {t("auth.signOut")}
             </button>
           </div>
         </>

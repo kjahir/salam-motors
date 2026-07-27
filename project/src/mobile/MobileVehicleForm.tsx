@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, AlertTriangle } from "lucide-react";
 import { TopBar, Field, Input, Select, Button, Spinner, Card } from "./ui/primitives";
 import { PartyPickerField } from "@/components/PartyPickerField";
@@ -75,6 +76,7 @@ interface MobileVehicleFormProps {
 }
 
 export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: MobileVehicleFormProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<CoreForm>(initialCore);
   const [sellerPartyId, setSellerPartyId] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
@@ -213,10 +215,10 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         },
         user?.email ?? "Unknown",
       );
-      toast(`${v.stock_number} onboarded successfully`, "success");
+      toast(t("vehicleForm.onboardSuccess", { stock: v.stock_number }), "success");
       onNavigate("vehicle", { vehicleId: v.id });
     } catch (e) {
-      toast(e instanceof Error ? `${e.message} — rolled back.` : "Failed to create vehicle", "error");
+      toast(e instanceof Error ? t("vehicleForm.mobileRollback", { message: e.message }) : t("vehicleForm.createFailedRollback"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -302,10 +304,10 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         }
       }
 
-      toast("Vehicle updated", "success");
+      toast(t("vehicleForm.vehicleUpdated"), "success");
       onNavigate("vehicle", { vehicleId });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update vehicle", "error");
+      toast(e instanceof Error ? e.message : t("vehicleForm.updateFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -314,7 +316,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
   if (loading) {
     return (
       <div>
-        <TopBar title={mode === "create" ? "Onboard Vehicle" : "Edit Vehicle"} onBack={onBack} />
+        <TopBar title={mode === "create" ? t("vehicleForm.onboardTitle") : t("vehicleForm.editVehicle")} onBack={onBack} />
         <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
       </div>
     );
@@ -322,24 +324,24 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
 
   return (
     <div>
-      <TopBar title={mode === "create" ? "Onboard Vehicle" : `Edit ${vehicle?.stock_number ?? ""}`} onBack={onBack} />
+      <TopBar title={mode === "create" ? t("vehicleForm.onboardTitle") : t("vehicleForm.editTitle", { stock: vehicle?.stock_number ?? "" })} onBack={onBack} />
       <div className="p-4 space-y-4 pb-28">
         <Card className="p-4 space-y-4">
-          <Field label="Category" required>
+          <Field label={t("vehicleForm.category")} required>
             <Select value={form.category} onChange={(v) => update("category", v)} options={VEHICLE_CATEGORIES} />
           </Field>
-          <Field label="Fuel Type" required>
+          <Field label={t("vehicleForm.fuelType")} required>
             <Select value={form.fuel_type} onChange={(v) => update("fuel_type", v)} options={FUEL_TYPES} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Manufacturer" required>
+            <Field label={t("vehicleForm.manufacturer")} required>
               <Input value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="Honda" />
             </Field>
-            <Field label="Model" required>
+            <Field label={t("vehicleForm.model")} required>
               <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="Activa 6G" />
             </Field>
           </div>
-          <Field label="Registration Number" required hint={regAvailable === false ? undefined : "Must be unique"}>
+          <Field label={t("vehicleForm.registrationNumber")} required hint={regAvailable === false ? undefined : t("vehicleForm.mustBeUnique")}>
             <div className="relative">
               <Input
                 value={form.registration_number}
@@ -351,24 +353,24 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
                 {regChecking ? <Spinner size={14} /> : regAvailable === true ? <Check size={16} className="text-mobile-success" /> : regAvailable === false ? <AlertTriangle size={16} className="text-mobile-error" /> : null}
               </div>
             </div>
-            {regAvailable === false && <p className="text-xs text-mobile-error mt-1">Already in use.</p>}
+            {regAvailable === false && <p className="text-xs text-mobile-error mt-1">{t("vehicleForm.alreadyInUse")}</p>}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Year" required>
+            <Field label={t("vehicleForm.year")} required>
               <Input type="number" value={form.manufacture_year} onChange={(e) => update("manufacture_year", e.target.value)} />
             </Field>
-            <Field label="Colour">
+            <Field label={t("vehicleForm.colour")}>
               <Input value={form.colour} onChange={(e) => update("colour", e.target.value)} placeholder="Black" />
             </Field>
           </div>
-          <Field label="Odometer (km)">
+          <Field label={t("vehicleForm.odometer")}>
             <Input type="number" value={form.odometer} onChange={(e) => update("odometer", e.target.value)} placeholder="18500" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Asking Price (₹)">
+            <Field label={t("vehicleForm.askingPrice")}>
               <Input type="number" value={form.asking_price} onChange={(e) => update("asking_price", e.target.value)} placeholder="79000" />
             </Field>
-            <Field label="Minimum Price (₹)">
+            <Field label={t("vehicleForm.minimumPrice")}>
               <Input type="number" value={form.minimum_price} onChange={(e) => update("minimum_price", e.target.value)} placeholder="70000" />
             </Field>
           </div>
@@ -377,12 +379,12 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         {mode === "create" && (
           <>
             <Card className="p-4">
-              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Seller</h3>
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">{t("vehicleForm.seller")}</h3>
               <PartyPickerField partyType="seller" value={sellerPartyId} onChange={setSellerPartyId} />
             </Card>
             <Card className="p-4">
-              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Purchase</h3>
-              <Field label="Purchase Price (₹)" required>
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">{t("vehicleForm.purchase")}</h3>
+              <Field label={t("vehicleForm.purchasePrice")} required>
                 <Input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} placeholder="62000" />
               </Field>
             </Card>
@@ -392,48 +394,48 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         {mode === "edit" && purchaseId && (
           <>
             <Card className="p-4">
-              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Seller</h3>
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">{t("vehicleForm.seller")}</h3>
               <PartyPickerField partyType="seller" value={purchaseForm.seller_party_id} onChange={(v) => updatePurchase("seller_party_id", v)} />
             </Card>
             <Card className="p-4 space-y-4">
-              <h3 className="text-sm font-poppins font-semibold text-mobile-text">Purchase</h3>
-              <Field label="Purchase Price (₹)" required>
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text">{t("vehicleForm.purchase")}</h3>
+              <Field label={t("vehicleForm.purchasePrice")} required>
                 <Input type="number" value={purchaseForm.purchase_price} onChange={(e) => updatePurchase("purchase_price", e.target.value)} />
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Broker Commission (₹)">
+                <Field label={t("vehicleForm.brokerCommission")}>
                   <Input type="number" value={purchaseForm.broker_commission} onChange={(e) => updatePurchase("broker_commission", e.target.value)} />
                 </Field>
-                <Field label="Other Fees (₹)">
+                <Field label={t("vehicleForm.otherFees")}>
                   <Input type="number" value={purchaseForm.other_fee} onChange={(e) => updatePurchase("other_fee", e.target.value)} />
                 </Field>
               </div>
-              <Field label="Payment Method">
+              <Field label={t("vehicleForm.paymentMethod")}>
                 <Select value={purchaseForm.payment_method} onChange={(v) => updatePurchase("payment_method", v)} options={PAYMENT_METHODS} />
               </Field>
-              <Field label="Payment Reference">
+              <Field label={t("vehicleForm.paymentReference")}>
                 <Input value={purchaseForm.payment_reference} onChange={(e) => updatePurchase("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Handover Location">
+                <Field label={t("vehicleForm.handoverLocation")}>
                   <Input value={purchaseForm.handover_location} onChange={(e) => updatePurchase("handover_location", e.target.value)} placeholder="Chennai" />
                 </Field>
-                <Field label="Odometer at Purchase">
+                <Field label={t("vehicleForm.odometerAtPurchase")}>
                   <Input type="number" value={purchaseForm.odometer_at_purchase} onChange={(e) => updatePurchase("odometer_at_purchase", e.target.value)} />
                 </Field>
               </div>
               <div className="flex items-center gap-5">
                 <label className="flex items-center gap-2 text-sm text-mobile-text">
                   <input type="checkbox" checked={purchaseForm.keys_received} onChange={(e) => updatePurchase("keys_received", e.target.checked)} className="rounded border-mobile-border" />
-                  Keys received
+                  {t("vehicleForm.keysReceived")}
                 </label>
                 <label className="flex items-center gap-2 text-sm text-mobile-text">
                   <input type="checkbox" checked={purchaseForm.documents_received} onChange={(e) => updatePurchase("documents_received", e.target.checked)} className="rounded border-mobile-border" />
-                  Docs received
+                  {t("vehicleForm.docsReceived")}
                 </label>
               </div>
 
-              <Field label="Payment Proof" hint="Add one screenshot per transaction">
+              <Field label={t("vehicleForm.paymentProof")} hint={t("vehicleForm.paymentProofShortHint")}>
                 <FileUploadGrid
                   bucket="finance-proofs"
                   pathPrefix={`purchase-payments/${uploadSessionId}`}
@@ -446,7 +448,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
         )}
 
         <Button className="w-full" onClick={mode === "create" ? handleCreate : handleSave} loading={submitting} disabled={!isValid}>
-          <Check size={16} /> {mode === "create" ? "Create Vehicle" : "Save Changes"}
+          <Check size={16} /> {mode === "create" ? t("vehicleForm.createVehicle") : t("vehicleForm.saveChanges")}
         </Button>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, TrendingUp, ShoppingCart, Bike, ArrowUpDown } from "lucide-react";
 import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs, Button } from "./ui/primitives";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
@@ -43,6 +44,9 @@ export function MobileReports() {
   const [dateRange, setDateRange] = useState<DateRangeKey>("all");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const { t } = useTranslation();
+
+  const trDateRange = (value: DateRangeKey, label: string) => t("dateRange." + value, { defaultValue: label });
 
   useEffect(() => {
     (async () => {
@@ -113,7 +117,7 @@ export function MobileReports() {
   if (loading) {
     return (
       <div>
-        <TopBar title="Reports" />
+        <TopBar title={t("mobileReports.title")} />
         <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
       </div>
     );
@@ -121,27 +125,27 @@ export function MobileReports() {
 
   return (
     <div>
-      <TopBar title="Reports" />
+      <TopBar title={t("mobileReports.title")} />
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <StatTile label="Total Invested" value={formatINR(totals.totalInvested)} />
+        <StatTile label={t("financePage.totalInvested")} value={formatINR(totals.totalInvested)} />
         <StatTile
-          label="Purchase & Expenses"
+          label={t("mobileReports.purchaseExpenses")}
           value={formatINR(totals.totalPurchaseAndExpenses)}
-          sub={`Purchases ${formatINR(totals.totalPurchases)} · Expenses ${formatINR(totals.totalExpenses)}`}
+          sub={t("financePage.purchasesExpensesShort", { purchases: formatINR(totals.totalPurchases), expenses: formatINR(totals.totalExpenses) })}
         />
-        <StatTile label="Sales & Profit" value={formatINR(totals.totalSales)} sub={`Profit ${formatINR(totals.totalProfit)}`} />
-        <StatTile label="Payable to Partners" value={formatINR(totals.totalPayable)} />
+        <StatTile label={t("mobileReports.salesProfit")} value={formatINR(totals.totalSales)} sub={t("financePage.profitHint", { profit: formatINR(totals.totalProfit) })} />
+        <StatTile label={t("financePage.payableToPartners")} value={formatINR(totals.totalPayable)} />
       </div>
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by make, model or reg. no." className="pl-10" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("financePage.searchPlaceholder")} className="pl-10" />
         </div>
         <SegmentedTabs
           tabs={[
-            { key: "purchases", label: "Purchases" },
-            { key: "inventory", label: "Inventory" },
-            { key: "sales", label: "Sales" },
+            { key: "purchases", label: t("mobileReports.tabs.purchases") },
+            { key: "inventory", label: t("mobileReports.tabs.inventory") },
+            { key: "sales", label: t("mobileReports.tabs.sales") },
           ]}
           active={tab}
           onChange={(k) => setTab(k as ReportTab)}
@@ -153,14 +157,14 @@ export function MobileReports() {
               onClick={() => setDateRange(opt.value)}
               className={`shrink-0 rounded-pill px-3 py-1 text-xs font-medium ${dateRange === opt.value ? "bg-mobile-navy text-white" : "bg-white text-mobile-text-secondary border border-mobile-border"}`}
             >
-              {opt.label}
+              {trDateRange(opt.value, opt.label)}
             </button>
           ))}
           <button
             onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
             className="shrink-0 ml-auto inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium bg-white text-mobile-text-secondary border border-mobile-border"
           >
-            <ArrowUpDown size={12} /> {sortDir === "desc" ? "Newest" : "Oldest"}
+            <ArrowUpDown size={12} /> {sortDir === "desc" ? t("mobileReports.newest") : t("mobileReports.oldest")}
           </button>
         </div>
       </div>
@@ -169,7 +173,7 @@ export function MobileReports() {
         {tab === "purchases" && (
           <>
             <ListSection
-              empty={{ icon: <ShoppingCart size={20} />, title: "No purchases found" }}
+              empty={{ icon: <ShoppingCart size={20} />, title: t("mobileReports.noPurchases") }}
               rows={purchaseRows.slice(0, limit)}
               total={purchaseRows.length}
               limit={limit}
@@ -188,7 +192,7 @@ export function MobileReports() {
             />
             {purchaseRows.length > 0 && (
               <TotalFooter
-                label={`Total (${purchaseRows.length})`}
+                label={t("mobileReports.totalWithCount", { count: purchaseRows.length })}
                 value={formatINR(purchaseRows.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0))}
               />
             )}
@@ -197,7 +201,7 @@ export function MobileReports() {
         {tab === "inventory" && (
           <>
             <ListSection
-              empty={{ icon: <Bike size={20} />, title: "No vehicles in stock" }}
+              empty={{ icon: <Bike size={20} />, title: t("mobileReports.noVehicles") }}
               rows={inventoryRows.slice(0, limit)}
               total={inventoryRows.length}
               limit={limit}
@@ -223,7 +227,7 @@ export function MobileReports() {
             />
             {inventoryRows.length > 0 && (
               <TotalFooter
-                label={`Total (${inventoryRows.length})`}
+                label={t("mobileReports.totalWithCount", { count: inventoryRows.length })}
                 value={formatINR(inventoryRows.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0))}
               />
             )}
@@ -232,7 +236,7 @@ export function MobileReports() {
         {tab === "sales" && (
           <>
             <ListSection
-              empty={{ icon: <TrendingUp size={20} />, title: "No sales found" }}
+              empty={{ icon: <TrendingUp size={20} />, title: t("mobileReports.noSales") }}
               rows={saleRows.slice(0, limit)}
               total={saleRows.length}
               limit={limit}
@@ -258,9 +262,9 @@ export function MobileReports() {
             />
             {saleRows.length > 0 && (
               <TotalFooter
-                label={`Total (${saleRows.length})`}
+                label={t("mobileReports.totalWithCount", { count: saleRows.length })}
                 value={formatINR(saleRows.reduce((s, sale) => s + sale.sale_price, 0))}
-                sub={`Profit ${formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0))}`}
+                sub={t("financePage.profitHint", { profit: formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0)) })}
               />
             )}
           </>
@@ -278,6 +282,8 @@ function ListSection<T>({ rows, total, limit, onLoadMore, render, empty }: {
   render: (row: T) => React.ReactNode;
   empty: { icon: React.ReactNode; title: string };
 }) {
+  const { t } = useTranslation();
+
   if (total === 0) {
     return <Card className="p-5"><EmptyState icon={empty.icon} title={empty.title} /></Card>;
   }
@@ -286,7 +292,7 @@ function ListSection<T>({ rows, total, limit, onLoadMore, render, empty }: {
       {rows.map(render)}
       {limit < total && (
         <Button variant="secondary" className="w-full" onClick={onLoadMore}>
-          Load more ({total - limit} remaining)
+          {t("mobileReports.loadMore", { count: total - limit })}
         </Button>
       )}
     </>

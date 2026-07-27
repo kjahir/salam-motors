@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/useToast";
@@ -29,6 +30,9 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
   const [submitting, setSubmitting] = useState(false);
   const [paymentLightbox, setPaymentLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const { toast } = useToast();
+  const { t } = useTranslation();
+
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value });
 
   const reset = () => {
     setAmount(String(distribution.balance_payable));
@@ -48,7 +52,7 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
 
   const handleSubmit = async () => {
     if (!isValid) {
-      toast("Enter an amount between ₹1 and the balance payable", "error");
+      toast(t("financeModals.settlementAmountInvalid"), "error");
       return;
     }
     setSubmitting(true);
@@ -85,12 +89,12 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
       }).eq("id", distribution.id);
       if (updErr) throw updErr;
 
-      toast(newBalance <= 0 ? "Settlement completed" : "Partial settlement recorded", "success");
+      toast(newBalance <= 0 ? t("financeModals.settlementCompleted") : t("financeModals.partialSettlementRecorded"), "success");
       onSaved();
       handleClose();
     } catch (e) {
       await rollback();
-      toast(e instanceof Error ? e.message : "Failed to record settlement", "error");
+      toast(e instanceof Error ? e.message : t("financeModals.settlementFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -100,48 +104,48 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
     <Modal
       open={open}
       onClose={handleClose}
-      title={`Settle Profit — ${distribution.partner?.name ?? "Partner"}`}
-      description={`${distribution.vehicle?.stock_number ?? ""} · Total entitlement ${formatINR(distribution.total_entitlement)} · Balance ${formatINR(distribution.balance_payable)}`}
+      title={t("financeModals.settleTitle", { partner: distribution.partner?.name ?? t("financeModals.partner") })}
+      description={t("financeModals.settleDescription", { stock: distribution.vehicle?.stock_number ?? "", total: formatINR(distribution.total_entitlement), balance: formatINR(distribution.balance_payable) })}
       size="lg"
       footer={
         <>
-          <button onClick={handleClose} className="btn-secondary">Cancel</button>
+          <button onClick={handleClose} className="btn-secondary">{t("financeModals.cancel")}</button>
           <button onClick={handleSubmit} disabled={submitting || !isValid} className="btn-primary">
-            {submitting ? <Spinner size={14} /> : null} Record Payment
+            {submitting ? <Spinner size={14} /> : null} {t("financeModals.recordPayment")}
           </button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Amount to Pay (₹)" required hint={`Balance payable: ${formatINR(distribution.balance_payable)}`}>
+          <Field label={t("financeModals.amountToPay")} required hint={t("financeModals.balancePayable", { amount: formatINR(distribution.balance_payable) })}>
             <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
-          <Field label="Date" required>
+          <Field label={t("financeModals.date")} required>
             <input className="input" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
           </Field>
-          <Field label="Payment Method">
-            <Select value={paymentMethod} onChange={setPaymentMethod} options={PAYMENT_METHODS} />
+          <Field label={t("financeModals.paymentMethod")}>
+            <Select value={paymentMethod} onChange={setPaymentMethod} options={PAYMENT_METHODS.map((method) => ({ value: method, label: trStatus(method) }))} />
           </Field>
-          <Field label="Reference">
+          <Field label={t("financeModals.reference")}>
             <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UPI/XXXX" />
           </Field>
         </div>
-        <Field label="Notes">
-          <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+        <Field label={t("financeModals.notes")}>
+          <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("financeModals.optionalNotes")} />
         </Field>
         <FileUploadGrid
           bucket="finance-proofs"
           pathPrefix={`settlements/${distribution.id}`}
           value={proofFiles}
           onChange={setProofFiles}
-          label="Payment Proof"
-          hint="Add one or more screenshots or receipts (max 10MB each)"
+          label={t("financeModals.paymentProof")}
+          hint={t("financeModals.proofHint")}
         />
 
         {distribution.payments && distribution.payments.length > 0 && (
           <div className="pt-4 border-t border-slate-200">
-            <h4 className="text-sm font-semibold text-slate-800 mb-2">Payment History</h4>
+            <h4 className="text-sm font-semibold text-slate-800 mb-2"> {t("financeModals.paymentHistory")}</h4>
             <div className="space-y-2">
               {distribution.payments.map((pay) => {
                 const paths = pay.proof_urls?.length ? pay.proof_urls : pay.proof_url ? [pay.proof_url] : [];
@@ -149,7 +153,7 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
                   <div key={pay.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 text-sm">
                     <div>
                       <span className="font-medium text-slate-800">{formatINR(pay.amount)}</span>
-                      <span className="text-xs text-slate-500 ml-2">{pay.payment_method} · {formatDate(pay.paid_at, { withTime: true })}</span>
+                      <span className="text-xs text-slate-500 ml-2">{trStatus(pay.payment_method)} · {formatDate(pay.paid_at, { withTime: true })}</span>
                       {pay.reference && <span className="text-xs text-slate-400 font-mono ml-2">{pay.reference}</span>}
                     </div>
                     {paths.length > 0 && (
@@ -170,7 +174,7 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
                         }
                         className="text-xs text-brand-600 hover:text-brand-700 font-medium"
                       >
-                        View Proof{paths.length > 1 ? ` (${paths.length})` : ""}
+                        {paths.length > 1 ? t("financePage.viewProofWithCount", { count: paths.length }) : t("financePage.viewProof")}
                       </button>
                     )}
                   </div>

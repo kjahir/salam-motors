@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, Spinner } from "./ui/primitives";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
@@ -37,6 +38,7 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehi
   const [seeding, setSeeding] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const insp = (vehicle.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
 
@@ -65,7 +67,7 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehi
         if (itemsErr) throw itemsErr;
         onChanged();
       } catch {
-        toast("Failed to prepare inspection checklist", "error");
+        toast(t("mobileInspection.prepFailed"), "error");
       } finally {
         setSeeding(false);
       }
@@ -85,7 +87,7 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehi
       if (error) throw error;
       onChanged();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update", "error");
+      toast(e instanceof Error ? e.message : t("mobileInspection.updateFailed"), "error");
     } finally {
       setUpdatingId(null);
     }
@@ -101,7 +103,7 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehi
     <div className="space-y-3 pt-3">
       <Card className="p-4">
         <div className="flex flex-col items-center">
-          <ScoreRing score={overallScore} size={96} strokeWidth={8} label="Overall" />
+          <ScoreRing score={overallScore} size={96} strokeWidth={8} label={t("mobileInspection.overall")} />
         </div>
       </Card>
       <div className="space-y-2">
@@ -114,11 +116,11 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehi
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-mobile-text">{item.category}</p>
-                  <p className="text-[10px] text-mobile-text-muted">Weight {item.weight}% · tap to change</p>
+                  <p className="text-[10px] text-mobile-text-muted">{t("mobileInspection.weightTap", { weight: item.weight })}</p>
                 </div>
                 <div className={`flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium ${meta.className}`}>
                   {updatingId === item.id ? <Spinner size={12} /> : <Icon size={14} />}
-                  {meta.label}
+                  {t("mobileInspection." + status)}
                 </div>
               </div>
             </Card>

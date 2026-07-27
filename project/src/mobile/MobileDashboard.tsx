@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Spinner, Card, EmptyState } from "./ui/primitives";
 import { formatINR, daysSince } from "@/lib/format";
 import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
@@ -18,6 +19,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const { signOut } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -93,57 +95,57 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       <div className="bg-mobile-navy text-white px-5 pt-6 pb-8 flex items-start justify-between">
         <div>
           <p className="font-poppins text-[13px] font-medium uppercase tracking-wide text-white/70">Salam</p>
-          <h1 className="font-poppins text-2xl font-bold mt-1">Dashboard</h1>
+          <h1 className="font-poppins text-2xl font-bold mt-1"> {t("mobileDashboard.dashboard")}</h1>
         </div>
-        <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label="Sign out">
+        <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label={t("auth.signOut")}>
           <LogOut size={16} />
         </button>
       </div>
 
       <div className="px-4 -mt-4">
         <Card className="p-5">
-          <p className="text-[13px] font-medium text-mobile-text-secondary">Overall Profit / Loss</p>
+          <p className="text-[13px] font-medium text-mobile-text-secondary"> {t("mobileDashboard.overallProfitLoss")}</p>
           <p className={`font-poppins text-[32px] font-bold mt-1 ${plPositive ? "text-mobile-success" : "text-mobile-error"}`}>
             {plPositive ? "+" : ""}
             {formatINR(stats.overallProfit)}
           </p>
           <p className="text-xs text-mobile-text-muted mt-1">
-            Across {stats.soldCount} bike{stats.soldCount !== 1 ? "s" : ""} sold to date
+            {t("mobileDashboard.soldToDate", { count: stats.soldCount })}
           </p>
         </Card>
       </div>
 
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <StatTile label="Purchased" value={`${stats.purchasedCount} bike${stats.purchasedCount !== 1 ? "s" : ""}`} sub={formatINR(stats.purchasedValue)} />
-        <StatTile label="Sold" value={`${stats.soldCount} bike${stats.soldCount !== 1 ? "s" : ""}`} sub={formatINR(stats.soldValue)} />
+        <StatTile label={t("mobileDashboard.purchased")} value={t("mobileDashboard.bikeCount", { count: stats.purchasedCount })} sub={formatINR(stats.purchasedValue)} />
+        <StatTile label={t("mobileDashboard.sold")} value={t("mobileDashboard.bikeCount", { count: stats.soldCount })} sub={formatINR(stats.soldValue)} />
         <StatTile
-          label="In Stock"
-          value={`${stats.inStockCount} bike${stats.inStockCount !== 1 ? "s" : ""}`}
+          label={t("mobileDashboard.inStock")}
+          value={t("mobileDashboard.bikeCount", { count: stats.inStockCount })}
           sub={formatINR(stats.inStockValue)}
           onClick={() => onNavigate("inventory")}
         />
-        <StatTile label="Total Expenses" value={formatINR(stats.totalExpenses)} sub="Service, repairs & more" />
+        <StatTile label={t("mobileDashboard.totalExpenses")} value={formatINR(stats.totalExpenses)} sub={t("mobileDashboard.serviceMore")} />
         <StatTile
-          label="Compliance Issues"
+          label={t("mobileDashboard.complianceIssues")}
           value={String(stats.complianceIssues)}
-          sub={stats.complianceIssues > 0 ? "Vehicles need attention" : "All vehicles compliant"}
+          sub={stats.complianceIssues > 0 ? t("mobileDashboard.needsAttentionSub") : t("mobileDashboard.allCompliant")}
           onClick={() => onNavigate("inventory")}
         />
       </div>
 
       <div className="px-4 pt-5">
-        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">Quick Actions</p>
+        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.quickActions")}</p>
         <div className="grid grid-cols-2 gap-3">
-          <QuickAction icon={<PlusCircle size={18} />} label="Add Vehicle" onClick={() => onNavigate("add-vehicle")} />
-          <QuickAction icon={<ClipboardList size={18} />} label="View Reports" onClick={() => onNavigate("reports")} />
+          <QuickAction icon={<PlusCircle size={18} />} label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
+          <QuickAction icon={<ClipboardList size={18} />} label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
         </div>
       </div>
 
       <div className="px-4 pt-5 pb-4">
-        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">Needs Attention</p>
+        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.needsAttention")}</p>
         {stats.openAlerts.length === 0 ? (
           <Card className="p-5">
-            <EmptyState icon={<CheckCircle2 size={20} />} title="All clear" description="No open alerts right now." />
+            <EmptyState icon={<CheckCircle2 size={20} />} title={t("mobileDashboard.allClear")} description={t("mobileDashboard.noOpenAlerts")} />
           </Card>
         ) : (
           <div className="space-y-2">
@@ -157,7 +159,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
                     <p className="text-sm font-medium text-mobile-text truncate">{a.title}</p>
                     <p className="text-xs text-mobile-text-muted truncate">
                       {a.vehicle?.stock_number} · {a.vehicle?.manufacturer} {a.vehicle?.model}
-                      {a.vehicle && ` · ${daysSince(a.vehicle.onboarded_at)}d in stock`}
+                      {a.vehicle && ` · ${t("mobileDashboard.daysInStock", { days: daysSince(a.vehicle.onboarded_at) })}`}
                     </p>
                   </div>
                 </div>

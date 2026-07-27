@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bike,
   Wallet,
@@ -35,6 +36,7 @@ import {
   fetchProfitDistributions,
 } from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
+import { translateAlertCopy } from "@/lib/i18nText";
 import type {
   Vehicle,
   VehicleFinancialSummary,
@@ -53,6 +55,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
+  const { t } = useTranslation();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
@@ -93,7 +96,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setPartners(pt);
         setDistributions(dist);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
+        if (!cancelled) setError(e instanceof Error ? e.message : t("dashboard.failedToLoad"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -101,7 +104,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
 
@@ -203,7 +206,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Dashboard" description="Business overview and key metrics" />
+        <PageHeader title={t("dashboard.title")} description={t("dashboard.description")} />
         <div className="flex items-center justify-center py-20">
           <Spinner size={32} />
         </div>
@@ -214,9 +217,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Dashboard" />
+        <PageHeader title={t("dashboard.title")} />
         <Card className="p-6">
-          <EmptyState icon={<AlertTriangle size={24} />} title="Failed to load dashboard" description={error} />
+          <EmptyState icon={<AlertTriangle size={24} />} title={t("dashboard.failedToLoad")} description={error} />
         </Card>
       </div>
     );
@@ -225,11 +228,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
-        title="Dashboard"
-        description="Business overview and key metrics"
+        title={t("dashboard.title")}
+        description={t("dashboard.description")}
         actions={
           <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
-            <Bike size={16} /> Onboard Vehicle
+            <Bike size={16} /> {t("dashboard.onboardVehicle")}
           </button>
         }
       />
@@ -239,32 +242,32 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <div className="lg:col-span-2 space-y-6">
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">As of Today</h3>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("dashboard.asOfToday")}</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <StatCard
-                label="Vehicles in Stock"
+                label={t("dashboard.vehiclesInStock")}
                 value={stats.inStockCount}
                 icon={<Bike size={20} />}
                 color="brand"
-                hint={`${stats.readyForSale} ready for sale · ${stats.underRepair} under repair`}
+                hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
                 onClick={() => onNavigate("inventory")}
               />
               <StatCard
-                label="Total Inventory Cost"
+                label={t("dashboard.totalInventoryCost")}
                 value={formatINR(stats.totalCost, { compact: true })}
                 icon={<Wallet size={20} />}
                 color="slate"
-                hint={`Asking value ${formatINR(stats.totalAsking, { compact: true })}`}
+                hint={t("dashboard.askingValue", { value: formatINR(stats.totalAsking, { compact: true }) })}
               />
               <StatCard
-                label="Estimated Profit"
+                label={t("dashboard.estimatedProfit")}
                 value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
                 icon={<TrendingUp size={20} />}
                 color="emerald"
                 hint={
                   <span className="inline-flex items-center gap-1">
-                    {stats.marginLow}%–{stats.marginHigh}% margin over cost <Pencil size={11} className="opacity-60" />
+                    {t("dashboard.marginHint", { low: stats.marginLow, high: stats.marginHigh })} <Pencil size={11} className="opacity-60" />
                   </span>
                 }
                 onClick={() => setEditingMargin(true)}
@@ -274,16 +277,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">This Month</h3>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("dashboard.thisMonth")}</h3>
               <button onClick={() => onNavigate("finance")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-                View all <ArrowRight size={14} />
+                {t("dashboard.viewAll")} <ArrowRight size={14} />
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StatCard label="Bought This Month" value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
-              <StatCard label="Sold This Month" value={stats.soldThisMonth} icon={<CheckCircle2 size={18} />} color="emerald" />
+              <StatCard label={t("dashboard.boughtThisMonth")} value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
+              <StatCard label={t("dashboard.soldThisMonth")} value={stats.soldThisMonth} icon={<CheckCircle2 size={18} />} color="emerald" />
               <StatCard
-                label="Realised Profit (Month)"
+                label={t("dashboard.realisedProfitMonth")}
                 value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
                 icon={<IndianRupee size={18} />}
                 color="emerald"
@@ -294,21 +297,21 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         {/* Right: Financial Overview, spanning the height of both rows on the left */}
         <Card className="p-5 h-full">
-          <h3 className="font-semibold text-slate-900 mb-4">Financial Overview</h3>
+          <h3 className="font-semibold text-slate-900 mb-4">{t("dashboard.financialOverview")}</h3>
           <div className="space-y-3">
-            <FinancialStatRow label="Total Invested" value={formatINR(stats.totalInvestment, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow label="Total Cost" value={formatINR(stats.totalCostAllTime, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow label="Total Sales" value={formatINR(stats.totalSalesAllTime, { compact: true })} color="text-slate-900" />
+            <FinancialStatRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: true })} color="text-slate-900" />
+            <FinancialStatRow label={t("dashboard.totalCost")} value={formatINR(stats.totalCostAllTime, { compact: true })} color="text-slate-900" />
+            <FinancialStatRow label={t("dashboard.totalSales")} value={formatINR(stats.totalSalesAllTime, { compact: true })} color="text-slate-900" />
             <FinancialStatRow
-              label="Total Profit"
+              label={t("dashboard.totalProfit")}
               value={formatINR(stats.totalProfitAllTime, { compact: true })}
               color={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
             />
           </div>
           <div className="pt-4 mt-4 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Profit Share by Partner</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{t("dashboard.profitShareByPartner")}</p>
             {partnerShares.length === 0 ? (
-              <p className="text-sm text-slate-400">No partners configured yet.</p>
+              <p className="text-sm text-slate-400">{t("dashboard.noPartners")}</p>
             ) : (
               <div className="space-y-3">
                 {partnerShares.map((p) => (
@@ -324,16 +327,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         {/* Inventory ageing */}
         <Card className="p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900">Inventory Ageing</h3>
+            <h3 className="font-semibold text-slate-900">{t("dashboard.inventoryAgeing")}</h3>
             <button onClick={() => onNavigate("inventory")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-              View all <ArrowRight size={14} />
+              {t("dashboard.viewAll")} <ArrowRight size={14} />
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <AgeingStat label="0–29 days" count={stats.inStockCount - stats.aged30} color="emerald" />
-            <AgeingStat label="30–44 days" count={stats.aged30 - stats.aged45} color="amber" />
-            <AgeingStat label="45–59 days" count={stats.aged45 - stats.aged60} color="orange" />
-            <AgeingStat label="60+ days" count={stats.aged60} color="red" />
+            <AgeingStat label={t("dashboard.ageing0")} count={stats.inStockCount - stats.aged30} color="emerald" />
+            <AgeingStat label={t("dashboard.ageing30")} count={stats.aged30 - stats.aged45} color="amber" />
+            <AgeingStat label={t("dashboard.ageing45")} count={stats.aged45 - stats.aged60} color="orange" />
+            <AgeingStat label={t("dashboard.ageing60")} count={stats.aged60} color="red" />
           </div>
           <div className="space-y-2">
             {stats.inStock
@@ -371,19 +374,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-slate-900">
-              Recent Alerts List ({stats.openAlerts} open alert{stats.openAlerts !== 1 ? "s" : ""} from {stats.openAlertVehicleCount} vehicle{stats.openAlertVehicleCount !== 1 ? "s" : ""})
+              {t("dashboard.recentAlerts", { alerts: stats.openAlerts, vehicles: stats.openAlertVehicleCount, alertPlural: stats.openAlerts !== 1 ? "s" : "", vehiclePlural: stats.openAlertVehicleCount !== 1 ? "s" : "" })}
             </h3>
             <button onClick={() => onNavigate("alerts")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-              All <ArrowRight size={14} />
+              {t("dashboard.all")} <ArrowRight size={14} />
             </button>
           </div>
           {stats.openAlertList.length === 0 ? (
-            <EmptyState icon={<CheckCircle2 size={20} />} title="No open alerts" />
+            <EmptyState icon={<CheckCircle2 size={20} />} title={t("dashboard.noOpenAlerts")} />
           ) : (
             <div className="space-y-3">
               {stats.openAlertList.map((a) => {
                 const sevColor =
                   a.severity === "Critical" ? "red" : a.severity === "High" ? "orange" : a.severity === "Warning" ? "amber" : "slate";
+                const copy = translateAlertCopy(t, a.title, a.message);
                 return (
                   <button
                     key={a.id}
@@ -414,12 +418,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 truncate">{a.title}</p>
+                      <p className="text-sm font-medium text-slate-900 truncate">{copy.title}</p>
                       <p className="text-xs text-slate-500 truncate">
                         {a.vehicle?.stock_number} · {a.vehicle?.manufacturer} {a.vehicle?.model}
                       </p>
                     </div>
-                    <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{a.severity}</Badge>
+                    <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{t(`status.${a.severity}`, { defaultValue: a.severity })}</Badge>
                   </button>
                 );
               })}
@@ -432,22 +436,22 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <Card className="p-5 mt-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-            <Activity size={18} className="text-slate-400" /> Recently Onboarded
+            <Activity size={18} className="text-slate-400" /> {t("dashboard.recentlyOnboarded")}
           </h3>
           <button onClick={() => onNavigate("inventory")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-            View inventory <ArrowRight size={14} />
+            {t("dashboard.viewInventory")} <ArrowRight size={14} />
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                <th className="pb-2 font-medium">Stock #</th>
-                <th className="pb-2 font-medium">Vehicle</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium text-right">Cost</th>
-                <th className="pb-2 font-medium text-right">Asking</th>
-                <th className="pb-2 font-medium">Onboarded</th>
+                <th className="pb-2 font-medium">{t("dashboard.stockNumber")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.vehicle")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.status")}</th>
+                <th className="pb-2 font-medium text-right">{t("dashboard.cost")}</th>
+                <th className="pb-2 font-medium text-right">{t("dashboard.asking")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.onboarded")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -497,6 +501,7 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (settings: AppSettings) => void;
 }) {
+  const { t } = useTranslation();
   const [low, setLow] = useState(settings.estimated_profit_margin_low_pct);
   const [high, setHigh] = useState(settings.estimated_profit_margin_high_pct);
   const [saving, setSaving] = useState(false);
@@ -522,10 +527,10 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
         { estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high },
         user?.email ?? "Unknown",
       );
-      toast("Estimated profit margin updated", "success");
+      toast(t("dashboard.marginUpdated"), "success");
       onSaved({ ...settings, estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update margin", "error");
+      toast(e instanceof Error ? e.message : t("dashboard.failedUpdateMargin"), "error");
     } finally {
       setSaving(false);
     }
@@ -535,32 +540,31 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
     <Modal
       open
       onClose={onClose}
-      title="Estimated Profit Margin"
+      title={t("dashboard.marginModalTitle")}
       footer={
         <>
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={onClose} className="btn-secondary">{t("dashboard.cancel")}</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary disabled:opacity-50">
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("dashboard.saving") : t("dashboard.save")}
           </button>
         </>
       }
     >
       <div className="space-y-5">
         <p className="text-sm text-slate-600">
-          Estimated Profit = current in-stock cost × margin. Drag the sliders to preview instantly — saving applies
-          the new range across Dashboard, Inventory, and Vehicle Detail.
+          {t("dashboard.marginHelp")}
         </p>
 
         <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
-          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Estimated Profit Preview</p>
+          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">{t("dashboard.estimatedProfitPreview")}</p>
           <p className="text-xl font-bold text-emerald-700 mt-1">{formatINRRange(previewLow, previewHigh, { compact: true })}</p>
-          <p className="text-xs text-emerald-600 mt-0.5">Across current in-stock cost of {formatINR(totalCost, { compact: true })}</p>
+          <p className="text-xs text-emerald-600 mt-0.5">{t("dashboard.acrossCurrentStockCost", { value: formatINR(totalCost, { compact: true }) })}</p>
         </div>
 
         <div className="px-1 py-2">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-amber-600 tabular-nums">Low {low}%</span>
-            <span className="text-sm font-bold text-emerald-600 tabular-nums">High {high}%</span>
+            <span className="text-sm font-bold text-amber-600 tabular-nums">{t("dashboard.low", { value: low })}</span>
+            <span className="text-sm font-bold text-emerald-600 tabular-nums">{t("dashboard.high", { value: high })}</span>
           </div>
           <DualRangeSlider low={low} high={high} onLowChange={handleLowChange} onHighChange={handleHighChange} />
         </div>

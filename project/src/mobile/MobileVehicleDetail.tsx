@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, ShoppingCart, AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { TopBar, Spinner, Card, Tag, SegmentedTabs, Sheet, Button, Field } from "./ui/primitives";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
@@ -37,6 +38,8 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [showDelete, setShowDelete] = useState(false);
+  const { t } = useTranslation();
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value.replace(/_/g, " ") });
 
   useEffect(() => {
     if (initialTab) setTab(initialTab);
@@ -96,7 +99,7 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
   if (loading || !vehicle) {
     return (
       <div>
-        <TopBar title="Vehicle" onBack={onBack} />
+        <TopBar title={t("mobileVehicle.vehicle")} onBack={onBack} />
         <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
       </div>
     );
@@ -112,10 +115,10 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
         onBack={onBack}
         actions={
           <>
-            <button onClick={() => onNavigate("edit-vehicle", { vehicleId })} className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-text-secondary active:bg-mobile-bg" aria-label="Edit">
+            <button onClick={() => onNavigate("edit-vehicle", { vehicleId })} className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-text-secondary active:bg-mobile-bg" aria-label={t("mobileVehicle.edit")}>
               <Pencil size={17} />
             </button>
-            <button onClick={() => setShowDelete(true)} className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-error active:bg-mobile-bg" aria-label="Delete">
+            <button onClick={() => setShowDelete(true)} className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-error active:bg-mobile-bg" aria-label={t("mobileVehicle.delete")}>
               <Trash2 size={17} />
             </button>
           </>
@@ -123,26 +126,26 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
       />
 
       <div className="px-4 pt-3">
-        <p className="text-xs text-mobile-text-muted font-mono">{vehicle.stock_number} · {vehicle.registration_number ?? "No registration"}</p>
+        <p className="text-xs text-mobile-text-muted font-mono">{vehicle.stock_number} · {vehicle.registration_number ?? t("mobileVehicle.noRegistration")}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
         <Card className="p-3">
-          <p className="text-[10px] text-mobile-text-muted uppercase">Status</p>
+          <p className="text-[10px] text-mobile-text-muted uppercase"> {t("mobileVehicle.status")}</p>
           <div className="mt-1">
-            <Tag color={isSold ? "success" : days >= 60 ? "error" : days >= 30 ? "warning" : "primary"}>{vehicle.current_status.replace(/_/g, " ")}</Tag>
+            <Tag color={isSold ? "success" : days >= 60 ? "error" : days >= 30 ? "warning" : "primary"}>{trStatus(vehicle.current_status)}</Tag>
           </div>
         </Card>
         <Card className="p-3">
-          <p className="text-[10px] text-mobile-text-muted uppercase">Days in Stock</p>
+          <p className="text-[10px] text-mobile-text-muted uppercase"> {t("mobileVehicle.daysInStock")}</p>
           <p className="text-base font-poppins font-bold text-mobile-text mt-1">{days}d</p>
         </Card>
         <Card className="p-3">
-          <p className="text-[10px] text-mobile-text-muted uppercase">Total Cost</p>
+          <p className="text-[10px] text-mobile-text-muted uppercase"> {t("mobileVehicle.totalCost")}</p>
           <p className="text-base font-poppins font-bold text-mobile-text mt-1">{formatINR(cost.totalVehicleCost)}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-[10px] text-mobile-text-muted uppercase">{isSold ? "Profit" : "Est. Profit"}</p>
+          <p className="text-[10px] text-mobile-text-muted uppercase">{isSold ? t("mobileVehicle.profit") : t("mobileVehicle.estProfit")}</p>
           <p className={`text-base font-poppins font-bold mt-1 ${profit ? (profit.grossProfit >= 0 ? "text-mobile-success" : "text-mobile-error") : "text-mobile-success"}`}>
             {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: true })}
           </p>
@@ -152,10 +155,10 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
       <div className="pt-4">
         <SegmentedTabs
           tabs={[
-            { key: "overview", label: "Overview" },
-            { key: "documents", label: "Documents", badge: <Tag color="neutral">{vehicle.documents?.length ?? 0}</Tag> },
-            { key: "expenses", label: "Expenses", badge: <Tag color="neutral">{vehicle.expenses?.length ?? 0}</Tag> },
-            { key: "inspection", label: "Inspection" },
+            { key: "overview", label: t("mobileVehicle.overview") },
+            { key: "documents", label: t("mobileVehicle.documents"), badge: <Tag color="neutral">{vehicle.documents?.length ?? 0}</Tag> },
+            { key: "expenses", label: t("mobileVehicle.expenses"), badge: <Tag color="neutral">{vehicle.expenses?.length ?? 0}</Tag> },
+            { key: "inspection", label: t("mobileVehicle.inspection") },
           ]}
           active={tab}
           onChange={setTab}
@@ -197,6 +200,7 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     setFiles(media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })));
@@ -230,8 +234,8 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
             entity_type: "vehicle_media",
             entity_id: vehicle.id,
             action: "deleted",
-            performed_by: user?.email ?? "Unknown",
-            reason: `Removed ${removed.length} photo${removed.length === 1 ? "" : "s"} from ${vehicle.stock_number}`,
+            performed_by: user?.email ?? t("auth.user"),
+            reason: t("mobileVehicle.photoRemovedReason", { count: removed.length, stock: vehicle.stock_number }),
           })
           .then(({ error: auditErr }) => {
             if (auditErr) console.error("Failed to log photo deletion", auditErr);
@@ -239,7 +243,7 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
       }
       onChanged();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save photos", "error");
+      toast(err instanceof Error ? err.message : t("mobileVehicle.photosSaveFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -247,13 +251,13 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
 
   return (
     <Card className="p-4">
-      <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Photos</h3>
+      <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3"> {t("mobileVehicle.photos")}</h3>
       <FileUploadGrid
         bucket="vehicle-photos"
         pathPrefix={vehicle.id}
         value={files}
         onChange={handleChange}
-        hint={saving ? "Saving…" : "Add photos — exterior, interior, damage, etc."}
+        hint={saving ? t("mobileVehicle.saving") : t("mobileVehicle.photoHint")}
         fileAccept="image/*"
       />
     </Card>
@@ -277,6 +281,8 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value });
 
   const isBelowCost = Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost;
   const openCriticalAlerts = (vehicle.alerts ?? []).filter((a) => a.status === "Open" && a.severity === "Critical");
@@ -300,13 +306,13 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
           delivery_location: "",
           notes: form.notes,
         },
-        user?.email ?? "Unknown",
+        user?.email ?? t("auth.user"),
       );
-      toast("Sale recorded and profit calculated", "success");
+      toast(t("mobileVehicle.saleRecorded"), "success");
       setShowSale(false);
       onChanged();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to record sale", "error");
+      toast(e instanceof Error ? e.message : t("mobileVehicle.saleFailed"), "error");
     } finally {
       setSubmitting(false);
     }
@@ -317,49 +323,49 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
       <PhotosCard vehicle={vehicle} onChanged={onChanged} />
       {vehicle.sale ? (
         <Card className="p-4">
-          <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Sale Completed</h3>
+          <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3"> {t("mobileVehicle.saleCompleted")}</h3>
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <Spec label="Buyer" value={vehicle.sale.buyer?.full_name} />
-            <Spec label="Sale Price" value={formatINR(vehicle.sale.sale_price)} />
-            <Spec label="Net Revenue" value={formatINR(profit?.netSaleRevenue)} />
-            <Spec label="Profit" value={formatINR(profit?.grossProfit)} />
-            <Spec label="Margin" value={formatPercent(profit?.profitMarginPct)} />
-            <Spec label="Return on Cost" value={formatPercent(profit?.returnOnCostPct)} />
+            <Spec label={t("mobileVehicle.buyer")} value={vehicle.sale.buyer?.full_name} />
+            <Spec label={t("mobileVehicle.salePrice")} value={formatINR(vehicle.sale.sale_price)} />
+            <Spec label={t("mobileVehicle.netRevenue")} value={formatINR(profit?.netSaleRevenue)} />
+            <Spec label={t("mobileVehicle.profit")} value={formatINR(profit?.grossProfit)} />
+            <Spec label={t("mobileVehicle.margin")} value={formatPercent(profit?.profitMarginPct)} />
+            <Spec label={t("mobileVehicle.returnOnCost")} value={formatPercent(profit?.returnOnCostPct)} />
           </div>
         </Card>
       ) : openCriticalAlerts.length > 0 ? (
         <Card className="p-4">
-          <h3 className="text-sm font-poppins font-semibold text-mobile-error">Sale blocked — open Critical alerts</h3>
+          <h3 className="text-sm font-poppins font-semibold text-mobile-error"> {t("mobileVehicle.saleBlocked")}</h3>
           <p className="text-xs text-mobile-text-muted mt-0.5">
-            Resolve these before recording a sale: {openCriticalAlerts.map((a) => a.title).join(", ")}
+            {t("mobileVehicle.resolveBeforeSale", { alerts: openCriticalAlerts.map((a) => a.title).join(", ") })}
           </p>
         </Card>
       ) : (
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-poppins font-semibold text-mobile-text">Not Sold Yet</h3>
-              <p className="text-xs text-mobile-text-muted mt-0.5">Record the sale to calculate profit</p>
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text"> {t("mobileVehicle.notSold")}</h3>
+              <p className="text-xs text-mobile-text-muted mt-0.5"> {t("mobileVehicle.recordSaleHint")}</p>
             </div>
-            <Button size="sm" onClick={() => setShowSale(true)}><ShoppingCart size={14} /> Record Sale</Button>
+            <Button size="sm" onClick={() => setShowSale(true)}><ShoppingCart size={14} /> {t("mobileVehicle.recordSale")}</Button>
           </div>
         </Card>
       )}
 
       <Card className="p-4">
-        <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Health Score</h3>
+        <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3"> {t("mobileVehicle.healthScore")}</h3>
         <div className="flex flex-col items-center">
-          <ScoreRing score={overallScore} size={96} strokeWidth={8} label="Overall" />
+          <ScoreRing score={overallScore} size={96} strokeWidth={8} label={t("mobileVehicle.overall")} />
         </div>
         <div className="mt-3 pt-3 border-t border-mobile-border flex items-center justify-between text-xs">
-          <span className="text-mobile-text-muted">Documents</span>
-          <span className="font-medium text-mobile-text">{docCompleteness.verified}/{docCompleteness.total} verified</span>
+          <span className="text-mobile-text-muted"> {t("mobileVehicle.documents")}</span>
+          <span className="font-medium text-mobile-text">{t("mobileVehicle.documentsVerified", { verified: docCompleteness.verified, total: docCompleteness.total })}</span>
         </div>
         <div className="mt-3 pt-3 border-t border-mobile-border">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-mobile-text-muted">Compliance</span>
+            <span className="text-mobile-text-muted"> {t("mobileVehicle.compliance")}</span>
             <Tag color={complianceViolations.length === 0 ? "success" : complianceViolations.some((v) => (SEVERITY_RANK[v.severity] ?? 0) >= SEVERITY_RANK.High) ? "error" : "warning"}>
-              {complianceViolations.length === 0 ? "Compliant" : `${complianceViolations.length} issue${complianceViolations.length > 1 ? "s" : ""}`}
+              {complianceViolations.length === 0 ? t("mobileInventory.compliant") : t("mobileInventory.issueCount", { count: complianceViolations.length })}
             </Tag>
           </div>
           {complianceViolations.length > 0 && (
@@ -375,24 +381,24 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
       </Card>
 
       <Card className="p-4">
-        <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Specifications</h3>
+        <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3"> {t("mobileVehicle.specifications")}</h3>
         <div className="grid grid-cols-2 gap-3">
-          <Spec label="Category" value={vehicle.category} />
-          <Spec label="Fuel Type" value={vehicle.fuel_type} />
-          <Spec label="Colour" value={vehicle.colour} />
-          <Spec label="Year" value={String(vehicle.manufacture_year ?? "—")} />
-          <Spec label="Odometer" value={vehicle.odometer ? `${vehicle.odometer.toLocaleString("en-IN")} km` : "—"} />
-          <Spec label="Owners" value={String(vehicle.owner_count)} />
+          <Spec label={t("mobileVehicle.category")} value={vehicle.category} />
+          <Spec label={t("mobileVehicle.fuelType")} value={vehicle.fuel_type} />
+          <Spec label={t("passportPage.colour")} value={vehicle.colour} />
+          <Spec label={t("passportPage.year")} value={String(vehicle.manufacture_year ?? "—")} />
+          <Spec label={t("passportPage.odometer")} value={vehicle.odometer ? `${vehicle.odometer.toLocaleString("en-IN")} km` : "—"} />
+          <Spec label={t("passportPage.owners")} value={String(vehicle.owner_count)} />
         </div>
       </Card>
 
       <Card className="p-4">
-        <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">Purchase</h3>
+        <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3"> {t("mobileVehicle.purchase")}</h3>
         <div className="grid grid-cols-2 gap-3">
-          <Spec label="Seller" value={vehicle.purchase?.seller?.full_name} />
-          <Spec label="Seller Mobile" value={vehicle.purchase?.seller?.mobile} />
-          <Spec label="Purchase Price" value={formatINR(vehicle.purchase?.agreed_price)} />
-          <Spec label="Purchase Date" value={formatDate(vehicle.purchase?.purchase_date)} />
+          <Spec label={t("mobileVehicle.seller")} value={vehicle.purchase?.seller?.full_name} />
+          <Spec label={t("mobileVehicle.sellerMobile")} value={vehicle.purchase?.seller?.mobile} />
+          <Spec label={t("mobileVehicle.purchasePrice")} value={formatINR(vehicle.purchase?.agreed_price)} />
+          <Spec label={t("mobileVehicle.purchaseDate")} value={formatDate(vehicle.purchase?.purchase_date)} />
         </div>
       </Card>
 
@@ -400,45 +406,45 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
         onClick={() => onNavigate("edit-vehicle", { vehicleId: vehicle.id })}
         className="w-full text-center text-xs text-mobile-text-muted py-1"
       >
-        Full financial detail available on desktop
+        {t("mobileVehicle.desktopFinancial")}
       </button>
 
       <Sheet
         open={showSale}
         onClose={() => setShowSale(false)}
-        title="Record Sale"
-        description={`${vehicle.stock_number} · Total cost ${formatINR(cost.totalVehicleCost)}`}
+        title={t("mobileVehicle.recordSale")}
+        description={t("mobileVehicle.sheetDescription", { stock: vehicle.stock_number, cost: formatINR(cost.totalVehicleCost) })}
         footer={
           <div className="flex gap-3 w-full">
-            <Button variant="secondary" className="flex-1" onClick={() => setShowSale(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleRecordSale} loading={submitting} disabled={openCriticalAlerts.length > 0}>Complete Sale</Button>
+            <Button variant="secondary" className="flex-1" onClick={() => setShowSale(false)}> {t("mobileVehicle.cancel")}</Button>
+            <Button className="flex-1" onClick={handleRecordSale} loading={submitting} disabled={openCriticalAlerts.length > 0}> {t("mobileVehicle.completeSale")}</Button>
           </div>
         }
       >
         <div className="space-y-4">
           <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
-          <Field label="Sale Price (₹)" required>
+          <Field label={t("mobileVehicle.salePrice")} required>
             <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Discount (₹)">
+            <Field label={t("mobileVehicle.discount")}>
               <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} />
             </Field>
-            <Field label="Buyer Charges (₹)">
+            <Field label={t("mobileVehicle.buyerCharges")}>
               <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.buyer_charges} onChange={(e) => setForm((f) => ({ ...f, buyer_charges: e.target.value }))} />
             </Field>
           </div>
-          <Field label="Payment Method">
+          <Field label={t("mobileVehicle.paymentMethod")}>
             <select className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
-              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{trStatus(m)}</option>)}
             </select>
           </Field>
-          <Field label="Notes" required={isBelowCost} hint={isBelowCost ? "Required: this sale is below total cost" : undefined}>
+          <Field label={t("mobileVehicle.notes")} required={isBelowCost} hint={isBelowCost ? t("mobileVehicle.belowCostHint") : undefined}>
             <textarea className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
           </Field>
           {isBelowCost && (
             <div className="flex items-start gap-2 rounded-xl bg-mobile-error-bg p-3 text-xs text-mobile-error">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0" /> This sale is below cost — a reason is required in notes.
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {t("mobileVehicle.belowCostWarning")}
             </div>
           )}
         </div>

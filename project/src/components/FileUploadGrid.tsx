@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Camera, Image as ImageIcon, Upload, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "@/components/ui/Primitives";
 import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
 import { useMultiFileUpload } from "@/hooks/useMultiFileUpload";
@@ -20,6 +21,7 @@ interface FileUploadGridProps {
 function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket: string; onClick: () => void; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(file.previewUrl ?? null);
   const isImage = isImageName(file.name);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (file.previewUrl) {
@@ -45,7 +47,7 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
           onRemove();
         }}
         className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/70 text-white"
-        aria-label={`Remove ${file.name}`}
+        aria-label={t("uploads.remove", { name: file.name })}
       >
         <X size={12} />
       </button>
@@ -60,8 +62,9 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
   );
 }
 
-export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label = "Files", hint, maxSizeMB = 10, fileAccept = "image/*,.pdf,.doc,.docx" }: FileUploadGridProps) {
+export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label, hint, maxSizeMB = 10, fileAccept = "image/*,.pdf,.doc,.docx" }: FileUploadGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const { t } = useTranslation();
   const { uploading, cameraRef, libraryRef, fileRef, openCamera, openLibrary, openFile, handleCameraChange, handleLibraryChange, handleFileChange, removeAt } =
     useMultiFileUpload({ bucket, pathPrefix, value, onChange, maxSizeMB });
 
@@ -78,7 +81,7 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label = "F
 
   return (
     <div>
-      <label className="label">{label}</label>
+      <label className="label">{label ?? t("uploads.files")}</label>
       {hint && <p className="text-xs text-slate-500 -mt-1 mb-2">{hint}</p>}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple onChange={handleCameraChange} className="hidden" />
       <input ref={libraryRef} type="file" accept="image/*" multiple onChange={handleLibraryChange} className="hidden" />
@@ -94,13 +97,13 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label = "F
 
       <div className="flex gap-2">
         <button type="button" onClick={openCamera} disabled={uploading} className="btn-secondary btn-sm flex-1">
-          {uploading ? <Spinner size={14} /> : <Camera size={14} />} Take Photo
+          {uploading ? <Spinner size={14} /> : <Camera size={14} />} {t("uploads.takePhoto")}
         </button>
         <button type="button" onClick={openLibrary} disabled={uploading} className="btn-secondary btn-sm flex-1">
-          {uploading ? <Spinner size={14} /> : <ImageIcon size={14} />} Photo Library
+          {uploading ? <Spinner size={14} /> : <ImageIcon size={14} />} {t("uploads.photoLibrary")}
         </button>
         <button type="button" onClick={openFile} disabled={uploading} className="btn-secondary btn-sm flex-1">
-          {uploading ? <Spinner size={14} /> : <Upload size={14} />} Choose File
+          {uploading ? <Spinner size={14} /> : <Upload size={14} />} {t("uploads.chooseFile")}
         </button>
       </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { History as HistoryIcon, AlertTriangle, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -16,6 +17,7 @@ export function History({ vehicleFilter }: HistoryProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vehicleId, setVehicleId] = useState<string>(vehicleFilter ?? "");
+  const { t } = useTranslation();
 
   useEffect(() => {
     setVehicleId(vehicleFilter ?? "");
@@ -28,7 +30,7 @@ export function History({ vehicleFilter }: HistoryProps) {
         const h = await fetchAllStatusHistory();
         if (!cancelled) setHistory(h);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load history");
+        if (!cancelled) setError(e instanceof Error ? e.message : t("historyPage.failedToLoad"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -36,7 +38,7 @@ export function History({ vehicleFilter }: HistoryProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const vehicleOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -54,7 +56,7 @@ export function History({ vehicleFilter }: HistoryProps) {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="History" />
+        <PageHeader title={t("historyPage.title")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -63,8 +65,8 @@ export function History({ vehicleFilter }: HistoryProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="History" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("historyPage.title")} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("historyPage.failedToLoadShort")} description={error} /></Card>
       </div>
     );
   }
@@ -72,8 +74,8 @@ export function History({ vehicleFilter }: HistoryProps) {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <PageHeader
-        title="History"
-        description="Status changes across every vehicle"
+        title={t("historyPage.title")}
+        description={t("historyPage.description")}
         icon={<HistoryIcon size={20} />}
       />
 
@@ -82,25 +84,25 @@ export function History({ vehicleFilter }: HistoryProps) {
           <Select
             value={vehicleId}
             onChange={setVehicleId}
-            placeholder="All vehicles"
+            placeholder={t("historyPage.allVehicles")}
             options={vehicleOptions}
             className="w-auto min-w-[220px]"
           />
           {vehicleId && (
             <button onClick={() => setVehicleId("")} className="btn-ghost btn-sm">
-              <X size={14} /> Clear filter
+              <X size={14} /> {t("historyPage.clearFilter")}
             </button>
           )}
         </div>
       </Card>
 
       {filteredVehicleLabel && (
-        <p className="text-sm text-slate-500 mb-3">Showing history for <span className="font-medium text-slate-700">{filteredVehicleLabel}</span></p>
+        <p className="text-sm text-slate-500 mb-3">{t("historyPage.showingFor", { vehicle: filteredVehicleLabel })}</p>
       )}
 
       <Card className="p-5">
         {filtered.length === 0 ? (
-          <EmptyState icon={<HistoryIcon size={20} />} title="No history" description="No status changes recorded yet." />
+          <EmptyState icon={<HistoryIcon size={20} />} title={t("historyPage.noHistory")} description={t("historyPage.noHistoryDescription")} />
         ) : (
           <div className="space-y-0">
             {filtered.map((h, i) => (
@@ -112,7 +114,7 @@ export function History({ vehicleFilter }: HistoryProps) {
                 <div className="pb-4 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <StatusBadge status={h.new_status} />
-                    {h.previous_status && <span className="text-xs text-slate-400">from {h.previous_status.replace(/_/g, " ")}</span>}
+                    {h.previous_status && <span className="text-xs text-slate-400">{t("historyPage.from", { status: t("status." + h.previous_status, { defaultValue: h.previous_status.replace(/_/g, " ") }) })}</span>}
                     {!vehicleId && h.vehicle && (
                       <span className="text-xs font-medium text-slate-600">{h.vehicle.stock_number} · {h.vehicle.manufacturer} {h.vehicle.model}</span>
                     )}

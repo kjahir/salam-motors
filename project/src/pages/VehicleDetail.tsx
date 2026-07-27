@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   Bike,
@@ -72,6 +73,7 @@ interface VehicleDetailProps {
 }
 
 export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openEditVehicle, highlightPolicyId }: VehicleDetailProps) {
+  const { t } = useTranslation();
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
@@ -92,7 +94,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
       const v = await fetchVehicleFull(vehicleId);
       setVehicle(v);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load vehicle");
+      setError(e instanceof Error ? e.message : t("vehicleDetail.failedToLoad"));
     }
   };
 
@@ -112,7 +114,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         setPolicies(pol);
         setSettings(st);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load vehicle");
+        if (!cancelled) setError(e instanceof Error ? e.message : t("vehicleDetail.failedToLoad"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -120,7 +122,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
     return () => {
       cancelled = true;
     };
-  }, [vehicleId]);
+  }, [vehicleId, t]);
 
   const complianceViolations = useMemo(
     () => (vehicle ? evaluateVehicleCompliance(vehicle, policies) : []),
@@ -166,8 +168,8 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   if (error || !vehicle) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
-        <button onClick={onBack} className="btn-ghost mb-4"><ChevronLeft size={16} /> Back</button>
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Vehicle not found" description={error ?? undefined} /></Card>
+        <button onClick={onBack} className="btn-ghost mb-4"><ChevronLeft size={16} /> {t("vehicleDetail.back")}</button>
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("vehicleDetail.vehicleNotFound")} description={error ?? undefined} /></Card>
       </div>
     );
   }
@@ -176,31 +178,31 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   const isSold = vehicle.current_status === "SOLD" || vehicle.current_status === "DELIVERED";
 
   const tabs = [
-    { key: "overview", label: "Overview", badge: (vehicle.alerts?.filter((a) => a.status === "Open").length ?? 0) > 0 ? <Badge color="red">{vehicle.alerts?.filter((a) => a.status === "Open").length}</Badge> : undefined },
-    { key: "expenses", label: "Expenses", badge: <Badge color="slate">{vehicle.expenses?.length ?? 0}</Badge> },
-    { key: "inspection", label: "Inspection" },
-    { key: "documents", label: "Documents", badge: <Badge color="slate">{vehicle.documents?.length ?? 0}</Badge> },
-    { key: "sale", label: "Sale & Profit" },
+    { key: "overview", label: t("vehicleDetail.overview"), badge: (vehicle.alerts?.filter((a) => a.status === "Open").length ?? 0) > 0 ? <Badge color="red">{vehicle.alerts?.filter((a) => a.status === "Open").length}</Badge> : undefined },
+    { key: "expenses", label: t("vehicleDetail.expenses"), badge: <Badge color="slate">{vehicle.expenses?.length ?? 0}</Badge> },
+    { key: "inspection", label: t("vehicleDetail.inspection") },
+    { key: "documents", label: t("vehicleDetail.documents"), badge: <Badge color="slate">{vehicle.documents?.length ?? 0}</Badge> },
+    { key: "sale", label: t("vehicleDetail.saleProfit") },
   ];
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <button onClick={onBack} className="btn-ghost mb-3 text-sm"><ChevronLeft size={16} /> Back to Inventory</button>
+      <button onClick={onBack} className="btn-ghost mb-3 text-sm"><ChevronLeft size={16} /> {t("vehicleDetail.backToInventory")}</button>
 
       <PageHeader
         title={`${vehicle.manufacturer} ${vehicle.model}`}
-        description={`${vehicle.stock_number} · ${vehicle.registration_number ?? "No registration"} · ${vehicle.manufacture_year ?? "—"}`}
+        description={`${vehicle.stock_number} · ${vehicle.registration_number ?? t("vehicleDetail.noRegistration")} · ${vehicle.manufacture_year ?? "—"}`}
         icon={<Bike size={20} />}
         actions={
           <>
             <button onClick={() => onNavigate("passport", { vehicleId: vehicle.id })} className="btn-secondary">
-              <Share2 size={16} /> View Passport
+              <Share2 size={16} /> {t("vehicleDetail.viewPassport")}
             </button>
             <button onClick={() => setShowEditModal(true)} className="btn-secondary">
-              <Pencil size={16} /> Edit
+              <Pencil size={16} /> {t("vehicleDetail.edit")}
             </button>
             <button onClick={() => setShowDeleteModal(true)} className="btn-secondary text-red-600 hover:bg-red-50">
-              <Trash2 size={16} /> Delete
+              <Trash2 size={16} /> {t("vehicleDetail.delete")}
             </button>
           </>
         }
@@ -226,23 +228,23 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
       {/* Summary strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <Card className="p-4">
-          <p className="stat-label">Status</p>
+          <p className="stat-label">{t("vehicleDetail.status")}</p>
           <div className="mt-1.5"><StatusBadge status={vehicle.current_status} /></div>
         </Card>
         <Card className="p-4">
-          <p className="stat-label">Days in Stock</p>
+          <p className="stat-label">{t("vehicleDetail.daysInStock")}</p>
           <p className="stat-value mt-1.5">{isSold ? `${Math.round((new Date(vehicle.sold_at ?? vehicle.onboarded_at).getTime() - new Date(vehicle.onboarded_at).getTime()) / 86400000)}d` : `${days}d`}</p>
         </Card>
         <Card className="p-4">
-          <p className="stat-label">Total Vehicle Cost</p>
+          <p className="stat-label">{t("vehicleDetail.totalVehicleCost")}</p>
           <p className="stat-value mt-1.5">{formatINR(cost.totalVehicleCost)}</p>
         </Card>
         <Card className="p-4">
-          <p className="stat-label">{isSold ? "Realised Profit" : "Est. Profit"}</p>
+          <p className="stat-label">{isSold ? t("vehicleDetail.realisedProfit") : t("vehicleDetail.estimatedProfit")}</p>
           <p className={`stat-value mt-1.5 ${profit ? (profit.grossProfit >= 0 ? "text-emerald-600" : "text-red-600") : "text-emerald-600"}`}>
             {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: true })}
           </p>
-          {!profit && <p className="text-xs text-slate-400 mt-0.5">{marginLow}%–{marginHigh}% of cost</p>}
+          {!profit && <p className="text-xs text-slate-400 mt-0.5">{t("vehicleDetail.marginOfCost", { low: marginLow, high: marginHigh })}</p>}
         </Card>
       </div>
 
@@ -272,6 +274,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
 }
 
 function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onChanged: () => void }) {
+  const { t } = useTranslation();
   const media = vehicle.media ?? [];
   const [files, setFiles] = useState<UploadedFile[]>(() =>
     media.filter((m) => m.file_url).map((m) => ({ path: m.file_url!, name: m.file_url!.split("/").pop() ?? "photo" })),
@@ -321,7 +324,7 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
       }
       onChanged();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save photos", "error");
+      toast(err instanceof Error ? err.message : t("vehicleDetail.photosSaveFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -329,14 +332,14 @@ function PhotosCard({ vehicle, onChanged }: { vehicle: VehicleWithRelations; onC
 
   return (
     <Card className="p-5">
-      <h3 className="font-semibold text-slate-900 mb-4">Photos</h3>
+      <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.photos")}</h3>
       <FileUploadGrid
         bucket="vehicle-photos"
         pathPrefix={vehicle.id}
         value={files}
         onChange={handleChange}
         label=""
-        hint={saving ? "Saving…" : "Add photos of the vehicle — exterior, interior, damage, etc."}
+        hint={saving ? t("vehicleDetail.saving") : t("vehicleDetail.photosHint")}
         fileAccept="image/*"
       />
     </Card>
@@ -355,58 +358,59 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   onNavigate: (page: PageKey, params?: NavigateParams) => void;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-5">
     <PhotosCard vehicle={vehicle} onChanged={onChanged} />
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <Card className="p-5 lg:col-span-2">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900">Vehicle Specifications</h3>
+          <h3 className="font-semibold text-slate-900">{t("vehicleDetail.vehicleSpecifications")}</h3>
           <button
             onClick={() => onNavigate("history", { historyVehicleId: vehicle.id })}
             className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
           >
-            <History size={13} /> View full history
+            <History size={13} /> {t("vehicleDetail.viewFullHistory")}
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-          <Spec label="Category" value={vehicle.category} />
-          <Spec label="Fuel Type" value={vehicle.fuel_type} />
-          <Spec label="Colour" value={vehicle.colour} />
-          <Spec label="Year" value={String(vehicle.manufacture_year ?? "—")} />
-          <Spec label="Odometer" value={vehicle.odometer ? `${vehicle.odometer.toLocaleString("en-IN")} km` : "—"} />
-          <Spec label="Previous Owners" value={String(vehicle.owner_count)} />
-          <Spec label="Registration Date" value={formatDate(vehicle.registration_date)} />
-          <Spec label="Registration City" value={vehicle.registration_city} />
-          <Spec label="Registration State" value={vehicle.registration_state} />
-          <Spec label="Chassis #" value={vehicle.chassis_number} />
-          <Spec label="Engine #" value={vehicle.engine_number} />
-          <Spec label="Current Location" value={vehicle.current_location} />
+          <Spec label={t("vehicleDetail.category")} value={vehicle.category} />
+          <Spec label={t("vehicleDetail.fuelType")} value={vehicle.fuel_type} />
+          <Spec label={t("vehicleDetail.colour")} value={vehicle.colour} />
+          <Spec label={t("vehicleDetail.year")} value={String(vehicle.manufacture_year ?? "—")} />
+          <Spec label={t("vehicleDetail.odometer")} value={vehicle.odometer ? `${vehicle.odometer.toLocaleString("en-IN")} km` : "—"} />
+          <Spec label={t("vehicleDetail.previousOwners")} value={String(vehicle.owner_count)} />
+          <Spec label={t("vehicleDetail.registrationDate")} value={formatDate(vehicle.registration_date)} />
+          <Spec label={t("vehicleDetail.registrationCity")} value={vehicle.registration_city} />
+          <Spec label={t("vehicleDetail.registrationState")} value={vehicle.registration_state} />
+          <Spec label={t("vehicleDetail.chassis")} value={vehicle.chassis_number} />
+          <Spec label={t("vehicleDetail.engine")} value={vehicle.engine_number} />
+          <Spec label={t("vehicleDetail.currentLocation")} value={vehicle.current_location} />
         </div>
         {vehicle.notes && (
           <div className="mt-4 pt-4 border-t border-slate-100">
-            <p className="text-xs text-slate-500 mb-1">Notes</p>
+            <p className="text-xs text-slate-500 mb-1">{t("vehicleDetail.notes")}</p>
             <p className="text-sm text-slate-700">{vehicle.notes}</p>
           </div>
         )}
       </Card>
 
       <Card className="p-5">
-        <h3 className="font-semibold text-slate-900 mb-4">Health Score</h3>
+        <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.healthScore")}</h3>
         <div className="flex flex-col items-center">
-          <ScoreRing score={overallScore} label="Overall score" />
+          <ScoreRing score={overallScore} label={t("vehicleDetail.overallScore")} />
           <p className="text-xs text-slate-500 mt-3 text-center">
             {overallScore === null
-              ? "No inspection recorded yet"
+              ? t("vehicleDetail.noInspection")
               : overallScore >= 70
-                ? "Vehicle is in good condition"
-                : "Needs attention before sale"}
+                ? t("vehicleDetail.goodCondition")
+                : t("vehicleDetail.needsAttention")}
           </p>
         </div>
         <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Documents</span>
-            <span className="font-medium">{docCompleteness.verified}/{docCompleteness.total} verified</span>
+            <span className="text-slate-500">{t("vehicleDetail.documents")}</span>
+            <span className="font-medium">{t("vehicleDetail.documentsVerified", { verified: docCompleteness.verified, total: docCompleteness.total })}</span>
           </div>
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${docCompleteness.pct}%` }} />
@@ -414,7 +418,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
         </div>
         <div className="mt-4 pt-4 border-t border-slate-100">
           <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-slate-500">Compliance</span>
+            <span className="text-slate-500">{t("vehicleDetail.compliance")}</span>
             <ComplianceBadge
               violationCount={complianceViolations.length}
               maxSeverityRank={complianceViolations.reduce((max, v) => Math.max(max, SEVERITY_RANK[v.severity] ?? 0), 0)}
@@ -433,60 +437,60 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
       </Card>
 
       <Card className="p-5 lg:col-span-3">
-        <h3 className="font-semibold text-slate-900 mb-4">Financial Summary</h3>
+        <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.financialSummary")}</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
             {vehicle.purchase && (
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 pb-4 mb-4 border-b border-slate-100">
-                <Spec label="Agreed Price" value={formatINR(vehicle.purchase.agreed_price)} />
-                <Spec label="Broker Commission" value={formatINR(vehicle.purchase.broker_commission)} />
-                <Spec label="Purchase Fees" value={formatINR(vehicle.purchase.other_fee)} />
+                <Spec label={t("vehicleDetail.agreedPrice")} value={formatINR(vehicle.purchase.agreed_price)} />
+                <Spec label={t("vehicleDetail.brokerCommission")} value={formatINR(vehicle.purchase.broker_commission)} />
+                <Spec label={t("vehicleDetail.purchaseFees")} value={formatINR(vehicle.purchase.other_fee)} />
               </div>
             )}
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <Spec label="Purchase Cost" value={formatINR(cost.purchaseCost)} />
-              <Spec label="Refurbishment" value={formatINR(cost.refurbishmentCost)} />
-              <Spec label="Holding Cost" value={formatINR(cost.holdingCost)} />
-              <Spec label="Logistics Cost" value={formatINR(cost.logisticsCost)} />
-              <Spec label="Docs & Selling" value={formatINR(cost.documentationSellingCost)} />
-              <Spec label="Other Cost" value={formatINR(cost.otherCost)} />
+              <Spec label={t("vehicleDetail.purchaseCost")} value={formatINR(cost.purchaseCost)} />
+              <Spec label={t("vehicleDetail.refurbishment")} value={formatINR(cost.refurbishmentCost)} />
+              <Spec label={t("vehicleDetail.holdingCost")} value={formatINR(cost.holdingCost)} />
+              <Spec label={t("vehicleDetail.logisticsCost")} value={formatINR(cost.logisticsCost)} />
+              <Spec label={t("vehicleDetail.docsSelling")} value={formatINR(cost.documentationSellingCost)} />
+              <Spec label={t("vehicleDetail.otherCost")} value={formatINR(cost.otherCost)} />
             </div>
           </div>
 
           <div className="lg:pl-6 lg:border-l lg:border-slate-100">
-            <h4 className="text-sm font-semibold text-slate-800 mb-3">Sales Summary</h4>
+            <h4 className="text-sm font-semibold text-slate-800 mb-3">{t("vehicleDetail.salesSummary")}</h4>
             {vehicle.purchase && (
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <Spec label="Seller" value={vehicle.purchase.seller?.full_name} />
-                <Spec label="Seller Mobile" value={vehicle.purchase.seller?.mobile} />
-                <Spec label="Purchase Date" value={formatDate(vehicle.purchase.purchase_date, { withTime: true })} />
-                <Spec label="Handover Location" value={vehicle.purchase.handover_location} />
-                <Spec label="Odometer at Purchase" value={vehicle.purchase.odometer_at_purchase ? `${vehicle.purchase.odometer_at_purchase.toLocaleString("en-IN")} km` : "—"} />
-                <Spec label="Keys Received" value={vehicle.purchase.keys_received ? "Yes" : "No"} />
-                <Spec label="Documents Received" value={vehicle.purchase.documents_received ? "Yes" : "No"} />
-                <Spec label="Payment Status" value={vehicle.purchase.payment_status} />
+                <Spec label={t("vehicleDetail.seller")} value={vehicle.purchase.seller?.full_name} />
+                <Spec label={t("vehicleDetail.sellerMobile")} value={vehicle.purchase.seller?.mobile} />
+                <Spec label={t("vehicleDetail.purchaseDate")} value={formatDate(vehicle.purchase.purchase_date, { withTime: true })} />
+                <Spec label={t("vehicleDetail.handoverLocation")} value={vehicle.purchase.handover_location} />
+                <Spec label={t("vehicleDetail.odometerAtPurchase")} value={vehicle.purchase.odometer_at_purchase ? `${vehicle.purchase.odometer_at_purchase.toLocaleString("en-IN")} km` : "—"} />
+                <Spec label={t("vehicleDetail.keysReceived")} value={vehicle.purchase.keys_received ? t("vehicleDetail.yes") : t("vehicleDetail.no")} />
+                <Spec label={t("vehicleDetail.documentsReceived")} value={vehicle.purchase.documents_received ? t("vehicleDetail.yes") : t("vehicleDetail.no")} />
+                <Spec label={t("vehicleDetail.paymentStatus")} value={vehicle.purchase.payment_status} />
               </div>
             )}
             {vehicle.purchase?.notes && (
               <div className="mt-4 pt-4 border-t border-slate-100">
-                <p className="text-xs text-slate-500 mb-1">Purchase Notes</p>
+                <p className="text-xs text-slate-500 mb-1">{t("vehicleDetail.purchaseNotes")}</p>
                 <p className="text-sm text-slate-700">{vehicle.purchase.notes}</p>
               </div>
             )}
 
             <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
-              <span className="font-semibold text-slate-900">Total Vehicle Cost</span>
+              <span className="font-semibold text-slate-900">{t("vehicleDetail.totalVehicleCost")}</span>
               <span className="text-lg font-bold text-slate-900">{formatINR(cost.totalVehicleCost)}</span>
             </div>
 
             {vehicle.sale && profit && (
               <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-500">Selling Price</span>
+                  <span className="text-sm text-slate-500">{t("vehicleDetail.sellingPrice")}</span>
                   <span className="text-sm font-medium">{formatINR(vehicle.sale.sale_price)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-500">Profit</span>
+                  <span className="text-sm text-slate-500">{t("vehicleDetail.profit")}</span>
                   <span className={`text-sm font-bold ${profit.grossProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatINR(profit.grossProfit)}</span>
                 </div>
               </div>
@@ -494,7 +498,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
 
             {vehicle.purchase?.payments && vehicle.purchase.payments.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-200">
-                <h4 className="text-sm font-semibold text-slate-800 mb-3">Payment Records</h4>
+                <h4 className="text-sm font-semibold text-slate-800 mb-3">{t("vehicleDetail.paymentRecords")}</h4>
                 <div className="space-y-2">
                   {vehicle.purchase.payments.map((pay) => (
                     <div key={pay.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
@@ -514,7 +518,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
 
       {funding.length > 0 && (
         <Card className="p-5 lg:col-span-3">
-          <h3 className="font-semibold text-slate-900 mb-4">Partner Funding</h3>
+          <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.partnerFunding")}</h3>
           <div className="space-y-3">
             {funding.map((f) => {
               const partner = vehicle.investments?.find((i) => i.partner_id === f.partnerId)?.partner;
@@ -527,7 +531,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
                   <div className="mt-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div className="h-full bg-brand-500 rounded-full" style={{ width: `${f.fundingPct}%` }} />
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">{formatPercent(f.fundingPct, 1)} of vehicle funding</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{t("vehicleDetail.fundingPct", { pct: formatPercent(f.fundingPct, 1) })}</p>
                 </div>
               );
             })}
@@ -847,6 +851,7 @@ function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
 
 // ============ INSPECTION ============
 function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleWithRelations; overallScore: number | null; onChanged: () => void }) {
+  const { t } = useTranslation();
   const insp = (vehicle.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
   const [mechanics, setMechanics] = useState<Party[]>([]);
   const [showLinkMechanic, setShowLinkMechanic] = useState(false);
@@ -1106,7 +1111,7 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
         <Card className="p-5">
           <h3 className="font-semibold text-slate-900 mb-4">Inspection Summary</h3>
           <div className="flex flex-col items-center">
-            <ScoreRing score={overallScore} label="Overall score" />
+            <ScoreRing score={overallScore} label={t("vehicleDetail.overallScore")} />
           </div>
           <div className="mt-4 space-y-2 text-sm">
             <Spec label="Inspection Type" value={insp.inspection_type} />
@@ -1573,6 +1578,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
   marginHigh: number;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation();
   const [showBuyers, setShowBuyers] = useState(false);
   const [form, setForm] = useState({
     buyer_party_id: "",
@@ -1708,11 +1714,11 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
       <Card className="p-5">
         <h3 className="font-semibold text-slate-900 mb-4">Cost Sheet</h3>
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <Spec label="Purchase Cost" value={formatINR(cost.purchaseCost)} />
-          <Spec label="Refurbishment" value={formatINR(cost.refurbishmentCost)} />
-          <Spec label="Holding Cost" value={formatINR(cost.holdingCost)} />
-          <Spec label="Logistics Cost" value={formatINR(cost.logisticsCost)} />
-          <Spec label="Docs & Selling" value={formatINR(cost.documentationSellingCost)} />
+          <Spec label={t("vehicleDetail.purchaseCost")} value={formatINR(cost.purchaseCost)} />
+          <Spec label={t("vehicleDetail.refurbishment")} value={formatINR(cost.refurbishmentCost)} />
+          <Spec label={t("vehicleDetail.holdingCost")} value={formatINR(cost.holdingCost)} />
+          <Spec label={t("vehicleDetail.logisticsCost")} value={formatINR(cost.logisticsCost)} />
+          <Spec label={t("vehicleDetail.docsSelling")} value={formatINR(cost.documentationSellingCost)} />
           <Spec label="Other" value={formatINR(cost.otherCost)} />
         </div>
         <div className="flex items-center justify-between pt-3 border-t border-slate-200">

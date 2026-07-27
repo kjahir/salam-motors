@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Camera, Image as ImageIcon, Upload, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "./primitives";
 import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
 import { useMultiFileUpload } from "@/hooks/useMultiFileUpload";
@@ -19,6 +20,7 @@ interface FileUploadGridProps {
 function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket: string; onClick: () => void; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(file.previewUrl ?? null);
   const isImage = isImageName(file.name);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (file.previewUrl) {
@@ -44,7 +46,7 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
           onRemove();
         }}
         className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-mobile-navy/70 text-white"
-        aria-label={`Remove ${file.name}`}
+        aria-label={t("uploads.remove", { name: file.name })}
       >
         <X size={12} />
       </button>
@@ -61,6 +63,7 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
 
 export function FileUploadGrid({ bucket, pathPrefix, value, onChange, hint, maxSizeMB = 10, fileAccept = "image/*,.pdf,.doc,.docx" }: FileUploadGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const { t } = useTranslation();
   const { uploading, cameraRef, libraryRef, fileRef, openCamera, openLibrary, openFile, handleCameraChange, handleLibraryChange, handleFileChange, removeAt } =
     useMultiFileUpload({ bucket, pathPrefix, value, onChange, maxSizeMB });
 
@@ -97,7 +100,7 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, hint, maxS
           disabled={uploading}
           className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-mobile-border bg-white px-2 py-2 text-xs font-medium text-mobile-text active:bg-mobile-bg disabled:opacity-50"
         >
-          {uploading ? <Spinner size={13} /> : <Camera size={13} />} Camera
+          {uploading ? <Spinner size={13} /> : <Camera size={13} />} {t("uploads.camera")}
         </button>
         <button
           type="button"
@@ -105,7 +108,7 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, hint, maxS
           disabled={uploading}
           className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-mobile-border bg-white px-2 py-2 text-xs font-medium text-mobile-text active:bg-mobile-bg disabled:opacity-50"
         >
-          {uploading ? <Spinner size={13} /> : <ImageIcon size={13} />} Library
+          {uploading ? <Spinner size={13} /> : <ImageIcon size={13} />} {t("uploads.library")}
         </button>
         <button
           type="button"
@@ -113,7 +116,7 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, hint, maxS
           disabled={uploading}
           className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-mobile-border bg-white px-2 py-2 text-xs font-medium text-mobile-text active:bg-mobile-bg disabled:opacity-50"
         >
-          {uploading ? <Spinner size={13} /> : <Upload size={13} />} File
+          {uploading ? <Spinner size={13} /> : <Upload size={13} />} {t("uploads.file")}
         </button>
       </div>
 

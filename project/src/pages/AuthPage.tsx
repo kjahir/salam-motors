@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Bike, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/components/ui/useToast";
 
 export function AuthPage() {
   const { signIn } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -14,7 +16,7 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      toast("Enter email and password", "error");
+      toast(t("authPage.enterEmailPassword"), "error");
       return;
     }
     setLoading(true);
@@ -34,18 +36,18 @@ export function AuthPage() {
             <Bike size={28} />
           </div>
           <h1 className="text-2xl font-bold text-white">Salam Motors</h1>
-          <p className="text-sm text-slate-400 mt-1">Dealer Operating System</p>
+          <p className="text-sm text-slate-400 mt-1"> {t("app.tagline")}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-slate-900">Sign In</h2>
-            <p className="text-sm text-slate-500 mt-1">Use the credentials provided to you.</p>
+            <h2 className="text-lg font-semibold text-slate-900"> {t("authPage.signIn")}</h2>
+            <p className="text-sm text-slate-500 mt-1"> {t("authPage.credentialHint")}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Email</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5"> {t("authPage.email")}</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -60,7 +62,7 @@ export function AuthPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Password</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5"> {t("authPage.password")}</label>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -90,7 +92,7 @@ export function AuthPage() {
                 <Loader2 size={16} className="animate-spin" />
               ) : (
                 <>
-                  Sign In
+                  {t("authPage.signIn")}
                   <ArrowRight size={16} />
                 </>
               )}
