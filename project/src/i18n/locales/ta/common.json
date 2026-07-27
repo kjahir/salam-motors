@@ -1,6 +1,6 @@
 {
   "app": {
-    "brand": "Salam Motors",
+    "brand": "VahanExchange Dealer",
     "tagline": "Dealer Operating System"
   },
   "auth": {
@@ -30,7 +30,8 @@
     "partners": "கூட்டாளர்கள்",
     "alerts": "எச்சரிக்கைகள்",
     "history": "வரலாறு",
-    "policies": "கொள்கைகள்"
+    "policies": "கொள்கைகள்",
+    "team": "Team"
   },
   "dashboard": {
     "title": "டாஷ்போர்டு",
@@ -600,7 +601,9 @@
     "email": "மின்னஞ்சல்",
     "password": "கடவுச்சொல்",
     "credentialHint": "உங்களுக்கு வழங்கப்பட்ட உள்நுழைவு விவரங்களை பயன்படுத்தவும்.",
-    "enterEmailPassword": "மின்னஞ்சல் மற்றும் கடவுச்சொல்லை உள்ளிடவும்"
+    "enterEmailPassword": "மின்னஞ்சல் மற்றும் கடவுச்சொல்லை உள்ளிடவும்",
+    "createAccount": "Create Account",
+    "newDealershipHint": "For a new dealership with nobody to invite you yet."
   },
   "historyPage": {
     "title": "வரலாறு",
@@ -760,7 +763,7 @@
     "unpublished": "பாஸ்போர்ட் வெளியீடு நிறுத்தப்பட்டது",
     "updateFailed": "பட்டியலை புதுப்பிக்க முடியவில்லை",
     "noPublicListing": "பொது பட்டியல் இல்லை.",
-    "verifiedBy": "Salam Motors மூலம் சரிபார்க்கப்பட்டது",
+    "verifiedBy": "{{org}} மூலம் சரிபார்க்கப்பட்டது",
     "verifiedDescription": "இந்த பாஸ்போர்ட் டீலரின் சரிபார்க்கப்பட்ட ஆய்வு பதிவுகளிலிருந்து உருவாக்கப்பட்டது. வாங்குபவரின் தனியுரிமைக்காக நிதி விவரங்கள் சேர்க்கப்படவில்லை.",
     "generated": "உருவாக்கப்பட்டது {{date}} · {{stock}}",
     "advisory": "இந்த பாஸ்போர்ட் ஆலோசனைக்கானது. வாங்குபவர்கள் வாங்குவதற்கு முன் தனியாக சரிபார்க்க வேண்டும்."

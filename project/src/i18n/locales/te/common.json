@@ -1,6 +1,6 @@
 {
   "app": {
-    "brand": "Salam Motors",
+    "brand": "VahanExchange Dealer",
     "tagline": "Dealer Operating System"
   },
   "auth": {
@@ -30,7 +30,8 @@
     "partners": "పార్ట్నర్లు",
     "alerts": "అలర్ట్స్",
     "history": "చరిత్ర",
-    "policies": "పాలసీలు"
+    "policies": "పాలసీలు",
+    "team": "Team"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -600,7 +601,9 @@
     "email": "Email",
     "password": "Password",
     "credentialHint": "Use the credentials provided to you.",
-    "enterEmailPassword": "Enter email and password"
+    "enterEmailPassword": "Enter email and password",
+    "createAccount": "Create Account",
+    "newDealershipHint": "For a new dealership with nobody to invite you yet."
   },
   "historyPage": {
     "title": "History",
@@ -760,7 +763,7 @@
     "unpublished": "Passport unpublished",
     "updateFailed": "Failed to update listing",
     "noPublicListing": "No public listing available.",
-    "verifiedBy": "Verified by Salam Motors",
+    "verifiedBy": "Verified by {{org}}",
     "verifiedDescription": "This passport is generated from the dealer verified inspection records. Financial details are excluded for buyer privacy.",
     "generated": "Generated {{date}} · {{stock}}",
     "advisory": "This passport is advisory. Buyers should conduct independent verification before purchase."

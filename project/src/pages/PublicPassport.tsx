@@ -189,7 +189,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
               <div className="flex items-start gap-3">
                 <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-900"> {t("passportPage.verifiedBy")}</p>
+                  <p className="text-sm font-medium text-emerald-900">{t("passportPage.verifiedBy", { org: passport.organization_name ?? "the dealer" })}</p>
                   <p className="text-xs text-emerald-700 mt-1">
                     {t("passportPage.verifiedDescription")}
                   </p>

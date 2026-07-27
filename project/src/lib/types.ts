@@ -9,6 +9,24 @@ export interface Partner {
   notes: string | null;
   created_at: string;
   deleted_at: string | null;
+  org_id: string;
+  auth_user_id: string | null;
+}
+
+export type Role = "owner" | "manager" | "sales_executive" | "accountant" | "mechanic_inspector";
+
+export interface Membership {
+  id: string;
+  org_id: string;
+  user_id: string;
+  role: Role;
+  status: "invited" | "active" | "suspended";
+  display_name: string | null;
+  email: string;
+  invited_by: string | null;
+  invited_at: string;
+  joined_at: string | null;
+  created_at: string;
 }
 
 export type PartySubtype = "individual" | "bank_auction" | "agent" | "company_mechanic";
@@ -253,6 +271,8 @@ export interface PublicPassport {
   inspector_name: string | null;
   inspection_items: PublicPassportItem[];
   documents: PublicPassportDocument[];
+  org_id: string;
+  organization_name: string | null;
 }
 
 export interface Enquiry {

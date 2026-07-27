@@ -25,6 +25,7 @@ import { supabase } from "@/lib/supabase";
 import { formatDate } from "@/lib/format";
 import { computeOverallScore } from "@/lib/calc";
 import { fetchVehicleFull } from "@/lib/queries";
+import { useAuth } from "@/lib/useAuth";
 import type { VehicleWithRelations, InspectionItem } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
@@ -40,6 +41,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
   const [publishing, setPublishing] = useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
+  const { orgName } = useAuth();
 
   const reload = async () => {
     try {
@@ -278,7 +280,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
               <div className="flex items-start gap-3">
                 <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-900"> {t("passportPage.verifiedBy")}</p>
+                  <p className="text-sm font-medium text-emerald-900">{t("passportPage.verifiedBy", { org: orgName ?? "the dealer" })}</p>
                   <p className="text-xs text-emerald-700 mt-1">
                     {t("passportPage.verifiedDescription")}
                   </p>

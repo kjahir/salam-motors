@@ -7,6 +7,7 @@ import { MobileInventory } from "./MobileInventory";
 import { MobileVehicleDetail } from "./MobileVehicleDetail";
 import { MobileVehicleForm } from "./MobileVehicleForm";
 import { MobileReports } from "./MobileReports";
+import { usePermissions } from "@/lib/usePermissions";
 
 export type MobileScreen = "dashboard" | "inventory" | "vehicle" | "add-vehicle" | "edit-vehicle" | "reports";
 
@@ -22,6 +23,7 @@ export interface MobileNavigate {
 
 export function MobileApp() {
   const { t } = useTranslation();
+  const { canAccessMobileTab } = usePermissions();
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
@@ -103,22 +105,26 @@ export function MobileApp() {
               label={t("nav.inventory")}
               onClick={() => navigate("inventory")}
             />
-            <button
-              onClick={() => navigate("add-vehicle")}
-              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
-              aria-label={t("nav.addVehicle")}
-            >
-              <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-mobile-primary text-white">
-                <Plus size={18} />
-              </span>
-              <span className="text-[11px] font-semibold leading-none text-mobile-primary">{t("common.add")}</span>
-            </button>
-            <NavButton
-              active={isTabActive("reports")}
-              icon={<FileBarChart size={20} />}
-              label={t("nav.reports")}
-              onClick={() => navigate("reports")}
-            />
+            {canAccessMobileTab("add-vehicle") && (
+              <button
+                onClick={() => navigate("add-vehicle")}
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
+                aria-label={t("nav.addVehicle")}
+              >
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-mobile-primary text-white">
+                  <Plus size={18} />
+                </span>
+                <span className="text-[11px] font-semibold leading-none text-mobile-primary">{t("common.add")}</span>
+              </button>
+            )}
+            {canAccessMobileTab("reports") && (
+              <NavButton
+                active={isTabActive("reports")}
+                icon={<FileBarChart size={20} />}
+                label={t("nav.reports")}
+                onClick={() => navigate("reports")}
+              />
+            )}
           </div>
         </nav>
       )}

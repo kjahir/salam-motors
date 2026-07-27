@@ -1,6 +1,6 @@
 {
   "app": {
-    "brand": "Salam Motors",
+    "brand": "VahanExchange Dealer",
     "tagline": "Dealer Operating System"
   },
   "auth": {
@@ -30,7 +30,8 @@
     "partners": "पार्टनर",
     "alerts": "अलर्ट",
     "history": "इतिहास",
-    "policies": "नीतियां"
+    "policies": "नीतियां",
+    "team": "Team"
   },
   "dashboard": {
     "title": "डैशबोर्ड",
@@ -600,7 +601,9 @@
     "email": "ईमेल",
     "password": "पासवर्ड",
     "credentialHint": "आपको दिए गए क्रेडेंशियल का उपयोग करें।",
-    "enterEmailPassword": "ईमेल और पासवर्ड दर्ज करें"
+    "enterEmailPassword": "ईमेल और पासवर्ड दर्ज करें",
+    "createAccount": "Create Account",
+    "newDealershipHint": "For a new dealership with nobody to invite you yet."
   },
   "historyPage": {
     "title": "इतिहास",
@@ -760,7 +763,7 @@
     "unpublished": "पासपोर्ट अप्रकाशित",
     "updateFailed": "लिस्टिंग अपडेट करने में विफल",
     "noPublicListing": "कोई सार्वजनिक लिस्टिंग उपलब्ध नहीं।",
-    "verifiedBy": "Salam Motors द्वारा सत्यापित",
+    "verifiedBy": "{{org}} द्वारा सत्यापित",
     "verifiedDescription": "यह पासपोर्ट डीलर के सत्यापित निरीक्षण रिकॉर्ड से बनाया गया है। खरीदार की गोपनीयता के लिए वित्तीय विवरण शामिल नहीं हैं।",
     "generated": "बनाया गया {{date}} · {{stock}}",
     "advisory": "यह पासपोर्ट सलाहकारी है। खरीदार खरीद से पहले स्वतंत्र सत्यापन करें।"
