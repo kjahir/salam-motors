@@ -29,6 +29,7 @@ import type {
   VehicleComplianceViolation,
   VehicleMedia,
   AppSettings,
+  Membership,
 } from "./types";
 
 export async function fetchAppSettings(): Promise<AppSettings> {
@@ -43,8 +44,7 @@ export async function updateAppSettings(
 ): Promise<void> {
   const { error } = await supabase
     .from("app_settings")
-    .update({ ...patch, updated_by: updatedBy })
-    .eq("id", true);
+    .update({ ...patch, updated_by: updatedBy });
   if (error) throw error;
 }
 
@@ -404,4 +404,32 @@ export async function nextStockNumber(): Promise<string> {
   const { data, error } = await supabase.rpc("next_stock_number");
   if (error) throw error;
   return data as string;
+}
+
+export async function fetchMemberships(): Promise<Membership[]> {
+  const { data, error } = await supabase.from("memberships").select("*").order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchMyInvestments(partnerId: string): Promise<(Investment & { vehicle: Vehicle | null })[]> {
+  const { data, error } = await supabase
+    .from("investments")
+    .select("*, vehicle:vehicles(*)")
+    .eq("partner_id", partnerId)
+    .order("investment_date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchMyProfitDistributions(
+  partnerId: string,
+): Promise<(ProfitDistribution & { vehicle: Vehicle | null; payments: ProfitSettlementPayment[] })[]> {
+  const { data, error } = await supabase
+    .from("profit_distributions")
+    .select("*, vehicle:vehicles(*), payments:profit_settlement_payments(*)")
+    .eq("partner_id", partnerId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as (ProfitDistribution & { vehicle: Vehicle | null; payments: ProfitSettlementPayment[] })[];
 }

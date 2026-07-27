@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2, Banknote, Download } from "lucide-react";
+import { Users, Plus, Wallet, TrendingUp, IndianRupee, AlertTriangle, Trash2, Banknote, Download, KeyRound, Unlink } from "lucide-react";
 import { PageHeader, Field, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -34,8 +34,12 @@ export function Partners({ onNavigate }: PartnersProps) {
   const [submitting, setSubmitting] = useState(false);
   const [investingPartner, setInvestingPartner] = useState<Partner | null>(null);
   const [settlingDistribution, setSettlingDistribution] = useState<DistributionRow | null>(null);
+  const [invitingPartner, setInvitingPartner] = useState<Partner | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitingSubmitting, setInvitingSubmitting] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, orgId, role } = useAuth();
+  const isOwner = role === "owner";
   const proofLightbox = useProofLightbox("finance-proofs");
 
   const reload = async () => {
@@ -117,6 +121,56 @@ export function Partners({ onNavigate }: PartnersProps) {
     }
   };
 
+  const openInvite = (p: Partner) => {
+    setInvitingPartner(p);
+    setInviteEmail("");
+  };
+
+  const handleInvitePartner = async () => {
+    if (!invitingPartner) return;
+    if (!inviteEmail.trim()) {
+      toast("Enter an email address", "error");
+      return;
+    }
+    if (!orgId) {
+      toast("No active organization", "error");
+      return;
+    }
+    setInvitingSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("invite-team-member", {
+        body: {
+          org_id: orgId,
+          email: inviteEmail.trim(),
+          kind: "partner",
+          partner_id: invitingPartner.id,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast("Portal invite sent", "success");
+      setInvitingPartner(null);
+      setInviteEmail("");
+      reload();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to send invite", "error");
+    } finally {
+      setInvitingSubmitting(false);
+    }
+  };
+
+  const handleRevokePortalAccess = async (p: Partner) => {
+    if (!confirm(`Revoke ${p.name}'s portal access? They will no longer be able to sign in to view their investments.`)) return;
+    try {
+      const { error } = await supabase.from("partners").update({ auth_user_id: null }).eq("id", p.id);
+      if (error) throw error;
+      toast("Portal access revoked", "success");
+      reload();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to revoke access", "error");
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -168,7 +222,22 @@ export function Partners({ onNavigate }: PartnersProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge color={p.status === "active" ? "emerald" : "slate"}>{p.status}</Badge>
+                  {p.auth_user_id ? (
+                    <Badge color="blue">Portal linked</Badge>
+                  ) : isOwner ? (
+                    <button
+                      onClick={() => openInvite(p)}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20 hover:bg-blue-100 hover:ring-blue-600/30 transition-colors"
+                    >
+                      <KeyRound size={13} /> Invite to Portal
+                    </button>
+                  ) : null}
                   <button onClick={() => setInvestingPartner(p)} className="btn-secondary btn-sm"><Plus size={13} /> Investment</button>
+                  {p.auth_user_id && isOwner && (
+                    <button onClick={() => handleRevokePortalAccess(p)} className="text-slate-400 hover:text-amber-600 p-1" title="Revoke portal access">
+                      <Unlink size={14} />
+                    </button>
+                  )}
                   <button onClick={() => handleDelete(p.id)} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
                 </div>
               </div>
@@ -296,6 +365,35 @@ export function Partners({ onNavigate }: PartnersProps) {
             <Field label="Email"><input className="input" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="arjun@example.com" /></Field>
           </div>
           <Field label="Default Profit Share %" hint="Sum of all partner percentages should equal 100%"><input className="input" type="number" value={form.default_profit_share_pct} onChange={(e) => setForm((f) => ({ ...f, default_profit_share_pct: e.target.value }))} /></Field>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(invitingPartner)}
+        onClose={() => setInvitingPartner(null)}
+        title={`Invite ${invitingPartner?.name ?? "Partner"} to the Portal`}
+        footer={
+          <>
+            <button onClick={() => setInvitingPartner(null)} className="btn-secondary">Cancel</button>
+            <button onClick={handleInvitePartner} disabled={invitingSubmitting} className="btn-primary">
+              {invitingSubmitting ? <Spinner size={14} /> : null} Send Invite
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            They&apos;ll be able to sign in and view only their own investments and profit distributions - read-only, nothing else in the app.
+          </p>
+          <Field label="Email" required>
+            <input
+              className="input"
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="partner@example.com"
+            />
+          </Field>
         </div>
       </Modal>
 

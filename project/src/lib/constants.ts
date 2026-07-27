@@ -1,4 +1,14 @@
-import type { VehicleStatus, PartySubtype } from "./types";
+import type { VehicleStatus, PartySubtype, Role } from "./types";
+
+export const ROLES: Role[] = ["owner", "manager", "sales_executive", "accountant", "mechanic_inspector"];
+
+export const ROLE_LABELS: Record<Role, string> = {
+  owner: "Owner",
+  manager: "Manager",
+  sales_executive: "Sales Executive",
+  accountant: "Accountant",
+  mechanic_inspector: "Mechanic/Inspector",
+};
 
 // Only the statuses the app actually transitions a vehicle into today
 // (PURCHASED on onboarding, SOLD on sale) — used solely by Inventory's

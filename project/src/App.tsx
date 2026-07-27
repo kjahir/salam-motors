@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/useAuth";
 import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { MobileApp } from "@/mobile/MobileApp";
 import { AuthPage } from "@/pages/AuthPage";
+import { CreateOrganization } from "@/pages/CreateOrganization";
 import { Dashboard } from "@/pages/Dashboard";
 import { Inventory } from "@/pages/Inventory";
 import { AddVehicle } from "@/pages/AddVehicle";
@@ -17,10 +18,12 @@ import { Finance } from "@/pages/Finance";
 import { Alerts } from "@/pages/Alerts";
 import { History } from "@/pages/History";
 import { Policies } from "@/pages/Policies";
+import { Team } from "@/pages/Team";
+import { PartnerPortal } from "@/pages/PartnerPortal";
 import { fetchAlerts } from "@/lib/queries";
 
 function AppContent() {
-  const { session, loading } = useAuth();
+  const { session, loading, membership, partner } = useAuth();
   const isMobile = useIsMobileViewport();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
@@ -94,6 +97,8 @@ function AppContent() {
         return <History vehicleFilter={historyVehicleId} />;
       case "policies":
         return <Policies />;
+      case "team":
+        return <Team />;
       default:
         return <Dashboard onNavigate={handleNavigate} />;
     }
@@ -109,6 +114,18 @@ function AppContent() {
 
   if (!session) {
     return <AuthPage />;
+  }
+
+  if (!membership && !partner) {
+    return <CreateOrganization />;
+  }
+
+  // A staff membership always wins over a partner link (e.g. an Owner who
+  // is also a JV investor sees the full staff app, not the read-only
+  // partner view) - the partner OR-branch in RLS still applies underneath
+  // regardless of which UI is shown.
+  if (!membership && partner) {
+    return <PartnerPortal />;
   }
 
   if (isMobile) {

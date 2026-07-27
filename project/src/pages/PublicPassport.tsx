@@ -187,7 +187,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
               <div className="flex items-start gap-3">
                 <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-900">Verified by Salam Motors</p>
+                  <p className="text-sm font-medium text-emerald-900">Verified by {passport.organization_name ?? "the dealer"}</p>
                   <p className="text-xs text-emerald-700 mt-1">
                     This passport is generated from the dealer's verified inspection records. Financial details are excluded for buyer privacy.
                   </p>
