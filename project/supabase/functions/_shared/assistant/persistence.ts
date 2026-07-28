@@ -368,6 +368,44 @@ export class AssistantPersistence {
     }
   }
 
+  /**
+   * Best-effort observability signal for a final answer whose script does
+   * not conform to the requested locale. Log-only for now (see the
+   * language-support task decision): no corrective re-prompt round, just a
+   * flagged security-audit event plus the console.warn already emitted by
+   * the caller.
+   */
+  async logLanguageMismatch(
+    runId: string | null,
+    conversationId: string,
+    locale: string,
+    scriptMatchRatio: number,
+  ): Promise<void> {
+    if (!this.serverClient) return;
+    const { error } = await this.serverClient.rpc(
+      "assistant_write_security_audit",
+      {
+        p_org_id: this.principal.orgId,
+        p_event_type: "language_mismatch",
+        p_action: "final_answer_language_check",
+        p_outcome: "flagged",
+        p_context: {
+          actor_user_id: this.principal.userId,
+          conversation_id: conversationId,
+          run_id: runId,
+          decision_reason: "script_conformance_below_threshold",
+          details_redacted: {
+            locale,
+            script_match_ratio: Number(scriptMatchRatio.toFixed(3)),
+          },
+        },
+      },
+    );
+    if (error) {
+      console.warn("assistant language-mismatch audit failed", error.code);
+    }
+  }
+
   async loadActionProposal(
     proposalId: string,
   ): Promise<StoredActionProposal> {

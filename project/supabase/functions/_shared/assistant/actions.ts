@@ -1,3 +1,4 @@
+import { assistantStrings, formatMoney, interpolate } from "./locales.ts";
 import type {
   ActionDisplayChange,
   ActionType,
@@ -34,6 +35,7 @@ export interface ActionSpec {
   parse: (
     value: unknown,
     principal: AssistantPrincipal,
+    locale: string,
   ) => ParsedProposal;
 }
 
@@ -120,12 +122,18 @@ function enumString(
   return value;
 }
 
-function money(value: unknown): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Number(value));
+function money(value: unknown, locale: string): string {
+  return formatMoney(Number(value), locale);
+}
+
+/** User-facing (localized) title for an action type — distinct from
+ * ActionSpec.title, which stays English as tool-description metadata sent
+ * to the model. */
+export function actionTitle(actionType: ActionType, locale: string): string {
+  const strings = assistantStrings(locale);
+  return actionType === "vehicle.create_with_purchase"
+    ? strings.onboardPurchasedVehicleTitle
+    : strings.completeVehicleSaleTitle;
 }
 
 const vehicleProperties: Record<string, JsonSchema> = {
@@ -291,7 +299,7 @@ const CREATE_VEHICLE: ActionSpec = {
     payment: objectSchema(paymentProperties),
     listing: nullableObject(listingProperties),
   }),
-  parse(value, principal) {
+  parse(value, principal, locale) {
     const object = asRecord(value);
     const vehicle = parseVehicle(object.vehicle);
     const purchase = parsePurchase(object.purchase);
@@ -308,22 +316,23 @@ const CREATE_VEHICLE: ActionSpec = {
       `${vehicle.manufacturer} ${vehicle.model} (${vehicle.registration_number})`;
     const total = Number(purchase.agreed_price) +
       Number(purchase.broker_commission) + Number(purchase.other_fee);
+    const strings = assistantStrings(locale);
     return {
       arguments: argumentsValue,
       targetType: null,
       targetId: null,
-      summary:
-        `Create ${vehicleLabel}, its purchase, reconciled payment, and ${
-          listing ? "draft listing" : "no listing"
-        } atomically.`,
+      summary: interpolate(strings.createVehicleSummary, {
+        vehicle: vehicleLabel,
+        listing: listing ? strings.draftListingWord : strings.noListingWord,
+      }),
       changes: [
-        { label: "Vehicle", to: vehicleLabel },
-        { label: "Purchase total", to: money(total) },
+        { label: strings.vehicleLabel, to: vehicleLabel },
+        { label: strings.purchaseTotalLabel, to: money(total, locale) },
         {
-          label: "Asking price",
+          label: strings.askingPriceLabel,
           to: vehicle.asking_price === null
-            ? "Not set"
-            : money(vehicle.asking_price),
+            ? strings.notSetValue
+            : money(vehicle.asking_price, locale),
         },
       ],
     };
@@ -413,12 +422,13 @@ const COMPLETE_SALE: ActionSpec = {
     vehicle_id: uuidSchema,
     sale: objectSchema(saleProperties),
   }),
-  parse(value, principal) {
+  parse(value, principal, locale) {
     const object = asRecord(value);
     const vehicleId = requiredUuid(object, "vehicle_id");
     const sale = parseSale(object.sale);
     const net = Number(sale.sale_price) + Number(sale.buyer_charges) -
       Number(sale.discount);
+    const strings = assistantStrings(locale);
     return {
       arguments: {
         org_id: principal.orgId,
@@ -427,12 +437,11 @@ const COMPLETE_SALE: ActionSpec = {
       },
       targetType: "vehicle",
       targetId: vehicleId,
-      summary:
-        "Complete the sale, receipt, vehicle/listing status, and partner distributions atomically.",
+      summary: strings.completeSaleSummary,
       changes: [
-        { label: "Vehicle ID", to: vehicleId },
-        { label: "Net revenue", to: money(net) },
-        { label: "Vehicle status", from: "Current", to: "SOLD" },
+        { label: strings.vehicleIdLabel, to: vehicleId },
+        { label: strings.netRevenueLabel, to: money(net, locale) },
+        { label: strings.vehicleStatusLabel, from: "Current", to: "SOLD" },
       ],
     };
   },

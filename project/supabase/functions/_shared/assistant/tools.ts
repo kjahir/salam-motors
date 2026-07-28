@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Supabase query rows are runtime-shaped; every outward record is selected, bounded, and normalized before model use. */
 // deno-lint-ignore-file no-explicit-any
-import { actionSpecByTool, ACTION_SPECS, type JsonSchema } from "./actions.ts";
+import {
+  actionSpecByTool,
+  actionTitle,
+  ACTION_SPECS,
+  type JsonSchema,
+} from "./actions.ts";
 import { sha256Hex, signActionToken } from "./action-token.ts";
 import { canUseTool } from "./capabilities.ts";
 import type { AssistantConfig } from "./config.ts";
@@ -758,9 +763,14 @@ async function createProposal(
       },
     };
   }
-  let parsed = spec.parse(raw, context.principal);
+  let parsed = spec.parse(raw, context.principal, context.locale);
   if (spec.actionType === "vehicle.complete_sale") {
-    parsed = await addAuthoritativeSaleGuards(context.client, context.principal.orgId, parsed);
+    parsed = await addAuthoritativeSaleGuards(
+      context.client,
+      context.principal.orgId,
+      parsed,
+      context.locale,
+    );
   }
   const localHash = await sha256Hex({
     action_type: spec.actionType,
@@ -772,8 +782,9 @@ async function createProposal(
     `proposal:${context.runId ?? context.conversationId}:${
       localHash.slice(0, 32)
     }`;
+  const localizedTitle = actionTitle(spec.actionType, context.locale);
   const preview = {
-    title: spec.title,
+    title: localizedTitle,
     summary: parsed.summary,
     changes: parsed.changes,
   };
@@ -839,7 +850,7 @@ async function createProposal(
     actionToken,
     actionType: spec.actionType,
     risk: spec.risk,
-    title: spec.title,
+    title: localizedTitle,
     summary: parsed.summary,
     changes: parsed.changes,
     expiresAt: row.proposal_expires_at,
@@ -849,7 +860,7 @@ async function createProposal(
     data: {
       proposal_reference: reference,
       action_type: spec.actionType,
-      title: spec.title,
+      title: localizedTitle,
       summary: parsed.summary,
       risk: spec.risk,
       changes: parsed.changes,

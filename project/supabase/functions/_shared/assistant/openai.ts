@@ -2,8 +2,13 @@
 // deno-lint-ignore-file no-explicit-any
 import { safetyIdentifier } from "./action-token.ts";
 import { actionSpecByTool } from "./actions.ts";
-import type { AssistantConfig } from "./config.ts";
+import {
+  REASONING_EFFORTS,
+  type AssistantConfig,
+  type ReasoningEffort,
+} from "./config.ts";
 import { AssistantHttpError } from "./http.ts";
+import { assistantStrings, checkScriptConformance } from "./locales.ts";
 import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
@@ -75,6 +80,40 @@ const READ_ONLY_TOOLS = new Set([
   "get_alerts_compliance",
   "get_partner_portfolio",
 ]);
+
+// Reads that surface finance or compliance data, plus every write-proposal
+// tool (via actionSpecByTool), warrant more careful reasoning than a plain
+// inventory lookup. Consulted per round rather than reading
+// config.reasoningEffort as one static value for the whole turn.
+const FINANCE_OR_COMPLIANCE_READ_TOOLS = new Set([
+  "get_partner_portfolio",
+  "get_alerts_compliance",
+]);
+
+function roundTouchesSensitiveData(callNames: readonly string[]): boolean {
+  return callNames.some((name) =>
+    FINANCE_OR_COMPLIANCE_READ_TOOLS.has(name) ||
+    Boolean(actionSpecByTool(name))
+  );
+}
+
+const REASONING_EFFORT_RANK = new Map<ReasoningEffort, number>(
+  REASONING_EFFORTS.map((effort, index) => [effort, index]),
+);
+
+function reasoningEffortForRound(
+  config: AssistantConfig,
+  sensitiveToolsSeen: boolean,
+): ReasoningEffort {
+  if (!sensitiveToolsSeen) return config.reasoningEffort;
+  const floor = REASONING_EFFORT_RANK.get("medium") ?? 0;
+  const current = REASONING_EFFORT_RANK.get(config.reasoningEffort) ?? 0;
+  return current >= floor ? config.reasoningEffort : "medium";
+}
+
+// Safety margin (beyond one worst-case model round trip) reserved before
+// deciding a round can no longer safely afford another tool round trip.
+const ROUND_DEADLINE_BUFFER_MS = 2_000;
 
 function functionCalls(output: unknown[]): FunctionCall[] {
   return output.flatMap((item) => {
@@ -210,6 +249,7 @@ function canonicalizeConfirmationBlocks(
       expiresAt: proposal.expiresAt,
     }];
   });
+  const strings = assistantStrings(turn.locale);
   for (const proposal of issued) {
     if (used.has(proposal.reference)) continue;
     blocks.push({
@@ -220,14 +260,14 @@ function canonicalizeConfirmationBlocks(
       changes: proposal.changes,
       confirm: {
         kind: "invoke",
-        label: "Confirm",
+        label: strings.confirmLabel,
         actionToken: proposal.actionToken,
         risk: proposal.risk,
       },
       cancel: {
         kind: "reply",
-        label: "Cancel",
-        message: "Cancel this proposed action.",
+        label: strings.cancelLabel,
+        message: strings.cancelProposedActionMessage,
       },
       expiresAt: proposal.expiresAt,
     });
@@ -310,6 +350,8 @@ export async function runOpenAITurn(
   const usage: RunUsage = { inputTokens: 0, outputTokens: 0 };
   let totalCalls = 0;
   let anyTruncated = false;
+  let sensitiveToolsSeen = false;
+  const deadlineAt = Date.now() + input.config.maxTurnMs;
 
   const executeCall = async (
     call: FunctionCall,
@@ -346,9 +388,22 @@ export async function runOpenAITurn(
 
   for (let round = 0; round < input.config.maxToolRounds; round += 1) {
     input.onStatus?.("assistant.status.thinking");
+
+    // Once the remaining turn budget can no longer safely absorb another
+    // full model round trip (or this is the last permitted round), force a
+    // text-only response instead of letting the run either blow past the
+    // deadline or exhaust maxToolRounds into a hard error.
+    const remainingMs = deadlineAt - Date.now();
+    const isLastRound = round === input.config.maxToolRounds - 1;
+    const deadlineClose =
+      remainingMs <= input.config.openAiTimeoutMs + ROUND_DEADLINE_BUFFER_MS;
+    const forceFinal = isLastRound || deadlineClose;
+
     const response = await requestResponses(input.config, {
       model: input.config.model,
-      reasoning: { effort: input.config.reasoningEffort },
+      reasoning: {
+        effort: reasoningEffortForRound(input.config, sensitiveToolsSeen),
+      },
       instructions: assistantInstructions({
         principal: input.principal,
         locale: input.request.locale,
@@ -357,7 +412,7 @@ export async function runOpenAITurn(
       }),
       input: replay,
       tools: toolsForPrincipal(input.principal),
-      tool_choice: "auto",
+      tool_choice: forceFinal ? "none" : "auto",
       parallel_tool_calls: true,
       text: { format: MODEL_TURN_FORMAT },
       max_output_tokens: input.config.maxOutputTokens,
@@ -372,7 +427,10 @@ export async function runOpenAITurn(
     usage.outputTokens += response.usage?.output_tokens ?? 0;
     const output = Array.isArray(response.output) ? response.output : [];
     replay.push(...output);
-    const calls = functionCalls(output);
+    // tool_choice:"none" guarantees a text-only response, but calls is also
+    // forced empty defensively so a forced-final round always resolves to a
+    // real (if partial) answer instead of ever re-entering tool execution.
+    const calls = forceFinal ? [] : functionCalls(output);
 
     if (!calls.length) {
       const rawText = outputText(response);
@@ -410,6 +468,26 @@ export async function runOpenAITurn(
       );
       turn = canonicalizeConfirmationBlocks(turn, issuedProposals);
       turn = groundProvenance(turn, evidence, anyTruncated);
+
+      // Language-mismatch is observability-only for now: flag and log, no
+      // corrective re-prompt round.
+      const conformance = checkScriptConformance(
+        input.request.locale,
+        turn.answer.text,
+      );
+      if (conformance.checked && conformance.mismatch) {
+        console.warn("assistant language mismatch detected", {
+          locale: input.request.locale,
+          scriptMatchRatio: conformance.ratio,
+        });
+        await input.persistence.logLanguageMismatch(
+          input.runId,
+          input.conversationId,
+          input.request.locale,
+          conformance.ratio ?? 0,
+        );
+      }
+
       return { turn, usage };
     }
 
@@ -421,6 +499,9 @@ export async function runOpenAITurn(
       );
     }
     totalCalls += calls.length;
+    sensitiveToolsSeen ||= roundTouchesSensitiveData(
+      calls.map((call) => call.name),
+    );
 
     // Only independent, read-only calls run concurrently. Every immediate
     // write and confirmation proposal is deliberately serialized.
@@ -447,6 +528,11 @@ export async function runOpenAITurn(
     }
   }
 
+  // Unreachable under normal operation: round `maxToolRounds - 1` always
+  // sets forceFinal, which forces tool_choice:"none" and returns a
+  // (possibly partial) real answer above instead of looping here. Kept as a
+  // defensive fallback rather than an infinite loop if that invariant is
+  // ever violated upstream.
   throw new AssistantHttpError(
     422,
     "TOOL_ROUND_LIMIT_REACHED",
