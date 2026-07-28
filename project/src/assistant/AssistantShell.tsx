@@ -20,78 +20,129 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { getAppLocale } from "@/i18n";
 import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { useAuth } from "@/lib/useAuth";
 import { AssistantTurnView, FailedMessageActions } from "./AssistantBlocks";
+import { transcribeAssistantAudio } from "./api";
 import { useAssistant } from "./AssistantProvider";
 
-interface SpeechRecognitionEventLike {
-  results: ArrayLike<{
-    0: { transcript: string };
-    isFinal: boolean;
-  }>;
+const MAX_RECORDING_MS = 60_000;
+
+function preferredAudioType(): string | undefined {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported)
+    return undefined;
+  return [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ].find((type) => MediaRecorder.isTypeSupported(type));
 }
 
-interface SpeechRecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-function speechRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
-  const candidate = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-  return candidate.SpeechRecognition ?? candidate.webkitSpeechRecognition;
-}
-
-function useVoiceDraft(onTranscript: (text: string) => void) {
+function useVoiceDraft(
+  onTranscript: (text: string) => void,
+  onError: () => void,
+) {
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const isSupported = typeof window !== "undefined" && Boolean(speechRecognitionConstructor());
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const isSupported =
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof MediaRecorder !== "undefined";
 
-  const toggle = () => {
+  const clearRecordingTimeout = () => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  };
+
+  const toggle = async () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      recorderRef.current?.stop();
       return;
     }
-    const Constructor = speechRecognitionConstructor();
-    if (!Constructor) return;
-    const recognition = new Constructor();
-    recognition.lang = getAppLocale();
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? "")
-        .join(" ")
-        .trim();
-      onTranscript(transcript);
-    };
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    setIsListening(true);
-    recognition.start();
+    if (!isSupported || isTranscribing) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const audioType = preferredAudioType();
+      const recorder = audioType
+        ? new MediaRecorder(stream, { mimeType: audioType })
+        : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        clearRecordingTimeout();
+        stopStream();
+        setIsListening(false);
+        onError();
+      };
+      recorder.onstop = () => {
+        clearRecordingTimeout();
+        stopStream();
+        setIsListening(false);
+        const audio = new Blob(chunksRef.current, {
+          type: recorder.mimeType || audioType || "audio/webm",
+        });
+        chunksRef.current = [];
+        recorderRef.current = null;
+        if (audio.size === 0) {
+          onError();
+          return;
+        }
+        const controller = new AbortController();
+        abortRef.current = controller;
+        setIsTranscribing(true);
+        void transcribeAssistantAudio(audio, controller.signal)
+          .then(onTranscript)
+          .catch((error: unknown) => {
+            if (!(error instanceof DOMException && error.name === "AbortError"))
+              onError();
+          })
+          .finally(() => {
+            if (abortRef.current === controller) abortRef.current = null;
+            setIsTranscribing(false);
+          });
+      };
+      recorder.start();
+      setIsListening(true);
+      timeoutRef.current = window.setTimeout(() => {
+        if (recorder.state === "recording") recorder.stop();
+      }, MAX_RECORDING_MS);
+    } catch {
+      stopStream();
+      setIsListening(false);
+      onError();
+    }
   };
 
   useEffect(
     () => () => {
-      recognitionRef.current?.stop();
+      clearRecordingTimeout();
+      abortRef.current?.abort();
+      if (recorderRef.current?.state === "recording")
+        recorderRef.current.stop();
+      stopStream();
     },
     [],
   );
 
-  return { isSupported, isListening, toggle };
+  return { isSupported, isListening, isTranscribing, toggle };
 }
 
 export function AssistantShell() {
@@ -113,15 +164,30 @@ export function AssistantShell() {
   const { user, membership, partner, orgName } = useAuth();
   const isMobile = useIsMobileViewport();
   const [draft, setDraft] = useState("");
+  const [voiceError, setVoiceError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const { isSupported: voiceSupported, isListening, toggle: toggleVoice } = useVoiceDraft(setDraft);
+  const {
+    isSupported: voiceSupported,
+    isListening,
+    isTranscribing,
+    toggle: toggleVoice,
+  } = useVoiceDraft(
+    (text) => {
+      setDraft((current) => [current.trim(), text].filter(Boolean).join(" "));
+      setVoiceError("");
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    () => setVoiceError(t("assistant.errors.voiceFailed")),
+  );
 
   const visible = Boolean(user && (membership || partner));
   const hasMessages = messages.length > 0;
-  const latestFailed = [...messages].reverse().find((message) => message.role === "assistant")?.status === "failed";
+  const latestFailed =
+    [...messages].reverse().find((message) => message.role === "assistant")
+      ?.status === "failed";
 
   const welcome = useMemo(() => {
     const dealership = orgName ?? t("assistant.welcome.defaultDealership");
@@ -143,7 +209,10 @@ export function AssistantShell() {
 
   useEffect(() => {
     if (isOpen) {
-      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      previousFocusRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
       window.setTimeout(() => inputRef.current?.focus(), 50);
     } else {
       previousFocusRef.current?.focus();
@@ -152,7 +221,10 @@ export function AssistantShell() {
 
   useEffect(() => {
     if (!isOpen) return;
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [isBusy, isOpen, messages, statusText]);
 
   useEffect(() => {
@@ -173,7 +245,9 @@ export function AssistantShell() {
     void sendMessage(message);
   };
 
-  const onComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+  const onComposerKeyDown = (
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
@@ -206,13 +280,19 @@ export function AssistantShell() {
           type="button"
           onClick={open}
           className={`fixed z-40 flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-600 to-blue-600 text-white shadow-xl shadow-brand-900/20 transition hover:-translate-y-0.5 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
-            isMobile ? "bottom-[5.5rem] right-4 h-12 w-12 justify-center" : "bottom-6 right-6 px-4 py-3"
+            isMobile
+              ? "bottom-[5.5rem] right-4 h-12 w-12 justify-center"
+              : "bottom-6 right-6 px-4 py-3"
           }`}
           aria-label={t("assistant.launcher.openAria")}
           title={t("assistant.launcher.tooltip")}
         >
           <Sparkles size={19} />
-          {!isMobile && <span className="text-sm font-semibold">{t("assistant.launcher.label")}</span>}
+          {!isMobile && (
+            <span className="text-sm font-semibold">
+              {t("assistant.launcher.label")}
+            </span>
+          )}
         </button>
       )}
 
@@ -243,9 +323,13 @@ export function AssistantShell() {
               <Sparkles size={18} />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-sm font-semibold text-slate-950">{t("assistant.header.title")}</h2>
+              <h2 className="truncate text-sm font-semibold text-slate-950">
+                {t("assistant.header.title")}
+              </h2>
               <p className="truncate text-[11px] text-slate-500">
-                {isBusy ? statusText || t("assistant.status.working") : t("assistant.header.subtitle")}
+                {isBusy
+                  ? statusText || t("assistant.status.working")
+                  : t("assistant.header.subtitle")}
               </p>
             </div>
             {hasMessages && (
@@ -270,14 +354,21 @@ export function AssistantShell() {
             </button>
           </header>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-3.5 py-4 sm:px-4">
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto px-3.5 py-4 sm:px-4"
+          >
             {!hasMessages ? (
               <div className="flex min-h-full flex-col justify-center py-6">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
                   <Bot size={26} />
                 </div>
-                <h3 className="mt-4 text-center text-lg font-semibold text-slate-950">{t("assistant.welcome.title")}</h3>
-                <p className="mx-auto mt-2 max-w-sm text-center text-sm leading-relaxed text-slate-500">{welcome}</p>
+                <h3 className="mt-4 text-center text-lg font-semibold text-slate-950">
+                  {t("assistant.welcome.title")}
+                </h3>
+                <p className="mx-auto mt-2 max-w-sm text-center text-sm leading-relaxed text-slate-500">
+                  {welcome}
+                </p>
                 <div className="mx-auto mt-6 grid w-full max-w-sm gap-2">
                   {starterPrompts.map((prompt) => (
                     <button
@@ -287,7 +378,10 @@ export function AssistantShell() {
                       className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left text-sm text-slate-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-50/50 hover:text-brand-900"
                     >
                       <span>{prompt}</span>
-                      <MessageCircle size={15} className="shrink-0 text-slate-300 transition group-hover:text-brand-500" />
+                      <MessageCircle
+                        size={15}
+                        className="shrink-0 text-slate-300 transition group-hover:text-brand-500"
+                      />
                     </button>
                   ))}
                 </div>
@@ -300,14 +394,24 @@ export function AssistantShell() {
                 {messages.map((message) => (
                   <article
                     key={message.id}
-                    className={message.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}
+                    className={
+                      message.role === "user"
+                        ? "flex justify-end"
+                        : "flex items-start gap-2.5"
+                    }
                   >
                     {message.role === "assistant" && (
                       <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
                         <Sparkles size={14} />
                       </span>
                     )}
-                    <div className={message.role === "user" ? "max-w-[85%]" : "min-w-0 max-w-[calc(100%-38px)] flex-1"}>
+                    <div
+                      className={
+                        message.role === "user"
+                          ? "max-w-[85%]"
+                          : "min-w-0 max-w-[calc(100%-38px)] flex-1"
+                      }
+                    >
                       {message.role === "user" ? (
                         <div className="rounded-2xl rounded-br-md bg-slate-900 px-3.5 py-2.5 text-sm leading-relaxed text-white">
                           {message.text}
@@ -330,7 +434,10 @@ export function AssistantShell() {
                 ))}
 
                 {isBusy && statusText && (
-                  <div className="flex items-center gap-2 pl-9 text-[11px] text-slate-400" aria-live="polite">
+                  <div
+                    className="flex items-center gap-2 pl-9 text-[11px] text-slate-400"
+                    aria-live="polite"
+                  >
                     <Loader2 size={12} className="animate-spin" />
                     {statusText}
                   </div>
@@ -377,14 +484,38 @@ export function AssistantShell() {
                   {voiceSupported && (
                     <button
                       type="button"
-                      onClick={toggleVoice}
-                      disabled={isBusy}
+                      onClick={() => {
+                        setVoiceError("");
+                        void toggleVoice();
+                      }}
+                      disabled={isBusy || isTranscribing}
                       className={`rounded-lg p-2 transition ${
-                        isListening ? "bg-red-50 text-red-600" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        isListening
+                          ? "bg-red-50 text-red-600"
+                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                       }`}
-                      aria-label={t(isListening ? "assistant.voice.stop" : "assistant.voice.start")}
+                      aria-label={t(
+                        isTranscribing
+                          ? "assistant.status.working"
+                          : isListening
+                            ? "assistant.voice.stop"
+                            : "assistant.voice.start",
+                      )}
+                      title={t(
+                        isTranscribing
+                          ? "assistant.status.working"
+                          : isListening
+                            ? "assistant.voice.stop"
+                            : "assistant.voice.start",
+                      )}
                     >
-                      {isListening ? <MicOff size={17} /> : <Mic size={17} />}
+                      {isTranscribing ? (
+                        <Loader2 size={17} className="animate-spin" />
+                      ) : isListening ? (
+                        <MicOff size={17} />
+                      ) : (
+                        <Mic size={17} />
+                      )}
                     </button>
                   )}
                 </div>
@@ -410,6 +541,14 @@ export function AssistantShell() {
                 )}
               </div>
             </div>
+            {voiceError && (
+              <p
+                role="alert"
+                className="mt-1.5 text-center text-[10px] text-red-600"
+              >
+                {voiceError}
+              </p>
+            )}
             <p className="mt-1.5 text-center text-[9px] text-slate-400">
               {t("assistant.composer.keyboardHint")}
             </p>

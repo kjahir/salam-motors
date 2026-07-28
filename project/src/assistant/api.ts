@@ -1,5 +1,10 @@
 import { supabase } from "@/lib/supabase";
-import { parseAssistantTurn, type AssistantTurn, type AssistantTurnRequest, type AssistantTurnResponse } from "./schema";
+import {
+  parseAssistantTurn,
+  type AssistantTurn,
+  type AssistantTurnRequest,
+  type AssistantTurnResponse,
+} from "./schema";
 import { AssistantApiError } from "./errors";
 
 export interface AssistantStreamCallbacks {
@@ -13,12 +18,35 @@ interface SseEvent {
   data: string;
 }
 
-function functionUrl(): string {
+function functionUrl(name = "assistant-turn"): string {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   if (!supabaseUrl) {
-    throw new AssistantApiError("Missing VITE_SUPABASE_URL.", { code: "CLIENT_CONFIGURATION_ERROR" });
+    throw new AssistantApiError("Missing VITE_SUPABASE_URL.", {
+      code: "CLIENT_CONFIGURATION_ERROR",
+    });
   }
-  return `${supabaseUrl.replace(/\/$/, "")}/functions/v1/assistant-turn`;
+  return `${supabaseUrl.replace(/\/$/, "")}/functions/v1/${name}`;
+}
+
+async function assistantAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) {
+    throw new AssistantApiError(
+      "Your session has expired. Please sign in again.",
+      {
+        code: "AUTH_REQUIRED",
+        status: 401,
+      },
+    );
+  }
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  if (!anonKey) {
+    throw new AssistantApiError("Missing VITE_SUPABASE_ANON_KEY.", {
+      code: "CLIENT_CONFIGURATION_ERROR",
+    });
+  }
+  return { Authorization: `Bearer ${accessToken}`, apikey: anonKey };
 }
 
 function parseSseFrame(frame: string): SseEvent | null {
@@ -38,7 +66,8 @@ function messageFromUnknown(value: unknown): string {
     const record = value as Record<string, unknown>;
     if (typeof record.error === "string") return record.error;
     if (
-      typeof record.error === "object" && record.error !== null &&
+      typeof record.error === "object" &&
+      record.error !== null &&
       typeof (record.error as { message?: unknown }).message === "string"
     ) {
       return (record.error as { message: string }).message;
@@ -50,7 +79,7 @@ function messageFromUnknown(value: unknown): string {
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -66,16 +95,15 @@ function apiErrorFromUnknown(
   const status = Number.isInteger(embeddedStatus)
     ? embeddedStatus
     : fallbackStatus;
-  const code = typeof details?.code === "string"
-    ? details.code
-    : "ASSISTANT_FAILED";
-  const retryable = typeof details?.retryable === "boolean"
-    ? details.retryable
-    : false;
+  const code =
+    typeof details?.code === "string" ? details.code : "ASSISTANT_FAILED";
+  const retryable =
+    typeof details?.retryable === "boolean" ? details.retryable : false;
   const extractedMessage = messageFromUnknown(value);
-  const message = extractedMessage === "The assistant request failed."
-    ? fallbackMessage
-    : extractedMessage;
+  const message =
+    extractedMessage === "The assistant request failed."
+      ? fallbackMessage
+      : extractedMessage;
   return new AssistantApiError(message, { code, status, retryable });
 }
 
@@ -84,7 +112,9 @@ function validatedTurn(value: unknown): AssistantTurn {
     return parseAssistantTurn(value);
   } catch (error) {
     throw new AssistantApiError(
-      error instanceof Error ? error.message : "The assistant returned an invalid response.",
+      error instanceof Error
+        ? error.message
+        : "The assistant returned an invalid response.",
       {
         code: "MODEL_OUTPUT_INVALID",
         status: 502,
@@ -99,11 +129,14 @@ async function responseError(response: Response): Promise<AssistantApiError> {
     const body = await response.json();
     return apiErrorFromUnknown(body, response.status);
   } catch {
-    return new AssistantApiError(`The assistant request failed (${response.status}).`, {
-      code: "ASSISTANT_FAILED",
-      status: response.status,
-      retryable: response.status >= 500,
-    });
+    return new AssistantApiError(
+      `The assistant request failed (${response.status}).`,
+      {
+        code: "ASSISTANT_FAILED",
+        status: response.status,
+        retryable: response.status >= 500,
+      },
+    );
   }
 }
 
@@ -112,29 +145,15 @@ export async function requestAssistantTurn(
   callbacks: AssistantStreamCallbacks = {},
   signal?: AbortSignal,
 ): Promise<AssistantTurnResponse> {
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
-  if (!accessToken) {
-    throw new AssistantApiError("Your session has expired. Please sign in again.", {
-      code: "AUTH_REQUIRED",
-      status: 401,
-    });
-  }
-
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-  if (!anonKey) {
-    throw new AssistantApiError("Missing VITE_SUPABASE_ANON_KEY.", {
-      code: "CLIENT_CONFIGURATION_ERROR",
-    });
-  }
+  const authHeaders = await assistantAuthHeaders();
 
   const response = await fetch(functionUrl(), {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: anonKey,
+      ...authHeaders,
       "Content-Type": "application/json",
-      Accept: request.stream === false ? "application/json" : "text/event-stream",
+      Accept:
+        request.stream === false ? "application/json" : "text/event-stream",
     },
     body: JSON.stringify(request),
     signal,
@@ -191,7 +210,11 @@ export async function requestAssistantTurn(
     }
     if (item.event === "delta") {
       if (typeof payload === "string") callbacks.onDelta?.(payload);
-      else if (typeof payload === "object" && payload !== null && typeof (payload as { text?: unknown }).text === "string") {
+      else if (
+        typeof payload === "object" &&
+        payload !== null &&
+        typeof (payload as { text?: unknown }).text === "string"
+      ) {
         callbacks.onDelta?.((payload as { text: string }).text);
       }
       return;
@@ -203,7 +226,10 @@ export async function requestAssistantTurn(
           : payload;
       finalTurn = validatedTurn(candidate);
       conversationId =
-        typeof payload === "object" && payload !== null && typeof (payload as { conversationId?: unknown }).conversationId === "string"
+        typeof payload === "object" &&
+        payload !== null &&
+        typeof (payload as { conversationId?: unknown }).conversationId ===
+          "string"
           ? (payload as { conversationId: string }).conversationId
           : finalTurn.conversationId;
       callbacks.onTurn?.(finalTurn);
@@ -242,5 +268,39 @@ export async function requestAssistantTurn(
       },
     );
   }
-  return { conversationId: conversationId ?? completedTurn.conversationId, turn: completedTurn };
+  return {
+    conversationId: conversationId ?? completedTurn.conversationId,
+    turn: completedTurn,
+  };
+}
+
+export async function transcribeAssistantAudio(
+  audio: Blob,
+  signal?: AbortSignal,
+): Promise<string> {
+  const authHeaders = await assistantAuthHeaders();
+  const form = new FormData();
+  const extension = audio.type.includes("ogg")
+    ? "ogg"
+    : audio.type.includes("mp4")
+      ? "m4a"
+      : "webm";
+  form.append("audio", audio, `ask-salam.${extension}`);
+  const response = await fetch(functionUrl("assistant-transcribe"), {
+    method: "POST",
+    headers: authHeaders,
+    body: form,
+    signal,
+  });
+  if (!response.ok) throw await responseError(response);
+  const body = (await response.json().catch(() => null)) as {
+    text?: unknown;
+  } | null;
+  if (!body || typeof body.text !== "string" || !body.text.trim()) {
+    throw new AssistantApiError("No speech was detected.", {
+      code: "TRANSCRIPTION_EMPTY",
+      status: 422,
+    });
+  }
+  return body.text.trim();
 }
