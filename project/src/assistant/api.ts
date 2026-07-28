@@ -274,10 +274,17 @@ export async function requestAssistantTurn(
   };
 }
 
+export type SpokenAssistantLocale = "en-IN" | "ta-IN" | "hi-IN";
+
+export interface AssistantTranscription {
+  text: string;
+  locale: SpokenAssistantLocale;
+}
+
 export async function transcribeAssistantAudio(
   audio: Blob,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<AssistantTranscription> {
   const authHeaders = await assistantAuthHeaders();
   const form = new FormData();
   const extension = audio.type.includes("ogg")
@@ -295,6 +302,7 @@ export async function transcribeAssistantAudio(
   if (!response.ok) throw await responseError(response);
   const body = (await response.json().catch(() => null)) as {
     text?: unknown;
+    locale?: unknown;
   } | null;
   if (!body || typeof body.text !== "string" || !body.text.trim()) {
     throw new AssistantApiError("No speech was detected.", {
@@ -302,5 +310,36 @@ export async function transcribeAssistantAudio(
       status: 422,
     });
   }
-  return body.text.trim();
+  const locale = body.locale === "ta-IN" || body.locale === "hi-IN"
+    ? body.locale
+    : "en-IN";
+  return { text: body.text.trim(), locale };
+}
+
+export async function synthesizeAssistantSpeech(
+  text: string,
+  locale: SpokenAssistantLocale,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const authHeaders = await assistantAuthHeaders();
+  const response = await fetch(functionUrl("assistant-speech"), {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+      Accept: "audio/mpeg",
+    },
+    body: JSON.stringify({ text, locale }),
+    signal,
+  });
+  if (!response.ok) throw await responseError(response);
+  const audio = await response.blob();
+  if (audio.size === 0) {
+    throw new AssistantApiError("The assistant returned empty speech audio.", {
+      code: "SPEECH_EMPTY",
+      status: 502,
+      retryable: true,
+    });
+  }
+  return audio;
 }

@@ -18,12 +18,18 @@ import {
   Sparkles,
   Square,
   Trash2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { useAuth } from "@/lib/useAuth";
 import { AssistantTurnView, FailedMessageActions } from "./AssistantBlocks";
-import { transcribeAssistantAudio } from "./api";
+import {
+  synthesizeAssistantSpeech,
+  transcribeAssistantAudio,
+  type AssistantTranscription,
+  type SpokenAssistantLocale,
+} from "./api";
 import { useAssistant } from "./AssistantProvider";
 
 const MAX_RECORDING_MS = 60_000;
@@ -40,7 +46,7 @@ function preferredAudioType(): string | undefined {
 }
 
 function useVoiceDraft(
-  onTranscript: (text: string) => void,
+  onTranscript: (transcription: AssistantTranscription) => void | Promise<void>,
   onError: () => void,
 ) {
   const [isListening, setIsListening] = useState(false);
@@ -109,7 +115,7 @@ function useVoiceDraft(
         abortRef.current = controller;
         setIsTranscribing(true);
         void transcribeAssistantAudio(audio, controller.signal)
-          .then(onTranscript)
+          .then((transcription) => onTranscript(transcription))
           .catch((error: unknown) => {
             if (!(error instanceof DOMException && error.name === "AbortError"))
               onError();
@@ -145,6 +151,56 @@ function useVoiceDraft(
   return { isSupported, isListening, isTranscribing, toggle };
 }
 
+function useSpokenReply(onError: () => void) {
+  const [isPreparingSpeech, setIsPreparingSpeech] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const stopSpeaking = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+    setIsPreparingSpeech(false);
+    setIsSpeaking(false);
+  };
+
+  const speak = async (text: string, locale: SpokenAssistantLocale) => {
+    stopSpeaking();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsPreparingSpeech(true);
+    try {
+      const speech = await synthesizeAssistantSpeech(text, locale, controller.signal);
+      if (abortRef.current !== controller) return;
+      const objectUrl = URL.createObjectURL(speech);
+      objectUrlRef.current = objectUrl;
+      const audio = new Audio(objectUrl);
+      audioRef.current = audio;
+      audio.onplay = () => setIsSpeaking(true);
+      audio.onended = stopSpeaking;
+      audio.onerror = () => {
+        stopSpeaking();
+        onError();
+      };
+      setIsPreparingSpeech(false);
+      await audio.play();
+    } catch (error) {
+      const aborted = error instanceof DOMException && error.name === "AbortError";
+      stopSpeaking();
+      if (!aborted) onError();
+    }
+  };
+
+  useEffect(() => stopSpeaking, []);
+
+  return { isPreparingSpeech, isSpeaking, speak, stopSpeaking };
+}
+
 export function AssistantShell() {
   const { t } = useTranslation();
   const {
@@ -170,15 +226,22 @@ export function AssistantShell() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const {
+    isPreparingSpeech,
+    isSpeaking,
+    speak,
+    stopSpeaking,
+  } = useSpokenReply(() => setVoiceError(t("assistant.errors.voiceFailed")));
+  const {
     isSupported: voiceSupported,
     isListening,
     isTranscribing,
     toggle: toggleVoice,
   } = useVoiceDraft(
-    (text) => {
-      setDraft((current) => [current.trim(), text].filter(Boolean).join(" "));
+    async ({ text, locale }) => {
+      setDraft("");
       setVoiceError("");
-      window.setTimeout(() => inputRef.current?.focus(), 0);
+      const answer = await sendMessage(text, { locale });
+      if (answer) await speak(answer, locale);
     },
     () => setVoiceError(t("assistant.errors.voiceFailed")),
   );
@@ -486,6 +549,7 @@ export function AssistantShell() {
                       type="button"
                       onClick={() => {
                         setVoiceError("");
+                        if (!isListening) stopSpeaking();
                         void toggleVoice();
                       }}
                       disabled={isBusy || isTranscribing}
@@ -516,6 +580,19 @@ export function AssistantShell() {
                       ) : (
                         <Mic size={17} />
                       )}
+                    </button>
+                  )}
+                  {(isPreparingSpeech || isSpeaking) && (
+                    <button
+                      type="button"
+                      onClick={stopSpeaking}
+                      className="rounded-lg p-2 text-brand-600 transition hover:bg-brand-50 hover:text-brand-800"
+                      aria-label={t("assistant.composer.stop")}
+                      title={t("assistant.composer.stop")}
+                    >
+                      {isPreparingSpeech
+                        ? <Loader2 size={17} className="animate-spin" />
+                        : <VolumeX size={17} />}
                     </button>
                   )}
                 </div>

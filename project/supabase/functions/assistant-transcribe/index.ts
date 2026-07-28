@@ -11,6 +11,8 @@ import {
   toPublicError,
 } from "../_shared/assistant/http.ts";
 
+import { detectSpokenLocale } from "./language.ts";
+
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 Deno.serve(async (req) => {
@@ -29,6 +31,13 @@ Deno.serve(async (req) => {
 
   try {
     const config = loadAssistantConfig();
+    if (!config.openAiApiKey) {
+      throw new AssistantHttpError(
+        503,
+        "TRANSCRIPTION_UNAVAILABLE",
+        "Voice transcription is not configured.",
+      );
+    }
     const token = bearerToken(req);
     const callerClient = createClient(
       config.supabaseUrl,
@@ -105,7 +114,7 @@ Deno.serve(async (req) => {
         "No speech was detected.",
       );
     }
-    return jsonResponse({ text });
+    return jsonResponse({ text, locale: detectSpokenLocale(text) });
   } catch (error) {
     const publicError = toPublicError(error);
     return jsonResponse(publicError.body, publicError.status);

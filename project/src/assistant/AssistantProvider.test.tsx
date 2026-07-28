@@ -57,6 +57,9 @@ function Harness() {
   return (
     <>
       <button onClick={() => void assistant.sendMessage("hello")}>Send</button>
+      <button onClick={() => void assistant.sendMessage("vanakkam", { locale: "ta-IN" })}>
+        Tamil voice
+      </button>
       <button
         onClick={() => {
           void assistant.sendMessage("first");
@@ -117,6 +120,23 @@ describe("AssistantProvider request ownership", () => {
     expect(mocks.requestAssistantTurn).toHaveBeenCalledTimes(1);
     const firstRequest = mocks.requestAssistantTurn.mock.calls[0][0];
     expect(firstRequest.message).toBe("first");
+  });
+
+  it("uses the detected spoken locale without changing the UI language", async () => {
+    mocks.requestAssistantTurn.mockResolvedValue(response("tamil-conversation"));
+    renderProvider();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tamil voice" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestAssistantTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "vanakkam", locale: "ta-IN" }),
+      expect.any(Object),
+      expect.any(AbortSignal),
+    );
+    expect(i18n.resolvedLanguage).toBe("en");
   });
 
   it("starts a clean conversation when the selected language changes", async () => {

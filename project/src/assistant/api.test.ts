@@ -87,7 +87,10 @@ describe("assistant API client", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ text: "\u0ba4\u0bae\u0bbf\u0bb4\u0bbf\u0bb2\u0bcd \u0bb5\u0bbe\u0b95\u0ba9\u0b99\u0bcd\u0b95\u0bb3\u0bc8 \u0b95\u0bbe\u0b9f\u0bcd\u0b9f\u0bc1" }), {
+        new Response(JSON.stringify({
+          text: "\u0ba4\u0bae\u0bbf\u0bb4\u0bbf\u0bb2\u0bcd \u0bb5\u0bbe\u0b95\u0ba9\u0b99\u0bcd\u0b95\u0bb3\u0bc8 \u0b95\u0bbe\u0b9f\u0bcd\u0b9f\u0bc1",
+          locale: "ta-IN",
+        }), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -98,7 +101,10 @@ describe("assistant API client", () => {
       new Blob(["recorded-audio"], { type: "audio/webm" }),
     );
 
-    expect(text).toBe("\u0ba4\u0bae\u0bbf\u0bb4\u0bbf\u0bb2\u0bcd \u0bb5\u0bbe\u0b95\u0ba9\u0b99\u0bcd\u0b95\u0bb3\u0bc8 \u0b95\u0bbe\u0b9f\u0bcd\u0b9f\u0bc1");
+    expect(text).toEqual({
+      text: "\u0ba4\u0bae\u0bbf\u0bb4\u0bbf\u0bb2\u0bcd \u0bb5\u0bbe\u0b95\u0ba9\u0b99\u0bcd\u0b95\u0bb3\u0bc8 \u0b95\u0bbe\u0b9f\u0bcd\u0b9f\u0bc1",
+      locale: "ta-IN",
+    });
     expect(fetch).toHaveBeenCalledWith(
       "https://example.supabase.co/functions/v1/assistant-transcribe",
       expect.objectContaining({
@@ -112,6 +118,35 @@ describe("assistant API client", () => {
     );
     const options = vi.mocked(fetch).mock.calls[0]?.[1];
     expect(options?.headers).not.toHaveProperty("Content-Type");
+  });
+
+  it("requests authenticated speech audio in the spoken language", async () => {
+    const speech = new Blob(["mp3-audio"], { type: "audio/mpeg" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(speech, {
+          status: 200,
+          headers: { "content-type": "audio/mpeg" },
+        }),
+      ),
+    );
+
+    const { synthesizeAssistantSpeech } = await import("./api");
+    const result = await synthesizeAssistantSpeech("\u0909\u0924\u094d\u0924\u0930 \u0924\u0948\u092f\u093e\u0930 \u0939\u0948", "hi-IN");
+
+    expect(result.size).toBeGreaterThan(0);
+    expect(fetch).toHaveBeenCalledWith(
+      "https://example.supabase.co/functions/v1/assistant-speech",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer signed-user-jwt",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ text: "\u0909\u0924\u094d\u0924\u0930 \u0924\u0948\u092f\u093e\u0930 \u0939\u0948", locale: "hi-IN" }),
+      }),
+    );
   });
 
   it("rejects calls without a current authenticated session", async () => {

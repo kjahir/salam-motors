@@ -11,7 +11,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { getAppLocale } from "@/i18n";
 import { useAuth } from "@/lib/useAuth";
-import { requestAssistantTurn } from "./api";
+import { requestAssistantTurn, type SpokenAssistantLocale } from "./api";
 import { assistantErrorTranslationKey } from "./errors";
 import {
   createFallbackTurn,
@@ -21,6 +21,10 @@ import {
 } from "./schema";
 
 type NavigationHandler = (page: string, params?: Extract<AssistantAction, { kind: "navigate" }>["params"]) => boolean;
+
+export interface AssistantSendOptions {
+  locale?: SpokenAssistantLocale;
+}
 
 interface AssistantContextValue {
   isOpen: boolean;
@@ -36,7 +40,7 @@ interface AssistantContextValue {
   toggle: () => void;
   stop: () => void;
   clearConversation: () => void;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, options?: AssistantSendOptions) => Promise<string | undefined>;
   retryLast: () => Promise<void>;
   handleAction: (action: AssistantAction) => Promise<void>;
   setAppContext: (context: AssistantRequestContext) => void;
@@ -82,6 +86,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const abortRef = useRef<AbortController | null>(null);
   const navigationRef = useRef<NavigationHandler | null>(null);
   const lastUserMessageRef = useRef<string>("");
+  const lastSendOptionsRef = useRef<AssistantSendOptions | undefined>();
   const principalRef = useRef<string | null>(null);
 
   const starterPrompts = useMemo(
@@ -111,6 +116,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setStreamingText("");
     lastUserMessageRef.current = "";
+    lastSendOptionsRef.current = undefined;
   }, [stop]);
 
   const open = useCallback(() => setIsOpen(true), []);
@@ -154,11 +160,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [activeLocale, clearConversation, membership, orgId, partner, role, user?.id]);
 
   const sendMessage = useCallback(
-    async (rawMessage: string) => {
+    async (rawMessage: string, options?: AssistantSendOptions) => {
       const message = rawMessage.trim();
       if (!message || isBusy || abortRef.current) return;
 
+      const requestLocale = options?.locale ?? activeLocale;
       lastUserMessageRef.current = message;
+      lastSendOptionsRef.current = options;
       const userMessage: AssistantChatMessage = {
         id: nowId("user"),
         role: "user",
@@ -189,7 +197,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           {
             conversationId,
             message,
-            locale: activeLocale,
+            locale: requestLocale,
             context: appContext,
             stream: true,
           },
@@ -225,6 +233,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               : item,
           ),
         );
+        return response.turn.answer.text;
       } catch (error) {
         const aborted = error instanceof DOMException && error.name === "AbortError";
         const text = aborted
@@ -236,7 +245,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               ? {
                   ...item,
                   text,
-                  turn: createFallbackTurn(text, activeLocale, aborted ? "neutral" : "danger"),
+                  turn: createFallbackTurn(text, requestLocale, aborted ? "neutral" : "danger"),
                   status: aborted ? "complete" : "failed",
                   error: aborted ? undefined : text,
                 }
@@ -354,7 +363,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   );
 
   const retryLast = useCallback(async () => {
-    if (lastUserMessageRef.current) await sendMessage(lastUserMessageRef.current);
+    if (lastUserMessageRef.current) {
+      await sendMessage(lastUserMessageRef.current, lastSendOptionsRef.current);
+    }
   }, [sendMessage]);
 
   const value = useMemo<AssistantContextValue>(
