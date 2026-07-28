@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:all": "npm run typecheck && npm run lint && npm run test && echo 'test:all covers vitest + typecheck + lint only. supabase/tests/role_matrix_test.sql (RLS matrix) and scripts/loadtest/ (k6) are NOT run here - they require a disposable local/staging Supabase target; run them manually per their own docs.'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
