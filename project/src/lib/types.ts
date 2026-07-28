@@ -409,6 +409,8 @@ export interface AppSettings {
   updated_by: string | null;
 }
 
+export type AuditLogSource = "app" | "trigger" | "assistant" | "system";
+
 export interface AuditLog {
   id: string;
   entity_type: string;
@@ -419,6 +421,50 @@ export interface AuditLog {
   performed_by: string | null;
   performed_at: string;
   reason: string | null;
+  source: AuditLogSource;
+  changed_fields: string[] | null;
+  db_txid: number | null;
+}
+
+export interface AssistantAuditTurn {
+  run_id: string;
+  conversation_id: string;
+  conversation_title: string | null;
+  requested_by_user_id: string;
+  requested_by_email: string | null;
+  status: string;
+  model: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  user_message_text: string | null;
+  assistant_message_text: string | null;
+  tool_call_count: number;
+  proposal_action_type: string | null;
+  proposal_status: string | null;
+  proposal_risk_level: string | null;
+  created_at: string;
+}
+
+export interface ToolEntitySummary {
+  type: string;
+  id: string;
+  label: string;
+}
+
+export interface AssistantAuditToolCall {
+  id: string;
+  tool_name: string;
+  status: string;
+  risk_level: string;
+  arguments_redacted: Record<string, unknown> | null;
+  result_redacted: Record<string, unknown> | null;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
 }
 
 export interface VehicleStatusHistory {

@@ -20,6 +20,7 @@ import { Alerts } from "@/pages/Alerts";
 import { History } from "@/pages/History";
 import { Policies } from "@/pages/Policies";
 import { Team } from "@/pages/Team";
+import { Audit } from "@/pages/Audit";
 import { PartnerPortal } from "@/pages/PartnerPortal";
 import { fetchAlerts } from "@/lib/queries";
 import { canAccessPage } from "@/lib/permissions";
@@ -39,6 +40,7 @@ const PAGE_KEYS: ReadonlySet<PageKey> = new Set([
   "history",
   "policies",
   "team",
+  "audit",
 ]);
 
 function isPageKey(value: string): value is PageKey {
@@ -158,6 +160,8 @@ function AppContent() {
         return <Policies />;
       case "team":
         return <Team />;
+      case "audit":
+        return <Audit />;
       default:
         return <Dashboard onNavigate={handleNavigate} />;
     }

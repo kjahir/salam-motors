@@ -31,7 +31,8 @@
     "alerts": "अलर्ट",
     "history": "इतिहास",
     "policies": "नीतियां",
-    "team": "टीम"
+    "team": "टीम",
+    "audit": "ऑडिट"
   },
   "dashboard": {
     "title": "डैशबोर्ड",
@@ -1220,5 +1221,79 @@
     "principal": "मूलधन: {{amount}}",
     "profit": "लाभ: {{amount}}",
     "balance": "शेष: {{amount}}"
+  },
+  "auditPage": {
+    "title": "ऑडिट",
+    "description": "व्यवसाय गतिविधि और आस्क सलाम सहायक गतिविधि, एक ही जगह पर",
+    "tabs": {
+      "business": "व्यवसाय गतिविधि",
+      "assistant": "आस्क सलाम गतिविधि"
+    },
+    "filters": {
+      "allEntities": "सभी एंटिटी",
+      "allActions": "सभी कार्रवाइयां",
+      "actor": "कर्ता",
+      "dateFrom": "तिथि से",
+      "dateTo": "तिथि तक",
+      "clear": "फ़िल्टर साफ़ करें"
+    },
+    "columns": {
+      "field": "फ़ील्ड",
+      "before": "पहले",
+      "after": "बाद में"
+    },
+    "actions": {
+      "created": "बनाया गया",
+      "updated": "अपडेट किया गया",
+      "deleted": "हटाया गया",
+      "sold": "बेचा गया"
+    },
+    "sources": {
+      "app": "ऐप",
+      "trigger": "स्वचालित",
+      "assistant": "आस्क सलाम",
+      "system": "सिस्टम"
+    },
+    "empty": {
+      "business": "अभी तक कोई ऑडिट गतिविधि नहीं",
+      "assistant": "अभी तक कोई आस्क सलाम गतिविधि नहीं"
+    },
+    "failedToLoad": "ऑडिट लॉग लोड करने में विफल",
+    "batch_one": "{{count}} बदलाव का बैच",
+    "batch_other": "{{count}} बदलावों का बैच",
+    "pagination": {
+      "previous": "पिछला",
+      "next": "अगला",
+      "pageOf": "पृष्ठ {{page}} / {{total}}"
+    },
+    "assistantTurn": {
+      "untitled": "शीर्षक रहित बातचीत",
+      "query": "उपयोगकर्ता प्रश्न",
+      "reply": "अंतिम उत्तर",
+      "toolCalls": "टूल कॉल",
+      "toolCallCount_one": "{{count}} टूल कॉल",
+      "toolCallCount_other": "{{count}} टूल कॉल",
+      "noToolCalls": "इस टर्न में कोई टूल कॉल नहीं",
+      "entities": "प्रभावित एंटिटी",
+      "proposal": "प्रस्तावित कार्रवाई",
+      "noText": "दर्ज नहीं",
+      "status": {
+        "queued": "कतारबद्ध",
+        "running": "चल रहा है",
+        "completed": "पूर्ण",
+        "failed": "विफल",
+        "cancelled": "रद्द"
+      },
+      "proposalStatus": {
+        "proposed": "प्रस्तावित",
+        "confirmed": "पुष्ट",
+        "rejected": "अस्वीकृत",
+        "expired": "समाप्त",
+        "executing": "क्रियान्वित हो रहा है",
+        "completed": "पूर्ण",
+        "failed": "विफल",
+        "cancelled": "रद्द"
+      }
+    }
   }
 }

@@ -29,6 +29,39 @@ function messageText(content: unknown): string | null {
   return null;
 }
 
+/*
+Per-tool allow-list of raw argument fields that are safe to keep in
+`assistant_tool_calls.arguments_redacted` in the clear (alongside the
+existing argument_hash). These are all filter/id/flag values, never free
+text a user typed (search query text, notes, addresses, etc.) - so this
+list intentionally excludes fields like `search_inventory.query` or the
+free-text fields inside the two proposal tools' vehicle/purchase/sale
+objects.
+*/
+const ARGUMENT_ALLOW_LIST: Readonly<Record<string, readonly string[]>> = {
+  search_inventory: ["status", "category", "min_price", "max_price", "include_sold"],
+  get_vehicle_360: ["vehicle_id"],
+  get_dashboard_ageing: ["include_sold", "ageing_threshold_days"],
+  get_alerts_compliance: ["vehicle_id", "status", "severity", "alert_type"],
+  get_partner_portfolio: ["partner_id", "include_settled"],
+  acknowledge_alert: ["alert_id"],
+  propose_complete_vehicle_sale: ["vehicle_id"],
+};
+
+function redactedArguments(
+  toolName: string,
+  argumentsValue: Record<string, unknown>,
+): Record<string, unknown> {
+  const allowed = ARGUMENT_ALLOW_LIST[toolName] ?? [];
+  const safeFields: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(argumentsValue, key)) {
+      safeFields[key] = argumentsValue[key];
+    }
+  }
+  return safeFields;
+}
+
 export class AssistantPersistence {
   readonly callerClient: SupabaseClientLike;
   readonly serverClient: SupabaseClientLike | null;
@@ -262,6 +295,10 @@ export class AssistantPersistence {
     if (!runId || !this.serverClient) return;
     const argumentHash = await sha256Hex(argumentsValue);
     const id = crypto.randomUUID();
+    // Entities are already redaction-safe: each is a {type, id, label}
+    // triple built server-side from authorized rows (see tools.ts), never
+    // raw tool arguments or full record payloads.
+    const entities = (result.entities ?? []).slice(0, 100);
     const { error } = await this.serverClient
       .from("assistant_tool_calls")
       .insert({
@@ -273,12 +310,16 @@ export class AssistantPersistence {
         tool_name: toolName,
         status: result.ok ? "completed" : "failed",
         risk_level: riskLevel,
-        arguments_redacted: { argument_hash: argumentHash },
+        arguments_redacted: {
+          argument_hash: argumentHash,
+          safe_fields: redactedArguments(toolName, argumentsValue),
+        },
         result_redacted: {
           ok: result.ok,
           error_code: result.error?.code ?? null,
-          entity_count: result.entities?.length ?? 0,
+          entity_count: entities.length,
           truncated: result.truncated === true,
+          entities,
         },
         authorization_decision: {
           allowed: true,
@@ -293,6 +334,37 @@ export class AssistantPersistence {
       });
     if (error) {
       console.warn("assistant tool-call persistence failed", error.code);
+    }
+
+    // Best-effort: a complete per-turn security record for every tool
+    // call (not just confirmed writes), independent of whether the
+    // assistant_tool_calls insert above succeeded.
+    const primaryEntity = entities[0];
+    const { error: auditError } = await this.serverClient.rpc(
+      "assistant_write_security_audit",
+      {
+        p_org_id: this.principal.orgId,
+        p_event_type: "tool_call",
+        p_action: toolName,
+        p_outcome: result.ok ? "completed" : "failed",
+        p_context: {
+          actor_user_id: this.principal.userId,
+          conversation_id: conversationId,
+          run_id: runId,
+          tool_call_id: id,
+          target_type: primaryEntity?.type ?? null,
+          target_id: primaryEntity?.id ?? null,
+          decision_reason: result.error?.code ?? null,
+          details_redacted: {
+            risk_level: riskLevel,
+            entity_count: entities.length,
+            latency_ms: latencyMs,
+          },
+        },
+      },
+    );
+    if (auditError) {
+      console.warn("assistant tool-call security audit failed", auditError.code);
     }
   }
 

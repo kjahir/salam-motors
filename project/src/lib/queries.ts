@@ -30,6 +30,8 @@ import type {
   VehicleMedia,
   AppSettings,
   Membership,
+  AssistantAuditTurn,
+  AssistantAuditToolCall,
 } from "./types";
 
 export async function fetchAppSettings(): Promise<AppSettings> {
@@ -367,14 +369,65 @@ export async function fetchProfitDistributions(): Promise<
   return (data ?? []) as (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] })[];
 }
 
-export async function fetchAuditLogs(): Promise<AuditLog[]> {
-  const { data, error } = await supabase
+export interface AuditLogFilters {
+  entityType?: string;
+  action?: string;
+  actor?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface AuditLogPage {
+  rows: AuditLog[];
+  count: number;
+}
+
+export async function fetchAuditLogs(
+  filters: AuditLogFilters = {},
+  page = 0,
+  pageSize = 50,
+): Promise<AuditLogPage> {
+  let query = supabase
     .from("audit_logs")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("performed_at", { ascending: false })
-    .limit(50);
+    .range(page * pageSize, page * pageSize + pageSize - 1);
+  if (filters.entityType) query = query.eq("entity_type", filters.entityType);
+  if (filters.action) query = query.eq("action", filters.action);
+  if (filters.actor) query = query.ilike("performed_by", `%${filters.actor}%`);
+  if (filters.dateFrom) query = query.gte("performed_at", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("performed_at", filters.dateTo);
+  const { data, error, count } = await query;
   if (error) throw error;
-  return data ?? [];
+  return { rows: data ?? [], count: count ?? 0 };
+}
+
+export async function fetchAssistantTurns(
+  orgId: string,
+  page = 0,
+  pageSize = 25,
+): Promise<AssistantAuditTurn[]> {
+  const { data, error } = await supabase.rpc("admin_list_assistant_turns", {
+    p_org_id: orgId,
+    p_limit: pageSize,
+    p_offset: page * pageSize,
+  });
+  if (error) throw error;
+  return (data ?? []) as AssistantAuditTurn[];
+}
+
+export async function fetchAssistantToolCallsForRun(
+  runId: string,
+): Promise<AssistantAuditToolCall[]> {
+  const { data, error } = await supabase
+    .from("assistant_tool_calls")
+    .select(
+      "id, tool_name, status, risk_level, arguments_redacted, result_redacted, error_code, error_message, started_at, completed_at, created_at",
+    )
+    .eq("run_id", runId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AssistantAuditToolCall[];
 }
 
 export async function fetchMechanics(): Promise<Party[]> {

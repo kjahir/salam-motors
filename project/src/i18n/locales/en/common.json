@@ -31,7 +31,8 @@
     "alerts": "Alerts",
     "history": "History",
     "policies": "Policies",
-    "team": "Team"
+    "team": "Team",
+    "audit": "Audit"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1220,5 +1221,79 @@
     "principal": "Principal: {{amount}}",
     "profit": "Profit: {{amount}}",
     "balance": "Balance: {{amount}}"
+  },
+  "auditPage": {
+    "title": "Audit",
+    "description": "Business activity and Ask Salam assistant activity, in one place",
+    "tabs": {
+      "business": "Business Activity",
+      "assistant": "Ask Salam Activity"
+    },
+    "filters": {
+      "allEntities": "All entities",
+      "allActions": "All actions",
+      "actor": "Actor",
+      "dateFrom": "From date",
+      "dateTo": "To date",
+      "clear": "Clear filters"
+    },
+    "columns": {
+      "field": "Field",
+      "before": "Before",
+      "after": "After"
+    },
+    "actions": {
+      "created": "Created",
+      "updated": "Updated",
+      "deleted": "Deleted",
+      "sold": "Sold"
+    },
+    "sources": {
+      "app": "App",
+      "trigger": "Automatic",
+      "assistant": "Ask Salam",
+      "system": "System"
+    },
+    "empty": {
+      "business": "No audit activity yet",
+      "assistant": "No Ask Salam activity yet"
+    },
+    "failedToLoad": "Failed to load audit log",
+    "batch_one": "Batch of {{count}} change",
+    "batch_other": "Batch of {{count}} changes",
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {{page}} of {{total}}"
+    },
+    "assistantTurn": {
+      "untitled": "Untitled conversation",
+      "query": "User query",
+      "reply": "Final reply",
+      "toolCalls": "Tool calls",
+      "toolCallCount_one": "{{count}} tool call",
+      "toolCallCount_other": "{{count}} tool calls",
+      "noToolCalls": "No tool calls in this turn",
+      "entities": "Entities touched",
+      "proposal": "Proposed action",
+      "noText": "Not recorded",
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "proposalStatus": {
+        "proposed": "Proposed",
+        "confirmed": "Confirmed",
+        "rejected": "Rejected",
+        "expired": "Expired",
+        "executing": "Executing",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      }
+    }
   }
 }

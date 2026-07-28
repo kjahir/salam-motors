@@ -31,7 +31,8 @@
     "alerts": "எச்சரிக்கைகள்",
     "history": "வரலாறு",
     "policies": "கொள்கைகள்",
-    "team": "குழு"
+    "team": "குழு",
+    "audit": "ஆடிட்"
   },
   "dashboard": {
     "title": "டாஷ்போர்டு",
@@ -1220,5 +1221,79 @@
     "principal": "முதல்தொகை: {{amount}}",
     "profit": "லாபம்: {{amount}}",
     "balance": "நிலுவை: {{amount}}"
+  },
+  "auditPage": {
+    "title": "ஆடிட்",
+    "description": "வணிக செயல்பாடு மற்றும் Ask Salam உதவியாளர் செயல்பாடு, ஒரே இடத்தில்",
+    "tabs": {
+      "business": "வணிக செயல்பாடு",
+      "assistant": "Ask Salam செயல்பாடு"
+    },
+    "filters": {
+      "allEntities": "அனைத்து entities",
+      "allActions": "அனைத்து செயல்கள்",
+      "actor": "செய்தவர்",
+      "dateFrom": "தேதி முதல்",
+      "dateTo": "தேதி வரை",
+      "clear": "வடிகட்டிகளை அழி"
+    },
+    "columns": {
+      "field": "புலம்",
+      "before": "முன்பு",
+      "after": "பின்பு"
+    },
+    "actions": {
+      "created": "உருவாக்கப்பட்டது",
+      "updated": "புதுப்பிக்கப்பட்டது",
+      "deleted": "நீக்கப்பட்டது",
+      "sold": "விற்கப்பட்டது"
+    },
+    "sources": {
+      "app": "ஆப்",
+      "trigger": "தானியங்கி",
+      "assistant": "Ask Salam",
+      "system": "சிஸ்டம்"
+    },
+    "empty": {
+      "business": "இதுவரை ஆடிட் செயல்பாடு இல்லை",
+      "assistant": "இதுவரை Ask Salam செயல்பாடு இல்லை"
+    },
+    "failedToLoad": "ஆடிட் பதிவை ஏற்ற முடியவில்லை",
+    "batch_one": "{{count}} மாற்றத்தின் தொகுதி",
+    "batch_other": "{{count}} மாற்றங்களின் தொகுதி",
+    "pagination": {
+      "previous": "முந்தைய",
+      "next": "அடுத்தது",
+      "pageOf": "பக்கம் {{page}} / {{total}}"
+    },
+    "assistantTurn": {
+      "untitled": "தலைப்பிடப்படாத உரையாடல்",
+      "query": "பயனர் கேள்வி",
+      "reply": "இறுதி பதில்",
+      "toolCalls": "Tool calls",
+      "toolCallCount_one": "{{count}} tool call",
+      "toolCallCount_other": "{{count}} tool calls",
+      "noToolCalls": "இந்த டர்னில் tool calls இல்லை",
+      "entities": "பாதிக்கப்பட்ட entities",
+      "proposal": "பரிந்துரைக்கப்பட்ட செயல்",
+      "noText": "பதிவு செய்யப்படவில்லை",
+      "status": {
+        "queued": "வரிசையில்",
+        "running": "இயங்குகிறது",
+        "completed": "முடிந்தது",
+        "failed": "தோல்வி",
+        "cancelled": "ரத்து செய்யப்பட்டது"
+      },
+      "proposalStatus": {
+        "proposed": "பரிந்துரைக்கப்பட்டது",
+        "confirmed": "உறுதிசெய்யப்பட்டது",
+        "rejected": "நிராகரிக்கப்பட்டது",
+        "expired": "காலாவதியானது",
+        "executing": "செயல்படுத்தப்படுகிறது",
+        "completed": "முடிந்தது",
+        "failed": "தோல்வி",
+        "cancelled": "ரத்து செய்யப்பட்டது"
+      }
+    }
   }
 }
