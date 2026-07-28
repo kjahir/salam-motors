@@ -38,7 +38,7 @@ Deno.test("request parser matches the frontend assistant-turn contract", () => {
 Deno.test("stream defaults follow the Accept header", () => {
   const base = {
     message: "Show inventory",
-    locale: "en",
+    locale: "en-IN",
     context: { surface: "mobile" },
   };
   assert(
@@ -56,7 +56,7 @@ Deno.test("request parser rejects caller-supplied access context", () => {
   // authentication derives that object independently from Supabase.
   const request = parseAssistantTurnRequest({
     message: "Show inventory",
-    locale: "en",
+    locale: "en-IN",
     context: {
       surface: "desktop",
       orgId: "attacker-org",
@@ -69,12 +69,33 @@ Deno.test("request parser rejects caller-supplied access context", () => {
   );
 });
 
-Deno.test("request parser rejects unsupported surfaces", () => {
+Deno.test("request parser rejects locales outside the 6 supported codes", () => {
+  expectValidationError(
+    () =>
+      parseAssistantTurnRequest({
+        message: "hello",
+        locale: "fr-FR",
+        context: { surface: "desktop" },
+      }),
+    "unsupported locale should be rejected",
+  );
   expectValidationError(
     () =>
       parseAssistantTurnRequest({
         message: "hello",
         locale: "en",
+        context: { surface: "desktop" },
+      }),
+    "bare language code without region should be rejected",
+  );
+});
+
+Deno.test("request parser rejects unsupported surfaces", () => {
+  expectValidationError(
+    () =>
+      parseAssistantTurnRequest({
+        message: "hello",
+        locale: "en-IN",
         context: { surface: "inventory" },
       }),
     "unknown surface should be rejected",
@@ -87,7 +108,7 @@ Deno.test("request parser rejects invalid IDs", () => {
       parseAssistantTurnRequest({
         conversationId: "not-a-uuid",
         message: "hello",
-        locale: "en",
+        locale: "en-IN",
         context: { surface: "desktop" },
       }),
     "invalid conversation ID should be rejected",
@@ -99,7 +120,7 @@ Deno.test("request parser rejects short action tokens", () => {
     () =>
       parseAssistantTurnRequest({
         message: "Execute the confirmed action.",
-        locale: "en",
+        locale: "en-IN",
         context: { surface: "desktop" },
         action: { token: "too-short" },
       }),

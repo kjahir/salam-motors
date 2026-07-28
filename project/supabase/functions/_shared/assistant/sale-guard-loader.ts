@@ -17,6 +17,7 @@ export async function addAuthoritativeSaleGuards(
   client: SupabaseClientLike,
   orgId: string,
   proposal: ParsedProposal,
+  locale: string,
 ): Promise<ParsedProposal> {
   const argumentsValue = asRecord(proposal.arguments);
   const vehicleId = requiredString(argumentsValue, "vehicle_id", 64);
@@ -49,6 +50,6 @@ export async function addAuthoritativeSaleGuards(
       0,
       999_999_999,
     ),
-  });
+  }, locale);
 }
 

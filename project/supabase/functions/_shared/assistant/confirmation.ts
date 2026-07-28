@@ -2,6 +2,7 @@ import { verifyActionToken } from "./action-token.ts";
 import { actionSpecByType, parseCanonicalProposalArguments } from "./actions.ts";
 import type { AssistantConfig } from "./config.ts";
 import { AssistantHttpError, type SseTurnResult } from "./http.ts";
+import { assistantStrings, formatMoney, interpolate } from "./locales.ts";
 import type { AssistantPersistence } from "./persistence.ts";
 import type {
   ActionTokenPayload,
@@ -175,12 +176,8 @@ function rpcError(
   }
 }
 
-function money(value: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
+function money(value: number, locale: string): string {
+  return formatMoney(value, locale);
 }
 
 function resultRecord(value: unknown): Record<string, unknown> {
@@ -217,32 +214,44 @@ interface ReceiptContent {
   navigateTab?: string;
 }
 
-function createVehicleReceipt(result: Record<string, unknown>): ReceiptContent {
+function createVehicleReceipt(
+  result: Record<string, unknown>,
+  locale: string,
+): ReceiptContent {
+  const strings = assistantStrings(locale);
   const stockNumber = resultString(result, "stock_number");
   const vehicleId = resultString(result, "vehicle_id");
   const status = resultString(result, "status");
   const listingId = resultString(result, "listing_id");
   const paymentId = resultString(result, "purchase_payment_id");
   const complete = Boolean(stockNumber && vehicleId && status);
+  const paymentStatus = paymentId ? strings.recordedValue : strings.notRecordedValue;
+  const listingStatus = listingId ? strings.draftCreatedValue : strings.notCreatedValue;
   return {
-    title: "Vehicle onboarded",
-    answerText: `Vehicle ${stockNumber ?? "—"} was onboarded with its purchase${
-      paymentId ? " and payment" : ""
-    } recorded${listingId ? " and a draft listing created" : ""}.`,
+    title: strings.vehicleOnboardedTitle,
+    answerText: interpolate(strings.vehicleOnboardedMessageTemplate, {
+      stock: stockNumber ?? "—",
+      paymentStatus,
+      listingStatus,
+    }),
     tone: "success",
     status: complete ? "success" : "partial",
     details: [
-      { label: "Stock number", value: stockNumber ?? "—" },
-      { label: "Vehicle status", value: status ?? "—" },
-      { label: "Purchase payment", value: paymentId ? "Recorded" : "Not recorded" },
-      { label: "Listing", value: listingId ? "Draft created" : "Not created" },
+      { label: strings.stockNumberLabel, value: stockNumber ?? "—" },
+      { label: strings.vehicleStatusLabel, value: status ?? "—" },
+      { label: strings.purchasePaymentLabel, value: paymentStatus },
+      { label: strings.listingLabel, value: listingStatus },
     ],
     vehicleId,
     sourceLabel: stockNumber ?? vehicleId ?? "vehicle",
   };
 }
 
-function completeSaleReceipt(result: Record<string, unknown>): ReceiptContent {
+function completeSaleReceipt(
+  result: Record<string, unknown>,
+  locale: string,
+): ReceiptContent {
+  const strings = assistantStrings(locale);
   const vehicleId = resultString(result, "vehicle_id");
   const saleId = resultString(result, "sale_id");
   const status = resultString(result, "status");
@@ -254,31 +263,36 @@ function completeSaleReceipt(result: Record<string, unknown>): ReceiptContent {
   const complete = Boolean(vehicleId && status && netRevenue !== null);
   const loss = grossProfit !== null && grossProfit < 0;
   const details: Array<{ label: string; value: string | number }> = [
-    { label: "Vehicle status", value: status ?? "—" },
-    { label: "Net revenue", value: netRevenue === null ? "—" : money(netRevenue) },
+    { label: strings.vehicleStatusLabel, value: status ?? "—" },
     {
-      label: "Total vehicle cost",
-      value: totalCost === null ? "—" : money(totalCost),
+      label: strings.netRevenueLabel,
+      value: netRevenue === null ? "—" : money(netRevenue, locale),
     },
     {
-      label: "Gross profit",
-      value: grossProfit === null ? "—" : money(grossProfit),
+      label: strings.totalVehicleCostLabel,
+      value: totalCost === null ? "—" : money(totalCost, locale),
     },
-    { label: "Partner distributions", value: distributionCount ?? 0 },
+    {
+      label: strings.grossProfitLabel,
+      value: grossProfit === null ? "—" : money(grossProfit, locale),
+    },
+    { label: strings.partnerDistributionsLabel, value: distributionCount ?? 0 },
   ];
   if (distributionCount !== null && distributionCount > 0) {
     details.push({
-      label: "Unallocated profit",
-      value: unallocatedProfit === null ? "—" : money(unallocatedProfit),
+      label: strings.unallocatedProfitLabel,
+      value: unallocatedProfit === null ? "—" : money(unallocatedProfit, locale),
     });
   }
   return {
-    title: "Sale completed",
+    title: strings.saleCompletedTitle,
     answerText: netRevenue === null || grossProfit === null
-      ? "The sale is complete. Review the vehicle for the final figures."
-      : `The sale is complete. Net revenue ${money(netRevenue)}, ${
-        loss ? "gross loss" : "gross profit"
-      } ${money(Math.abs(grossProfit))}.`,
+      ? strings.saleCompleteReviewFiguresMessage
+      : interpolate(strings.saleCompleteMessageTemplate, {
+        netRevenue: money(netRevenue, locale),
+        profitPhrase: loss ? strings.grossLossLabel : strings.grossProfitLabel,
+        amount: money(Math.abs(grossProfit), locale),
+      }),
     tone: loss ? "warning" : "success",
     status: complete ? "success" : "partial",
     details,
@@ -296,8 +310,8 @@ function receiptTurn(
   locale: string,
 ): AssistantTurn {
   const content = payload.actionType === "vehicle.create_with_purchase"
-    ? createVehicleReceipt(result)
-    : completeSaleReceipt(result);
+    ? createVehicleReceipt(result, locale)
+    : completeSaleReceipt(result, locale);
   const block: AssistantBlock = {
     type: "action_receipt",
     status: content.status,
@@ -307,7 +321,7 @@ function receiptTurn(
     actions: content.vehicleId
       ? [{
         kind: "navigate",
-        label: "Open vehicle",
+        label: assistantStrings(locale).openVehicleActionLabel,
         page: "vehicle",
         params: {
           vehicleId: content.vehicleId,

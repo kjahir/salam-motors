@@ -1,17 +1,10 @@
 import type { ParsedProposal } from "./actions.ts";
+import { assistantStrings, formatMoney } from "./locales.ts";
 import { asRecord, requiredNumber } from "./validation.ts";
 
 export interface AuthoritativeSaleSnapshot {
   vehicleUpdatedAt: string;
   totalVehicleCost: number;
-}
-
-function money(value: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 /**
@@ -21,6 +14,7 @@ function money(value: number): string {
 export function withAuthoritativeSaleGuards(
   proposal: ParsedProposal,
   snapshot: AuthoritativeSaleSnapshot,
+  locale: string,
 ): ParsedProposal {
   const argumentsValue = asRecord(proposal.arguments);
   const sale = asRecord(argumentsValue.sale);
@@ -59,8 +53,8 @@ export function withAuthoritativeSaleGuards(
     changes: [
       ...proposal.changes,
       {
-        label: "Expected gross profit",
-        to: money(expectedGrossProfit),
+        label: assistantStrings(locale).expectedGrossProfitLabel,
+        to: formatMoney(expectedGrossProfit, locale),
       },
     ],
   };

@@ -11,10 +11,13 @@ import type {
   AssistantTurnRequest,
 } from "./types.ts";
 import { normalizeNavigationAction } from "./navigation.ts";
+import { ASSISTANT_LOCALES } from "./locales.ts";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const LOCALE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/;
+// Locale must be exactly one of the app's 6 supported locale codes — keep
+// this list in sync with `languageOptions`/`AppLocale` in src/i18n/index.ts.
+const SUPPORTED_LOCALES: readonly string[] = ASSISTANT_LOCALES;
 
 export class RequestValidationError extends Error {
   readonly code = "INVALID_REQUEST";
@@ -66,9 +69,9 @@ export function parseAssistantTurnRequest(
     );
   }
   const locale = typeof value.locale === "string" ? value.locale.trim() : "";
-  if (!LOCALE_PATTERN.test(locale)) {
+  if (!SUPPORTED_LOCALES.includes(locale)) {
     throw new RequestValidationError(
-      "locale must be a valid language tag such as en or hi-IN",
+      `locale must be one of ${SUPPORTED_LOCALES.join(", ")}`,
     );
   }
   if (!isRecord(value.context)) {
