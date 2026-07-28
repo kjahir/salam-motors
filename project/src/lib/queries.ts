@@ -49,10 +49,9 @@ export async function updateAppSettings(
 }
 
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
+  if (slug.length === 0 || slug.length > 100 || slug.trim() !== slug) return null;
   const { data, error } = await supabase
-    .from("vehicle_passport_public")
-    .select("*")
-    .eq("public_slug", slug)
+    .rpc("get_public_vehicle_passport", { p_public_slug: slug })
     .maybeSingle();
   if (error) throw error;
   return data as PublicPassport | null;

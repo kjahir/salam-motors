@@ -944,6 +944,198 @@
     "accessRestored": "Access restored",
     "statusFailed": "Failed to update status"
   },
+  "assistant": {
+    "launcher": {
+      "label": "Ask Salam",
+      "tooltip": "Ask Salam (Ctrl/⌘ K)",
+      "openAria": "Open Salam assistant"
+    },
+    "header": {
+      "title": "Ask Salam",
+      "subtitle": "Live, role-aware dealership assistant",
+      "dialogAria": "Salam Motors AI assistant",
+      "close": "Close assistant",
+      "newConversation": "Start a new conversation"
+    },
+    "status": {
+      "ready": "Ready",
+      "understanding": "Understanding your request…",
+      "thinking": "Thinking…",
+      "searching": "Searching dealership records…",
+      "analyzing": "Analyzing the results…",
+      "preparing": "Preparing your answer…",
+      "working": "Working…",
+      "executing": "Completing the approved action…",
+      "revalidating": "Revalidating permissions and current data…",
+      "stopped": "Stopped.",
+      "starting": "Starting…",
+      "finalizing": "Finalizing…"
+    },
+    "welcome": {
+      "title": "What can I help with?",
+      "description": "I can search, compare, and explain {{dealership}}'s live operational data.",
+      "scope": "I only show information and actions allowed for your signed-in role.",
+      "defaultDealership": "your dealership"
+    },
+    "safety": {
+      "readOnly": "This result is read-only.",
+      "needsConfirmation": "Changes are never made without your confirmation.",
+      "privacy": "Sensitive dealership data stays restricted to your organization.",
+      "roleScoped": "Results and actions are limited by your signed-in role.",
+      "disclaimer": "AI can make mistakes. Confirm financial and administrative changes carefully."
+    },
+    "composer": {
+      "placeholder": "Ask about inventory, finance, alerts, inspections…",
+      "messageAria": "Message Ask Salam",
+      "send": "Send message",
+      "stop": "Stop response",
+      "attach": "Attach a file",
+      "attachmentsUnavailable": "Secure document attachments will be available after the storage-policy upgrade.",
+      "keyboardHint": "Enter to send · Shift+Enter for a new line · Ctrl/⌘ K to toggle"
+    },
+    "voice": {
+      "start": "Start voice input",
+      "stop": "Stop voice input",
+      "listening": "Listening…",
+      "unavailable": "Voice input is not supported in this browser.",
+      "permissionDenied": "Microphone access was not allowed.",
+      "failed": "Voice input could not be started."
+    },
+    "buttons": {
+      "retry": "Try again",
+      "newConversation": "New conversation",
+      "continue": "Continue",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "approve": "Approve",
+      "run": "Run",
+      "open": "Open",
+      "view": "View",
+      "download": "Download",
+      "submit": "Submit",
+      "back": "Back"
+    },
+    "errors": {
+      "generic": "The assistant could not complete this request.",
+      "offline": "You appear to be offline. Check your connection and try again.",
+      "sessionExpired": "Your session has expired. Sign in again to continue.",
+      "invalidResponse": "The assistant returned an invalid response. Please try again.",
+      "notAuthorized": "You do not have permission to perform this action.",
+      "rateLimited": "The assistant is busy right now. Please try again shortly.",
+      "timeout": "This request took too long. Please try again.",
+      "actionFailed": "The action could not be completed.",
+      "voiceFailed": "Voice input could not be completed."
+    },
+    "confirmation": {
+      "title": "Confirm this action",
+      "description": "Review the details before Salam makes this change.",
+      "warning": "This action changes dealership data.",
+      "highRisk": "High-risk action",
+      "criticalRisk": "Critical action",
+      "acknowledge": "I reviewed the details and want to continue.",
+      "expires": "This confirmation expires {{time}}.",
+      "confirmed": "Action confirmed",
+      "cancelled": "Action cancelled"
+    },
+    "empty": {
+      "title": "Nothing to show yet",
+      "description": "Ask Salam a question to get started.",
+      "noResults": "No matching records were found."
+    },
+    "provenance": {
+      "title": "Based on live dealership data",
+      "source": "Source",
+      "updatedAt": "Updated {{time}}",
+      "recordCount": "{{count}} records reviewed",
+      "generatedAt": "Generated {{time}}"
+    },
+    "display": {
+      "asking": "Asking",
+      "totalCost": "Total cost",
+      "age": "Age",
+      "days": "{{count}} days",
+      "estimatedProfit": "Estimated profit",
+      "alerts": "{{count}} alerts",
+      "compliance": "{{count}} compliance items",
+      "showingOf": "Showing {{shown}} of {{total}}",
+      "purchase": "Purchase",
+      "profit": "Profit",
+      "select": "Select",
+      "uploadSecure": "Secure upload",
+      "partyPicker": "Choose a party",
+      "completeRequired": "Complete all required fields.",
+      "reviewedConsequences": "I reviewed the consequences.",
+      "confirmationExpires": "Confirmation expires {{time}}.",
+      "audit": "Audit reference {{id}}",
+      "updated": "Updated {{time}}",
+      "sources": "{{count}} sources",
+      "records": "{{count}} records",
+      "partialResult": "Partial result — some data could not be loaded.",
+      "downloadUnavailable": "Download unavailable",
+      "unavailable": "unavailable",
+      "fileUploadUnavailable": "File uploads aren't available in chat yet",
+      "partyPickerUnavailable": "Party selection isn't available in chat yet",
+      "formSubmitUnavailable": "This form can't be submitted from chat yet"
+    },
+    "starters": {
+      "owner": {
+        "label": "Owner suggestions",
+        "prompts": [
+          "Which vehicles are tying up the most capital?",
+          "Show critical risks that need attention today",
+          "Explain this month's profit performance"
+        ]
+      },
+      "manager": {
+        "label": "Manager suggestions",
+        "prompts": [
+          "Build today's operational priority list",
+          "Which vehicles are blocked from sale?",
+          "Show unresolved critical alerts"
+        ]
+      },
+      "sales_executive": {
+        "label": "Sales suggestions",
+        "prompts": [
+          "Find vehicles ready for sale",
+          "Show inventory older than 30 days",
+          "Help me prepare a vehicle for listing"
+        ]
+      },
+      "accountant": {
+        "label": "Accounts suggestions",
+        "prompts": [
+          "Show unapproved expenses",
+          "Which partner settlements are pending?",
+          "Explain the largest cost variances"
+        ]
+      },
+      "mechanic_inspector": {
+        "label": "Inspection suggestions",
+        "prompts": [
+          "Show my inspection priority queue",
+          "Which vehicles have missing inspection details?",
+          "Find vehicles blocked by documents or inspection"
+        ]
+      },
+      "partner": {
+        "label": "Partner suggestions",
+        "prompts": [
+          "Summarize my current investments",
+          "Which settlements are still pending?",
+          "Explain my latest profit distribution"
+        ]
+      },
+      "default": {
+        "label": "Suggested questions",
+        "prompts": [
+          "Summarize today's inventory",
+          "Show the most urgent alerts",
+          "What needs my attention?"
+        ]
+      }
+    }
+  },
   "partnerPortal": {
     "partnerPortal": "Partner Portal",
     "signOut": "Sign Out",

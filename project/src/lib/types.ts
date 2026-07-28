@@ -271,7 +271,6 @@ export interface PublicPassport {
   inspector_name: string | null;
   inspection_items: PublicPassportItem[];
   documents: PublicPassportDocument[];
-  org_id: string;
   organization_name: string | null;
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutDashboard, Bike, FileBarChart, Plus } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -8,12 +8,14 @@ import { MobileVehicleDetail } from "./MobileVehicleDetail";
 import { MobileVehicleForm } from "./MobileVehicleForm";
 import { MobileReports } from "./MobileReports";
 import { usePermissions } from "@/lib/usePermissions";
+import { useAssistant } from "@/assistant/AssistantProvider";
 
 export type MobileScreen = "dashboard" | "inventory" | "vehicle" | "add-vehicle" | "edit-vehicle" | "reports";
 
 export interface MobileNavigateParams {
   vehicleId?: string;
   tab?: string;
+  openEditVehicle?: boolean;
   highlightPolicyId?: string;
 }
 
@@ -21,26 +23,80 @@ export interface MobileNavigate {
   (screen: MobileScreen, params?: MobileNavigateParams): void;
 }
 
+function assistantScreen(page: string, hasVehicle: boolean): MobileScreen | null {
+  switch (page) {
+    case "dashboard":
+    case "inventory":
+    case "add-vehicle":
+    case "reports":
+      return page;
+    case "finance":
+      return "reports";
+    case "vehicle":
+    case "edit-vehicle":
+      return hasVehicle ? page : null;
+    case "passport":
+    case "history":
+      return hasVehicle ? "vehicle" : null;
+    default:
+      return null;
+  }
+}
+
 export function MobileApp() {
   const { t } = useTranslation();
+  const { registerNavigation, setAppContext } = useAssistant();
   const { canAccessMobileTab } = usePermissions();
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
   const [highlightPolicyId, setHighlightPolicyId] = useState<string | undefined>(undefined);
 
-  const navigate: MobileNavigate = (next, params) => {
-    if (params?.vehicleId) setVehicleId(params.vehicleId);
+  const navigate = useCallback<MobileNavigate>((next, params) => {
+    if (params?.vehicleId) {
+      setVehicleId(params.vehicleId);
+    } else if (next !== "vehicle" && next !== "edit-vehicle") {
+      setVehicleId(null);
+    }
     if (next === "vehicle") {
       setVehicleTab(params?.tab);
       setHighlightPolicyId(params?.highlightPolicyId);
+    } else {
+      setVehicleTab(undefined);
+      setHighlightPolicyId(undefined);
     }
     setScreen(next);
-  };
+  }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
+
+  useEffect(() => {
+    setAppContext({
+      surface: "mobile",
+      page: screen,
+      vehicleId: screen === "vehicle" || screen === "edit-vehicle" ? vehicleId : null,
+      vehicleTab: screen === "vehicle" ? vehicleTab : null,
+    });
+  }, [screen, setAppContext, vehicleId, vehicleTab]);
+
+  useEffect(() => {
+    registerNavigation((page, params) => {
+      const currentVehicleId = screen === "vehicle" || screen === "edit-vehicle" ? vehicleId ?? undefined : undefined;
+      const nextVehicleId = params?.vehicleId ?? params?.historyVehicleId ?? currentVehicleId;
+      const requestedPage = page === "vehicle" && params?.openEditVehicle ? "edit-vehicle" : page;
+      const target = assistantScreen(requestedPage, Boolean(nextVehicleId));
+      if (!target || !canAccessMobileTab(target)) return false;
+      navigate(target, {
+        vehicleId: nextVehicleId,
+        tab: params?.tab,
+        highlightPolicyId: params?.highlightPolicyId,
+      });
+      return true;
+    });
+    return () => registerNavigation(null);
+  }, [canAccessMobileTab, navigate, registerNavigation, screen, vehicleId]);
 
   const isTabActive = (key: "dashboard" | "inventory" | "reports") => {
     if (key === "inventory") return screen === "inventory" || screen === "vehicle" || screen === "edit-vehicle";

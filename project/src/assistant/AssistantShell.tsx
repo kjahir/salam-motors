@@ -1,0 +1,421 @@
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { useTranslation } from "react-i18next";
+import {
+  ArrowUp,
+  Bot,
+  Loader2,
+  MessageCircle,
+  Mic,
+  MicOff,
+  Paperclip,
+  RotateCcw,
+  Sparkles,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
+import { getAppLocale } from "@/i18n";
+import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
+import { useAuth } from "@/lib/useAuth";
+import { AssistantTurnView, FailedMessageActions } from "./AssistantBlocks";
+import { useAssistant } from "./AssistantProvider";
+
+interface SpeechRecognitionEventLike {
+  results: ArrayLike<{
+    0: { transcript: string };
+    isFinal: boolean;
+  }>;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+function speechRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
+  const candidate = window as typeof window & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return candidate.SpeechRecognition ?? candidate.webkitSpeechRecognition;
+}
+
+function useVoiceDraft(onTranscript: (text: string) => void) {
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const isSupported = typeof window !== "undefined" && Boolean(speechRecognitionConstructor());
+
+  const toggle = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Constructor = speechRecognitionConstructor();
+    if (!Constructor) return;
+    const recognition = new Constructor();
+    recognition.lang = getAppLocale();
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+      onTranscript(transcript);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  };
+
+  useEffect(
+    () => () => {
+      recognitionRef.current?.stop();
+    },
+    [],
+  );
+
+  return { isSupported, isListening, toggle };
+}
+
+export function AssistantShell() {
+  const { t } = useTranslation();
+  const {
+    isOpen,
+    isBusy,
+    statusText,
+    messages,
+    starterPrompts,
+    open,
+    close,
+    toggle,
+    stop,
+    clearConversation,
+    sendMessage,
+    retryLast,
+  } = useAssistant();
+  const { user, membership, partner, orgName } = useAuth();
+  const isMobile = useIsMobileViewport();
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const { isSupported: voiceSupported, isListening, toggle: toggleVoice } = useVoiceDraft(setDraft);
+
+  const visible = Boolean(user && (membership || partner));
+  const hasMessages = messages.length > 0;
+  const latestFailed = [...messages].reverse().find((message) => message.role === "assistant")?.status === "failed";
+
+  const welcome = useMemo(() => {
+    const dealership = orgName ?? t("assistant.welcome.defaultDealership");
+    return t("assistant.welcome.description", { dealership });
+  }, [orgName, t]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const onShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        toggle();
+      }
+      if (event.key === "Escape" && isOpen) close();
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, [close, isOpen, toggle, visible]);
+
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      window.setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      previousFocusRef.current?.focus();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [isBusy, isOpen, messages, statusText]);
+
+  useEffect(() => {
+    if (!isOpen || !isMobile) return;
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = oldOverflow;
+    };
+  }, [isMobile, isOpen]);
+
+  if (!visible) return null;
+
+  const submit = () => {
+    const message = draft.trim();
+    if (!message || isBusy) return;
+    setDraft("");
+    void sendMessage(message);
+  };
+
+  const onComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+    }
+  };
+
+  const onPanelKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab" || !isMobile || !panelRef.current) return;
+    const focusable = Array.from(
+      panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <>
+      {!isOpen && (
+        <button
+          type="button"
+          onClick={open}
+          className={`fixed z-40 flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-600 to-blue-600 text-white shadow-xl shadow-brand-900/20 transition hover:-translate-y-0.5 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
+            isMobile ? "bottom-[5.5rem] right-4 h-12 w-12 justify-center" : "bottom-6 right-6 px-4 py-3"
+          }`}
+          aria-label={t("assistant.launcher.openAria")}
+          title={t("assistant.launcher.tooltip")}
+        >
+          <Sparkles size={19} />
+          {!isMobile && <span className="text-sm font-semibold">{t("assistant.launcher.label")}</span>}
+        </button>
+      )}
+
+      {isOpen && !isMobile && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 cursor-default bg-slate-950/10 backdrop-blur-[1px] lg:bg-transparent lg:backdrop-blur-none"
+          onClick={close}
+          aria-label={t("assistant.header.close")}
+        />
+      )}
+
+      {isOpen && (
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal={isMobile || undefined}
+          aria-label={t("assistant.header.dialogAria")}
+          onKeyDown={onPanelKeyDown}
+          className={`fixed z-50 flex flex-col overflow-hidden bg-slate-50 shadow-2xl ${
+            isMobile
+              ? "inset-0"
+              : "bottom-3 right-3 top-3 w-[min(470px,calc(100vw-24px))] rounded-2xl border border-slate-200"
+          }`}
+        >
+          <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-blue-600 text-white shadow-sm">
+              <Sparkles size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-sm font-semibold text-slate-950">{t("assistant.header.title")}</h2>
+              <p className="truncate text-[11px] text-slate-500">
+                {isBusy ? statusText || t("assistant.status.working") : t("assistant.header.subtitle")}
+              </p>
+            </div>
+            {hasMessages && (
+              <button
+                type="button"
+                onClick={clearConversation}
+                disabled={isBusy}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                aria-label={t("assistant.header.newConversation")}
+                title={t("assistant.header.newConversation")}
+              >
+                <Trash2 size={17} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={close}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label={t("assistant.header.close")}
+            >
+              <X size={19} />
+            </button>
+          </header>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-3.5 py-4 sm:px-4">
+            {!hasMessages ? (
+              <div className="flex min-h-full flex-col justify-center py-6">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+                  <Bot size={26} />
+                </div>
+                <h3 className="mt-4 text-center text-lg font-semibold text-slate-950">{t("assistant.welcome.title")}</h3>
+                <p className="mx-auto mt-2 max-w-sm text-center text-sm leading-relaxed text-slate-500">{welcome}</p>
+                <div className="mx-auto mt-6 grid w-full max-w-sm gap-2">
+                  {starterPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => void sendMessage(prompt)}
+                      className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left text-sm text-slate-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-50/50 hover:text-brand-900"
+                    >
+                      <span>{prompt}</span>
+                      <MessageCircle size={15} className="shrink-0 text-slate-300 transition group-hover:text-brand-500" />
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-5 text-center text-[10px] text-slate-400">
+                  {t("assistant.safety.disclaimer")}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {messages.map((message) => (
+                  <article
+                    key={message.id}
+                    className={message.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}
+                  >
+                    {message.role === "assistant" && (
+                      <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
+                        <Sparkles size={14} />
+                      </span>
+                    )}
+                    <div className={message.role === "user" ? "max-w-[85%]" : "min-w-0 max-w-[calc(100%-38px)] flex-1"}>
+                      {message.role === "user" ? (
+                        <div className="rounded-2xl rounded-br-md bg-slate-900 px-3.5 py-2.5 text-sm leading-relaxed text-white">
+                          {message.text}
+                        </div>
+                      ) : message.turn ? (
+                        <AssistantTurnView turn={message.turn} />
+                      ) : (
+                        <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-relaxed text-slate-700">
+                          {message.text || (
+                            <span className="flex items-center gap-2 text-slate-400">
+                              <Loader2 size={14} className="animate-spin" />
+                              {statusText || t("assistant.status.thinking")}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {message.status === "failed" && <FailedMessageActions />}
+                    </div>
+                  </article>
+                ))}
+
+                {isBusy && statusText && (
+                  <div className="flex items-center gap-2 pl-9 text-[11px] text-slate-400" aria-live="polite">
+                    <Loader2 size={12} className="animate-spin" />
+                    {statusText}
+                  </div>
+                )}
+
+                {latestFailed && !isBusy && (
+                  <button
+                    type="button"
+                    onClick={() => void retryLast()}
+                    className="ml-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <RotateCcw size={12} />
+                    {t("assistant.buttons.retry")}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+            <div className="rounded-xl border border-slate-300 bg-white shadow-sm focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/15">
+              <textarea
+                ref={inputRef}
+                rows={2}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={onComposerKeyDown}
+                disabled={isBusy}
+                placeholder={t("assistant.composer.placeholder")}
+                aria-label={t("assistant.composer.messageAria")}
+                className="block max-h-32 min-h-[52px] w-full resize-none rounded-t-xl border-0 bg-transparent px-3.5 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:bg-slate-50"
+              />
+              <div className="flex items-center justify-between px-2 pb-2">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-lg p-2 text-slate-300"
+                    aria-label={t("assistant.composer.attach")}
+                    title={t("assistant.composer.attachmentsUnavailable")}
+                  >
+                    <Paperclip size={17} />
+                  </button>
+                  {voiceSupported && (
+                    <button
+                      type="button"
+                      onClick={toggleVoice}
+                      disabled={isBusy}
+                      className={`rounded-lg p-2 transition ${
+                        isListening ? "bg-red-50 text-red-600" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      }`}
+                      aria-label={t(isListening ? "assistant.voice.stop" : "assistant.voice.start")}
+                    >
+                      {isListening ? <MicOff size={17} /> : <Mic size={17} />}
+                    </button>
+                  )}
+                </div>
+                {isBusy ? (
+                  <button
+                    type="button"
+                    onClick={stop}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white hover:bg-slate-800"
+                    aria-label={t("assistant.composer.stop")}
+                  >
+                    <Square size={13} fill="currentColor" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={!draft.trim()}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                    aria-label={t("assistant.composer.send")}
+                  >
+                    <ArrowUp size={18} />
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="mt-1.5 text-center text-[9px] text-slate-400">
+              {t("assistant.composer.keyboardHint")}
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

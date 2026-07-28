@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Layout, type PageKey, type NavigateParams } from "@/components/Layout";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -22,10 +22,33 @@ import { Policies } from "@/pages/Policies";
 import { Team } from "@/pages/Team";
 import { PartnerPortal } from "@/pages/PartnerPortal";
 import { fetchAlerts } from "@/lib/queries";
+import { canAccessPage } from "@/lib/permissions";
+import { AssistantProvider, useAssistant } from "@/assistant/AssistantProvider";
+import { AssistantShell } from "@/assistant/AssistantShell";
+
+const PAGE_KEYS: ReadonlySet<PageKey> = new Set([
+  "dashboard",
+  "inventory",
+  "add-vehicle",
+  "vehicle",
+  "parties",
+  "partners",
+  "finance",
+  "alerts",
+  "passport",
+  "history",
+  "policies",
+  "team",
+]);
+
+function isPageKey(value: string): value is PageKey {
+  return PAGE_KEYS.has(value as PageKey);
+}
 
 function AppContent() {
   const { t } = useTranslation();
-  const { session, loading, membership, partner } = useAuth();
+  const { session, loading, membership, partner, role } = useAuth();
+  const { registerNavigation, setAppContext } = useAssistant();
   const isMobile = useIsMobileViewport();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
@@ -43,10 +66,12 @@ function AppContent() {
       .catch(() => undefined);
   }, [page, session]);
 
-  const handleNavigate = (next: PageKey, params?: NavigateParams) => {
+  const handleNavigate = useCallback((next: PageKey, params?: NavigateParams) => {
     if (params?.vehicleId) {
-      setPreviousPage(page === "vehicle" || page === "passport" ? previousPage : page);
+      setPreviousPage((current) => page === "vehicle" || page === "passport" ? current : page);
       setVehicleId(params.vehicleId);
+    } else if (next !== "vehicle" && next !== "passport") {
+      setVehicleId(null);
     }
     if (next === "history") {
       setHistoryVehicleId(params?.historyVehicleId ?? null);
@@ -55,14 +80,46 @@ function AppContent() {
       setVehicleTab(params?.tab);
       setOpenEditVehicle(Boolean(params?.openEditVehicle));
       setHighlightPolicyId(params?.highlightPolicyId);
+    } else {
+      setVehicleTab(undefined);
+      setOpenEditVehicle(false);
+      setHighlightPolicyId(undefined);
     }
     setPage(next);
-  };
+  }, [page]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     setPage(previousPage);
     setVehicleId(null);
-  };
+  }, [previousPage]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (!membership && partner) {
+      setAppContext({ surface: "partner", page: "partner-portal" });
+      return;
+    }
+    if (!isMobile && membership) {
+      setAppContext({
+        surface: "desktop",
+        page,
+        vehicleId: page === "vehicle" || page === "passport" ? vehicleId : page === "history" ? historyVehicleId : null,
+        vehicleTab: page === "vehicle" ? vehicleTab : null,
+      });
+    }
+  }, [historyVehicleId, isMobile, membership, page, partner, session, setAppContext, vehicleId, vehicleTab]);
+
+  useEffect(() => {
+    if (!membership || isMobile) return;
+    registerNavigation((next, params) => {
+      if (!isPageKey(next) || !canAccessPage(role, next)) return false;
+      const needsVehicle = next === "vehicle" || next === "passport";
+      if (needsVehicle && !params?.vehicleId && !vehicleId) return false;
+      handleNavigate(next, params);
+      return true;
+    });
+    return () => registerNavigation(null);
+  }, [handleNavigate, isMobile, membership, registerNavigation, role, vehicleId]);
 
   const renderPage = () => {
     switch (page) {
@@ -153,7 +210,10 @@ export default function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <AppContent />
+        <AssistantProvider>
+          <AppContent />
+          <AssistantShell />
+        </AssistantProvider>
       </AuthProvider>
     </ToastProvider>
   );
