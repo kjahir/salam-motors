@@ -17,6 +17,7 @@ export const PAGE_ACCESS: Partial<Record<PageKey, Role[]>> = {
   partners: ["owner", "manager", "accountant"],
   finance: ["owner", "manager", "accountant"],
   team: ["owner", "manager"],
+  audit: ["owner", "manager"],
 };
 
 export const MOBILE_TAB_ACCESS: Partial<Record<MobileScreen, Role[]>> = {

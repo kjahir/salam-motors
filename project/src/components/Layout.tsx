@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   FileBarChart,
   UserCog,
+  ScrollText,
 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/lib/useAuth";
@@ -33,7 +34,8 @@ export type PageKey =
   | "passport"
   | "history"
   | "policies"
-  | "team";
+  | "team"
+  | "audit";
 
 export interface NavigateParams {
   vehicleId?: string;
@@ -61,12 +63,13 @@ const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
   { key: "history", labelKey: "nav.history", icon: <History size={18} /> },
   { key: "policies", labelKey: "nav.policies", icon: <ShieldCheck size={18} /> },
   { key: "team", labelKey: "nav.team", icon: <UserCog size={18} /> },
+  { key: "audit", labelKey: "nav.audit", icon: <ScrollText size={18} /> },
 ];
 
 const navSections: { key: PageKey }[][] = [
   [{ key: "dashboard" }, { key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
-  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }],
+  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }, { key: "audit" }],
 ];
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
