@@ -48,6 +48,16 @@ export async function updateAppSettings(
   if (error) throw error;
 }
 
+export async function updateCompanyPreferences(
+  patch: Pick<AppSettings, "preferred_language" | "instagram_handle" | "twitter_handle" | "whatsapp_business_number" | "website_url">,
+  updatedBy: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("app_settings")
+    .update({ ...patch, updated_by: updatedBy });
+  if (error) throw error;
+}
+
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
   if (slug.length === 0 || slug.length > 100 || slug.trim() !== slug) return null;
   const { data, error } = await supabase

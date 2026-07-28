@@ -4,23 +4,34 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
+import { Select } from "@/components/ui/Primitives";
+import { getAppLanguage, languageOptions } from "@/i18n";
 
 export function CreateOrganization() {
   const { user, signOut, refreshAccess } = useAuth();
   const { toast } = useToast();
   const { t } = useTranslation();
   const [name, setName] = useState("");
+  const [preferredLanguage, setPreferredLanguage] = useState(getAppLanguage());
   const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const trimmed = name.trim();
+    if (!trimmed) {
       toast(t("organizationPage.enterName"), "error");
+      return;
+    }
+    if (trimmed.length < 2 || trimmed.length > 120) {
+      toast(t("organizationPage.nameLength"), "error");
       return;
     }
     setSubmitting(true);
     try {
-      const { error } = await supabase.rpc("create_organization", { p_name: name.trim() });
+      const { error } = await supabase.rpc("create_organization", {
+        p_name: trimmed,
+        p_preferred_language: preferredLanguage,
+      });
       if (error) throw error;
       toast(t("organizationPage.created"), "success");
       await refreshAccess();
@@ -53,7 +64,16 @@ export function CreateOrganization() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t("organizationPage.placeholder")}
+                maxLength={120}
                 autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5"> {t("organizationPage.preferredLanguage")}</label>
+              <Select
+                value={preferredLanguage}
+                onChange={(v) => setPreferredLanguage(v as typeof preferredLanguage)}
+                options={languageOptions.map((option) => ({ value: option.code, label: option.nativeName }))}
               />
             </div>
             <button

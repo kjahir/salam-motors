@@ -400,6 +400,11 @@ export interface VehicleComplianceStatus {
 export interface AppSettings {
   estimated_profit_margin_low_pct: number;
   estimated_profit_margin_high_pct: number;
+  preferred_language: string | null;
+  instagram_handle: string | null;
+  twitter_handle: string | null;
+  whatsapp_business_number: string | null;
+  website_url: string | null;
   updated_at: string;
   updated_by: string | null;
 }

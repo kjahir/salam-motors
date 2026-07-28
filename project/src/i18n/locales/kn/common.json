@@ -958,7 +958,9 @@
     "create": "Create My Dealership",
     "or": "or",
     "joinHint": "Expecting to join an existing dealership instead? Ask its Owner to send you an invite to {{email}}.",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "preferredLanguage": "Preferred language",
+    "nameLength": "Dealership name must be between 2 and 120 characters"
   },
   "teamPage": {
     "title": "Team",
@@ -985,7 +987,23 @@
     "roleFailed": "Failed to update role",
     "accessSuspended": "Access suspended",
     "accessRestored": "Access restored",
-    "statusFailed": "Failed to update status"
+    "statusFailed": "Failed to update status",
+    "tabs": {
+      "team": "Team",
+      "company": "Company"
+    },
+    "company": {
+      "dealershipName": "Dealership Name",
+      "preferredLanguage": "Preferred language",
+      "instagramHandle": "Instagram handle",
+      "twitterHandle": "Twitter / X handle",
+      "whatsappNumber": "WhatsApp business number",
+      "websiteUrl": "Website URL",
+      "save": "Save changes",
+      "saved": "Company details updated",
+      "saveFailed": "Failed to update company details",
+      "ownerOnlyName": "Only the owner can rename the dealership"
+    }
   },
   "assistant": {
     "launcher": {

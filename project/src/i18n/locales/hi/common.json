@@ -958,7 +958,9 @@
     "create": "मेरी डीलरशिप बनाएं",
     "or": "या",
     "joinHint": "किसी मौजूदा डीलरशिप में जुड़ना चाहते हैं? उसके मालिक से {{email}} पर निमंत्रण भेजने को कहें।",
-    "signOut": "साइन आउट"
+    "signOut": "साइन आउट",
+    "preferredLanguage": "पसंदीदा भाषा",
+    "nameLength": "डीलरशिप का नाम 2 से 120 अक्षरों के बीच होना चाहिए"
   },
   "teamPage": {
     "title": "टीम",
@@ -985,7 +987,23 @@
     "roleFailed": "भूमिका अपडेट करने में विफल",
     "accessSuspended": "एक्सेस निलंबित",
     "accessRestored": "एक्सेस बहाल",
-    "statusFailed": "स्थिति अपडेट करने में विफल"
+    "statusFailed": "स्थिति अपडेट करने में विफल",
+    "tabs": {
+      "team": "टीम",
+      "company": "कंपनी"
+    },
+    "company": {
+      "dealershipName": "डीलरशिप का नाम",
+      "preferredLanguage": "पसंदीदा भाषा",
+      "instagramHandle": "इंस्टाग्राम हैंडल",
+      "twitterHandle": "ट्विटर / X हैंडल",
+      "whatsappNumber": "व्हाट्सएप बिज़नेस नंबर",
+      "websiteUrl": "वेबसाइट यूआरएल",
+      "save": "बदलाव सहेजें",
+      "saved": "कंपनी विवरण अपडेट किया गया",
+      "saveFailed": "कंपनी विवरण अपडेट करने में विफल",
+      "ownerOnlyName": "केवल स्वामी ही डीलरशिप का नाम बदल सकते हैं"
+    }
   },
   "assistant": {
     "launcher": {

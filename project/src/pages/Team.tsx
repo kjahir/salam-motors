@@ -1,16 +1,17 @@
 import { UserCog, Plus, AlertTriangle, Ban, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
+import { PageHeader, Field, Select, Spinner, Tabs } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
-import { fetchMemberships } from "@/lib/queries";
+import { fetchMemberships, fetchAppSettings, updateCompanyPreferences } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { ROLES, ROLE_LABELS } from "@/lib/constants";
-import type { Membership, Role } from "@/lib/types";
+import { languageOptions } from "@/i18n";
+import type { AppSettings, Membership, Role } from "@/lib/types";
 
 const emptyForm = {
   email: "",
@@ -25,11 +26,24 @@ export function Team() {
   const [showInvite, setShowInvite] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [tab, setTab] = useState<"team" | "company">("team");
+  const [orgName, setOrgName] = useState("");
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [companyForm, setCompanyForm] = useState({
+    name: "",
+    preferred_language: "en",
+    instagram_handle: "",
+    twitter_handle: "",
+    whatsapp_business_number: "",
+    website_url: "",
+  });
+  const [savingCompany, setSavingCompany] = useState(false);
   const { toast } = useToast();
   const { orgId, role: myRole, user } = useAuth();
   const { t } = useTranslation();
   const roleLabel = (role: Role) => t("roles." + role, { defaultValue: ROLE_LABELS[role] });
   const isOwner = myRole === "owner";
+  const canEditCompany = myRole === "owner" || myRole === "manager";
 
   const reload = useCallback(async () => {
     try {
@@ -42,9 +56,62 @@ export function Team() {
     }
   }, [t]);
 
+  const reloadCompany = useCallback(async () => {
+    if (!orgId) return;
+    const [{ data: orgRow }, appSettings] = await Promise.all([
+      supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
+      fetchAppSettings(),
+    ]);
+    setOrgName(orgRow?.name ?? "");
+    setSettings(appSettings);
+    setCompanyForm({
+      name: orgRow?.name ?? "",
+      preferred_language: appSettings.preferred_language ?? "en",
+      instagram_handle: appSettings.instagram_handle ?? "",
+      twitter_handle: appSettings.twitter_handle ?? "",
+      whatsapp_business_number: appSettings.whatsapp_business_number ?? "",
+      website_url: appSettings.website_url ?? "",
+    });
+  }, [orgId]);
+
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    reloadCompany();
+  }, [reloadCompany]);
+
+  const handleSaveCompany = async () => {
+    if (!user) return;
+    setSavingCompany(true);
+    try {
+      const trimmedName = companyForm.name.trim();
+      if (isOwner && trimmedName && trimmedName !== orgName) {
+        const { error: nameError } = await supabase
+          .from("organizations")
+          .update({ name: trimmedName })
+          .eq("id", orgId);
+        if (nameError) throw nameError;
+      }
+      await updateCompanyPreferences(
+        {
+          preferred_language: companyForm.preferred_language || null,
+          instagram_handle: companyForm.instagram_handle.trim().replace(/^@/, "") || null,
+          twitter_handle: companyForm.twitter_handle.trim().replace(/^@/, "") || null,
+          whatsapp_business_number: companyForm.whatsapp_business_number.trim() || null,
+          website_url: companyForm.website_url.trim() || null,
+        },
+        user.email ?? user.id,
+      );
+      toast(t("teamPage.company.saved"), "success");
+      await reloadCompany();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t("teamPage.company.saveFailed"), "error");
+    } finally {
+      setSavingCompany(false);
+    }
+  };
 
   const resetForm = () => {
     setShowInvite(false);
@@ -133,7 +200,7 @@ export function Team() {
         description={t("teamPage.description")}
         icon={<UserCog size={20} />}
         actions={
-          isOwner ? (
+          isOwner && tab === "team" ? (
             <button onClick={() => setShowInvite(true)} className="btn-primary">
               <Plus size={16} /> {t("teamPage.inviteMember")}
             </button>
@@ -141,7 +208,86 @@ export function Team() {
         }
       />
 
-      {members.length === 0 ? (
+      <div className="mb-4">
+        <Tabs
+          tabs={[
+            { key: "team", label: t("teamPage.tabs.team") },
+            { key: "company", label: t("teamPage.tabs.company") },
+          ]}
+          active={tab}
+          onChange={(k) => setTab(k as "team" | "company")}
+        />
+      </div>
+
+      {tab === "company" ? (
+        <Card className="p-5 space-y-4">
+          <Field label={t("teamPage.company.dealershipName")}>
+            <input
+              className="input"
+              value={companyForm.name}
+              disabled={!isOwner}
+              maxLength={120}
+              onChange={(e) => setCompanyForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            {!isOwner && <p className="text-xs text-slate-400 mt-1">{t("teamPage.company.ownerOnlyName")}</p>}
+          </Field>
+          <Field label={t("teamPage.company.preferredLanguage")}>
+            <Select
+              value={companyForm.preferred_language}
+              onChange={(v) => setCompanyForm((f) => ({ ...f, preferred_language: v }))}
+              options={languageOptions.map((option) => ({ value: option.code, label: option.nativeName }))}
+              className={canEditCompany ? "" : "pointer-events-none opacity-60"}
+            />
+          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label={t("teamPage.company.instagramHandle")}>
+              <input
+                className="input"
+                value={companyForm.instagram_handle}
+                disabled={!canEditCompany}
+                onChange={(e) => setCompanyForm((f) => ({ ...f, instagram_handle: e.target.value }))}
+                placeholder="dealername"
+              />
+            </Field>
+            <Field label={t("teamPage.company.twitterHandle")}>
+              <input
+                className="input"
+                value={companyForm.twitter_handle}
+                disabled={!canEditCompany}
+                onChange={(e) => setCompanyForm((f) => ({ ...f, twitter_handle: e.target.value }))}
+                placeholder="dealername"
+              />
+            </Field>
+            <Field label={t("teamPage.company.whatsappNumber")}>
+              <input
+                className="input"
+                value={companyForm.whatsapp_business_number}
+                disabled={!canEditCompany}
+                onChange={(e) => setCompanyForm((f) => ({ ...f, whatsapp_business_number: e.target.value }))}
+              />
+            </Field>
+            <Field label={t("teamPage.company.websiteUrl")}>
+              <input
+                className="input"
+                value={companyForm.website_url}
+                disabled={!canEditCompany}
+                onChange={(e) => setCompanyForm((f) => ({ ...f, website_url: e.target.value }))}
+                placeholder="https://"
+              />
+            </Field>
+          </div>
+          {settings?.updated_at && (
+            <p className="text-xs text-slate-400">{new Date(settings.updated_at).toLocaleString()}</p>
+          )}
+          {canEditCompany && (
+            <div className="flex justify-end">
+              <button onClick={handleSaveCompany} disabled={savingCompany} className="btn-primary">
+                {savingCompany ? <Spinner size={14} /> : null} {t("teamPage.company.save")}
+              </button>
+            </div>
+          )}
+        </Card>
+      ) : members.length === 0 ? (
         <Card className="p-6">
           <EmptyState icon={<UserCog size={24} />} title={t("teamPage.noMembers")} description={t("teamPage.noMembersDescription")} />
         </Card>
