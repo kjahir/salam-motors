@@ -1,6 +1,6 @@
 # Ask Salam Assistant — Deployment Runbook
 
-The assistant ships as one Supabase Edge Function (`assistant-turn`), eight new
+The assistant ships as one Supabase Edge Function (`assistant-turn`), nine
 database migrations, and frontend code that is already integrated into the
 desktop and mobile apps. Nothing below runs automatically — every step is a
 deliberate action against the **live production** project.
@@ -26,7 +26,7 @@ individually via `psql` and insert their rows into
 `supabase_migrations.schema_migrations` manually, as done previously in this
 repo.
 
-If the list is clean, push all eight:
+If the list is clean, push all nine:
 
 ```bash
 supabase db push
@@ -44,6 +44,7 @@ The new migrations, in order:
 | `20260727211700_public_passport_rpc.sql` | Secure public passport RPC |
 | `20260727212000_transactional_assistant_commands.sql` | Atomic `assistant_create_vehicle_with_purchase` / `assistant_complete_vehicle_sale` |
 | `20260727212500_revoke_legacy_anonymous_storage_policies.sql` | Defensive no-op cleanup of legacy storage policy names |
+| `20260729100000_atomic_assistant_confirmation_execution.sql` | Confirms and executes each assistant business command in one rollback-safe transaction |
 
 ## 3. Edge Function secrets
 
@@ -60,7 +61,8 @@ supabase secrets set ASSISTANT_ACTION_TOKEN_SECRET="$(openssl rand -base64 48)"
 - `ASSISTANT_ACTION_TOKEN_SECRET` — required for write actions (≥32 random
   bytes). Without it read-only chat works but proposal tools return
   `ACTIONS_NOT_CONFIGURED`. Rotating it invalidates outstanding confirmations,
-  which is safe (users just re-propose).
+  which is safe (users just re-propose). Values shorter than 32 encoded bytes
+  are treated as unavailable and leave write actions disabled.
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are
   injected automatically by the Supabase platform. The service-role key
   enables run/tool-call/assistant-message persistence; without it the chat
@@ -70,9 +72,10 @@ Optional tuning (defaults in `supabase/functions/_shared/assistant/config.ts`):
 
 | Variable | Default |
 |---|---|
-| `OPENAI_MODEL` | `gpt-5.6-terra` | (`gpt-5.6-sol/gpt-5.6-terra`) |
+| `OPENAI_MODEL` | `gpt-5.6-terra` |
 | `OPENAI_REASONING_EFFORT` | `low` (`none/low/medium/high/xhigh/max`) |
 | `OPENAI_TIMEOUT_MS` | 45000 |
+| `ASSISTANT_MAX_TURN_MS` | 30000 |
 | `ASSISTANT_MAX_TOOL_ROUNDS` | 5 |
 | `ASSISTANT_MAX_TOOL_CALLS` | 10 |
 | `ASSISTANT_MAX_OUTPUT_TOKENS` | 3200 |
@@ -130,13 +133,12 @@ Relative imports from `functions/_shared/` are bundled automatically.
 
 ## Known limitations
 
-- Confirmation and action-receipt block content (titles, labels, amounts) is
-  English with en-IN currency formatting — the backend has no i18n framework.
-  The conversational answer text follows the user's language; moving receipt
-  content behind frontend i18n keys is a follow-up.
-- If a business RPC fails *after* `assistant_confirm_action` succeeded, the
-  confirmation token is already consumed; the user must ask the assistant to
-  propose the action again (the idempotency layer prevents duplicates).
+- The SSE endpoint streams status immediately, but answer deltas are emitted
+  only after the complete structured turn passes validation. This protects the
+  renderer but does not reduce model time-to-first-answer-token.
+- There is no application-level per-user request or model-cost quota yet.
+  Configure upstream project limits before broad production rollout, then add
+  a dealership/user rate-limit policy before enabling an open beta.
 - Deno tests for the backend live in `supabase/functions/_shared/assistant/`
   (`deno test _shared/assistant/` from `supabase/functions/`); they are not
   part of the frontend vitest run.
