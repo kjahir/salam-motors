@@ -51,7 +51,7 @@ const LOCALES_REQUIRING_TRANSLATION = new Set(["hi", "ta"]);
 
 // Keys intentionally left in English across every locale (product name, an abbreviation
 // commonly kept in Latin script, etc).
-const ALLOWED_ENGLISH_KEYS = new Set(["app.brand", "status.UPI"]);
+const ALLOWED_ENGLISH_KEYS = new Set(["app.brand", "status.UPI", "auditPage.sources.assistant"]);
 
 describe("localization resources", () => {
   it.each(ALL_LOCALES.map(({ name, data }) => [name, data] as const))(
