@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Supabase query rows are runtime-shaped; every outward record is selected, bounded, and normalized before model use. */
 // deno-lint-ignore-file no-explicit-any
 import {
+  ACTION_SPECS,
   actionSpecByTool,
   actionTitle,
-  ACTION_SPECS,
   type JsonSchema,
 } from "./actions.ts";
 import { sha256Hex, signActionToken } from "./action-token.ts";
@@ -139,6 +139,66 @@ const READ_TOOLS: readonly OpenAIFunctionTool[] = [
     }),
   ),
   functionTool(
+    "search_parties",
+    "Find sellers, buyers, or mechanics by name, mobile, email, type, or exact ID. Use this to resolve party IDs before proposing vehicle purchases or sales.",
+    strictObject({
+      query: nullableText(160),
+      party_type: nullableText(40),
+      party_id: nullableUuid,
+      limit: { type: "integer", minimum: 1, maximum: 50 },
+    }),
+  ),
+  functionTool(
+    "search_partners",
+    "Find investment partners by name, mobile, email, status, or exact ID.",
+    strictObject({
+      query: nullableText(160),
+      status: nullableText(40),
+      partner_id: nullableUuid,
+      limit: { type: "integer", minimum: 1, maximum: 50 },
+    }),
+  ),
+  functionTool(
+    "get_finance_overview",
+    "Read organization finance totals and bounded supporting records for purchases, sales, expenses, investments, distributions, and settlements.",
+    strictObject({
+      vehicle_id: nullableUuid,
+      date_from: nullableText(20),
+      date_to: nullableText(20),
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+    }),
+  ),
+  functionTool(
+    "get_operational_records",
+    "Read inspections, document metadata, listings, and enquiries, optionally for one vehicle.",
+    strictObject({
+      vehicle_id: nullableUuid,
+      record_type: {
+        type: "string",
+        enum: ["all", "inspections", "documents", "listings", "enquiries"],
+      },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+    }),
+  ),
+  functionTool(
+    "get_compliance_policies",
+    "Read compliance policies and their current active state, severity, thresholds, and requirements.",
+    strictObject({
+      active_only: { type: "boolean" },
+      policy_type: nullableText(80),
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+    }),
+  ),
+  functionTool(
+    "get_administration_overview",
+    "Read role-authorized organization membership and audit activity. Sensitive credentials are never returned.",
+    strictObject({
+      section: { type: "string", enum: ["team", "audit", "both"] },
+      entity_type: nullableText(80),
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+    }),
+  ),
+  functionTool(
     "acknowledge_alert",
     "Immediately acknowledge one open alert. Call only after an explicit user request for that exact alert.",
     strictObject({ alert_id: uuid }),
@@ -241,7 +301,8 @@ async function searchInventory(
 ): Promise<ToolResult> {
   const args = asRecord(raw);
   const text = nullableString(args, "query", 160)?.toLocaleLowerCase() ?? null;
-  const status = nullableString(args, "status", 80)?.toLocaleLowerCase() ?? null;
+  const status = nullableString(args, "status", 80)?.toLocaleLowerCase() ??
+    null;
   const category = nullableString(args, "category", 80)?.toLocaleLowerCase() ??
     null;
   const minPrice = nullableNumber(args, "min_price");
@@ -258,38 +319,41 @@ async function searchInventory(
     throw new Error("min_days cannot exceed max_days");
   }
 
-  const result = await context.client
-    .from("vehicles")
-    .select(
-      "id, stock_number, registration_number, category, manufacturer, model, variant, fuel_type, manufacture_year, odometer, current_status, asking_price, minimum_price, onboarded_at",
-    )
-    .eq("org_id", context.principal.orgId)
-    .is("deleted_at", null)
-    .order("onboarded_at", { ascending: false })
-    .limit(250);
+  let request: any = context.client.from("vehicles").select(
+    "id, stock_number, registration_number, category, manufacturer, model, variant, fuel_type, manufacture_year, odometer, current_status, asking_price, minimum_price, onboarded_at",
+    { count: "exact" },
+  ).eq("org_id", context.principal.orgId).is("deleted_at", null)
+    .order("onboarded_at", { ascending: false }).limit(limit);
+  if (text) {
+    const safe = text.replace(/[%_,()]/g, " ").trim();
+    if (safe) {
+      request = request.or(
+        `stock_number.ilike.%${safe}%,registration_number.ilike.%${safe}%,manufacturer.ilike.%${safe}%,model.ilike.%${safe}%,variant.ilike.%${safe}%`,
+      );
+    }
+  }
+  if (status) request = request.ilike("current_status", status);
+  if (category) request = request.ilike("category", category);
+  if (!includeSold) request = request.neq("current_status", "SOLD");
+  if (minPrice !== null) request = request.gte("asking_price", minPrice);
+  if (maxPrice !== null) request = request.lte("asking_price", maxPrice);
+  if (minDays !== null) {
+    request = request.lte(
+      "onboarded_at",
+      new Date(Date.now() - minDays * 86_400_000).toISOString(),
+    );
+  }
+  if (maxDays !== null) {
+    request = request.gte(
+      "onboarded_at",
+      new Date(Date.now() - (maxDays + 1) * 86_400_000).toISOString(),
+    );
+  }
+  const result: any = await request;
   let vehicles = rows(result, "inventory search").map((vehicle) => ({
     ...vehicle,
     days_in_stock: daysSince(vehicle.onboarded_at),
-  })).filter((vehicle) => {
-    const haystack = [
-      vehicle.stock_number,
-      vehicle.registration_number,
-      vehicle.manufacturer,
-      vehicle.model,
-      vehicle.variant,
-    ].filter(Boolean).join(" ").toLocaleLowerCase();
-    const currentStatus = String(vehicle.current_status ?? "").toLowerCase();
-    const currentCategory = String(vehicle.category ?? "").toLowerCase();
-    const price = Number(vehicle.asking_price ?? 0);
-    return (!text || haystack.includes(text)) &&
-      (!status || currentStatus === status) &&
-      (!category || currentCategory === category) &&
-      (includeSold || !currentStatus.includes("sold")) &&
-      (minPrice === null || price >= minPrice) &&
-      (maxPrice === null || price <= maxPrice) &&
-      (minDays === null || vehicle.days_in_stock >= minDays) &&
-      (maxDays === null || vehicle.days_in_stock <= maxDays);
-  }).slice(0, limit);
+  }));
 
   if (financeVisible(context.principal) && vehicles.length) {
     const financeResult = await context.client
@@ -309,7 +373,9 @@ async function searchInventory(
   return {
     ok: true,
     data: {
-      count: vehicles.length,
+      total: result.count ?? vehicles.length,
+      returned: vehicles.length,
+      count: result.count ?? vehicles.length,
       vehicles,
       filters: {
         query: text,
@@ -328,7 +394,7 @@ async function searchInventory(
         `${vehicle.stock_number} · ${vehicle.manufacturer} ${vehicle.model}`,
       )!
     ),
-    truncated: vehicles.length === limit,
+    truncated: Number(result.count ?? vehicles.length) > vehicles.length,
   };
 }
 
@@ -366,7 +432,7 @@ async function getVehicle360(
     complianceResult,
   ] = await Promise.all([
     context.client.from("inspections").select(
-      "id, inspection_type, inspection_date, inspector_name, overall_manual_score, accident_status, summary, status",
+      "id, inspection_type, inspection_date, inspector_name, mechanic_party_id, overall_manual_score, accident_status, summary, status, mechanic:parties(id, full_name, mobile, email), items:inspection_items(id, category, score, condition_level, observation, recommended_action, estimated_cost, urgency, weight)",
     ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
       .order("inspection_date", { ascending: false }).limit(20),
     context.client.from("vehicle_documents").select(
@@ -401,6 +467,7 @@ async function getVehicle360(
     inspections: rows(inspectionResult, "inspections"),
     documents: rows(documentResult, "documents"),
     media_count: rows(mediaResult, "media").length,
+    media: rows(mediaResult, "media"),
     alerts: rows(alertResult, "alerts"),
     listings: rows(listingResult, "listings"),
     status_history: rows(historyResult, "status history"),
@@ -413,37 +480,42 @@ async function getVehicle360(
     )
   ) {
     const saleResult = await context.client.from("sales").select(
-      "id, buyer_party_id, sale_date, sale_price, discount, buyer_charges, payment_status, delivery_status, delivered_at, status, created_at",
+      "id, buyer_party_id, sale_date, sale_price, discount, buyer_charges, payment_status, delivery_status, delivered_at, status, created_at, buyer:parties(id, full_name, mobile, email), payments:sale_payments(id, amount, payment_method, reference, paid_at)",
     ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
       .order("sale_date", { ascending: false }).limit(20);
     data.sales = rows(saleResult, "sales");
   }
 
   if (financeVisible(context.principal)) {
-    const [summaryResult, purchaseResult, expenseResult, investmentResult, distributionResult] =
-      await Promise.all([
-        context.client.from("vehicle_financial_summary").select("*").eq(
-          "vehicle_id",
-          vehicleId,
-        ).maybeSingle(),
-        context.client.from("purchases").select(
-          "id, seller_party_id, purchase_date, agreed_price, broker_commission, other_fee, payment_status, created_at",
-        ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
-          .limit(20),
-        context.client.from("expenses").select(
-          "id, category, amount, expense_date, vendor, approval_status, created_at",
-        ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
-          .is("deleted_at", null).order("expense_date", { ascending: false })
-          .limit(200),
-        context.client.from("investments").select(
-          "id, partner_id, amount, investment_date, purpose, status, created_at",
-        ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
-          .limit(200),
-        context.client.from("profit_distributions").select(
-          "id, sale_id, partner_id, principal_return, profit_share, loss_share, total_entitlement, amount_paid, balance_payable, status, created_at",
-        ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
-          .limit(200),
-      ]);
+    const [
+      summaryResult,
+      purchaseResult,
+      expenseResult,
+      investmentResult,
+      distributionResult,
+    ] = await Promise.all([
+      context.client.from("vehicle_financial_summary").select("*").eq(
+        "vehicle_id",
+        vehicleId,
+      ).maybeSingle(),
+      context.client.from("purchases").select(
+        "id, seller_party_id, purchase_date, agreed_price, broker_commission, other_fee, payment_status, created_at, seller:parties(id, full_name, mobile, email), payments:purchase_payments(id, amount, payment_method, reference, paid_at)",
+      ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
+        .limit(20),
+      context.client.from("expenses").select(
+        "id, category, amount, expense_date, vendor, approval_status, created_at",
+      ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
+        .is("deleted_at", null).order("expense_date", { ascending: false })
+        .limit(200),
+      context.client.from("investments").select(
+        "id, partner_id, amount, investment_date, purpose, status, created_at, partner:partners(id, name, mobile, email)",
+      ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
+        .limit(200),
+      context.client.from("profit_distributions").select(
+        "id, sale_id, partner_id, principal_return, profit_share, loss_share, total_entitlement, amount_paid, balance_payable, status, created_at, partner:partners(id, name, mobile, email)",
+      ).eq("org_id", context.principal.orgId).eq("vehicle_id", vehicleId)
+        .limit(200),
+    ]);
     data.financial_summary = one(summaryResult, "financial summary");
     data.purchases = rows(purchaseResult, "purchases");
     data.expenses = rows(expenseResult, "expenses");
@@ -587,9 +659,8 @@ async function getAlertsCompliance(
   ]);
   const alerts = rows(alertResult, "alerts");
   const compliance = rows(complianceResult, "compliance");
-  const entities = alerts.map((alert) =>
-    entity("alert", alert.id, alert.title)
-  ).filter(Boolean) as ToolEntity[];
+  const entities = alerts.map((alert) => entity("alert", alert.id, alert.title))
+    .filter(Boolean) as ToolEntity[];
   for (const item of compliance) {
     const vehicle = entity(
       "vehicle",
@@ -621,6 +692,15 @@ async function getPartnerPortfolio(
   const partnerId = context.principal.kind === "partner"
     ? context.principal.partnerId
     : requestedPartnerId;
+  if (!partnerId) {
+    return {
+      ok: false,
+      error: {
+        code: "PARTNER_REQUIRED",
+        message: "Choose one partner before requesting a partner portfolio",
+      },
+    };
+  }
 
   let investmentQuery = context.client.from("investments").select(
     "id, partner_id, vehicle_id, amount, investment_date, purpose, payment_method, reference, status, created_at",
@@ -636,7 +716,9 @@ async function getPartnerPortfolio(
     investmentQuery = investmentQuery.eq("partner_id", partnerId);
     distributionQuery = distributionQuery.eq("partner_id", partnerId);
   }
-  if (!includeSettled) distributionQuery = distributionQuery.neq("status", "Paid");
+  if (!includeSettled) {
+    distributionQuery = distributionQuery.neq("status", "Paid");
+  }
 
   const [investmentResult, distributionResult] = await Promise.all([
     investmentQuery,
@@ -663,8 +745,7 @@ async function getPartnerPortfolio(
       0,
     ),
     entitlement: distributions.reduce(
-      (sum: number, item: any) =>
-        sum + Number(item.total_entitlement ?? 0),
+      (sum: number, item: any) => sum + Number(item.total_entitlement ?? 0),
       0,
     ),
     paid: distributions.reduce(
@@ -691,9 +772,382 @@ async function getPartnerPortfolio(
   }
   return {
     ok: true,
-    data: { partner_id: partnerId, summary, investments, distributions, settlements },
+    data: {
+      partner_id: partnerId,
+      summary,
+      investments,
+      distributions,
+      settlements,
+    },
     entities,
     truncated: investments.length === 500 || distributions.length === 500,
+  };
+}
+
+async function searchParties(
+  context: ToolExecutionContext,
+  raw: unknown,
+): Promise<ToolResult> {
+  const args = asRecord(raw);
+  const query = nullableString(args, "query", 160);
+  const partyType = nullableString(args, "party_type", 40);
+  const partyId = optionalUuid(args, "party_id");
+  const limit = requiredNumber(args, "limit", 1, 50);
+  if (!Number.isInteger(limit)) throw new Error("limit must be an integer");
+  let request = context.client.from("parties").select(
+    "id, party_type, party_subtype, full_name, mobile, email, city, state, consent, created_at",
+    { count: "exact" },
+  ).eq("org_id", context.principal.orgId).is("deleted_at", null)
+    .order("full_name", { ascending: true }).limit(limit);
+  if (partyId) request = request.eq("id", partyId);
+  if (partyType) request = request.eq("party_type", partyType);
+  if (query) {
+    const safe = query.replace(/[%_,()]/g, " ").trim();
+    if (safe) {
+      request = request.or(
+        `full_name.ilike.%${safe}%,mobile.ilike.%${safe}%,email.ilike.%${safe}%`,
+      );
+    }
+  }
+  const result: any = await request;
+  const parties = rows(result, "party search");
+  return {
+    ok: true,
+    data: {
+      total: result.count ?? parties.length,
+      returned: parties.length,
+      parties,
+    },
+    entities: parties.map((party) =>
+      entity("party", party.id, party.full_name)!
+    ),
+    truncated: Number(result.count ?? parties.length) > parties.length,
+  };
+}
+
+async function searchPartners(
+  context: ToolExecutionContext,
+  raw: unknown,
+): Promise<ToolResult> {
+  const args = asRecord(raw);
+  const query = nullableString(args, "query", 160);
+  const status = nullableString(args, "status", 40);
+  const partnerId = optionalUuid(args, "partner_id");
+  const limit = requiredNumber(args, "limit", 1, 50);
+  if (!Number.isInteger(limit)) throw new Error("limit must be an integer");
+  let request = context.client.from("partners").select(
+    "id, name, mobile, email, default_profit_share_pct, joining_date, status, created_at",
+    { count: "exact" },
+  ).eq("org_id", context.principal.orgId).is("deleted_at", null)
+    .order("name", { ascending: true }).limit(limit);
+  if (partnerId) request = request.eq("id", partnerId);
+  if (status) request = request.eq("status", status);
+  if (query) {
+    const safe = query.replace(/[%_,()]/g, " ").trim();
+    if (safe) {
+      request = request.or(
+        `name.ilike.%${safe}%,mobile.ilike.%${safe}%,email.ilike.%${safe}%`,
+      );
+    }
+  }
+  const result: any = await request;
+  const partners = rows(result, "partner search");
+  return {
+    ok: true,
+    data: {
+      total: result.count ?? partners.length,
+      returned: partners.length,
+      partners,
+    },
+    entities: partners.map((partner) =>
+      entity("partner", partner.id, partner.name)!
+    ),
+    truncated: Number(result.count ?? partners.length) > partners.length,
+  };
+}
+
+async function getFinanceOverview(
+  context: ToolExecutionContext,
+  raw: unknown,
+): Promise<ToolResult> {
+  const args = asRecord(raw);
+  const vehicleId = optionalUuid(args, "vehicle_id");
+  const dateFrom = nullableString(args, "date_from", 20);
+  const dateTo = nullableString(args, "date_to", 20);
+  const limit = requiredNumber(args, "limit", 1, 100);
+  if (!Number.isInteger(limit)) throw new Error("limit must be an integer");
+  const apply = (request: any, dateColumn: string) => {
+    let next = request.eq("org_id", context.principal.orgId).limit(limit);
+    if (vehicleId) next = next.eq("vehicle_id", vehicleId);
+    if (dateFrom) next = next.gte(dateColumn, dateFrom);
+    if (dateTo) next = next.lte(dateColumn, dateTo);
+    return next;
+  };
+  const [
+    purchasesResult,
+    salesResult,
+    expensesResult,
+    investmentsResult,
+    distributionsResult,
+  ] = await Promise.all([
+    apply(
+      context.client.from("purchases").select(
+        "id, vehicle_id, seller_party_id, purchase_date, agreed_price, broker_commission, other_fee, payment_status",
+        { count: "exact" },
+      ),
+      "purchase_date",
+    ).order("purchase_date", { ascending: false }),
+    apply(
+      context.client.from("sales").select(
+        "id, vehicle_id, buyer_party_id, sale_date, sale_price, discount, buyer_charges, payment_status, delivery_status, status",
+        { count: "exact" },
+      ),
+      "sale_date",
+    ).order("sale_date", { ascending: false }),
+    apply(
+      context.client.from("expenses").select(
+        "id, vehicle_id, category, amount, expense_date, vendor, approval_status, paid_by_partner_id",
+        { count: "exact" },
+      ).is("deleted_at", null),
+      "expense_date",
+    ).order("expense_date", { ascending: false }),
+    apply(
+      context.client.from("investments").select(
+        "id, vehicle_id, partner_id, amount, investment_date, purpose, payment_method, status",
+        { count: "exact" },
+      ),
+      "investment_date",
+    ).order("investment_date", { ascending: false }),
+    apply(
+      context.client.from("profit_distributions").select(
+        "id, vehicle_id, sale_id, partner_id, principal_return, profit_share, loss_share, total_entitlement, amount_paid, balance_payable, status, created_at",
+        { count: "exact" },
+      ),
+      "created_at",
+    ).order("created_at", { ascending: false }),
+  ]);
+  const group = (result: any, operation: string) => {
+    const records = rows(result, operation);
+    return {
+      total: result.count ?? records.length,
+      returned: records.length,
+      records,
+    };
+  };
+  const purchases = group(purchasesResult, "finance purchases");
+  const sales = group(salesResult, "finance sales");
+  const expenses = group(expensesResult, "finance expenses");
+  const investments = group(investmentsResult, "finance investments");
+  const distributions = group(distributionsResult, "finance distributions");
+  const all = [purchases, sales, expenses, investments, distributions];
+  return {
+    ok: true,
+    data: {
+      filters: { vehicle_id: vehicleId, date_from: dateFrom, date_to: dateTo },
+      purchases,
+      sales,
+      expenses,
+      investments,
+      distributions,
+    },
+    entities: [
+      ...purchases.records.map((item: any) =>
+        entity("purchase", item.id, `Purchase ${item.id}`)!
+      ),
+      ...sales.records.map((item: any) =>
+        entity("sale", item.id, `Sale ${item.id}`)!
+      ),
+      ...expenses.records.map((item: any) =>
+        entity("expense", item.id, `${item.category} expense`)!
+      ),
+      ...investments.records.map((item: any) =>
+        entity("investment", item.id, `Investment ${item.id}`)!
+      ),
+    ],
+    truncated: all.some((item) => Number(item.total) > item.returned),
+  };
+}
+
+async function getOperationalRecords(
+  context: ToolExecutionContext,
+  raw: unknown,
+): Promise<ToolResult> {
+  const args = asRecord(raw);
+  const vehicleId = optionalUuid(args, "vehicle_id");
+  const recordType = requiredString(args, "record_type", 40);
+  const supported = [
+    "all",
+    "inspections",
+    "documents",
+    "listings",
+    "enquiries",
+  ];
+  if (!supported.includes(recordType)) {
+    throw new Error("record_type is not supported");
+  }
+  const limit = requiredNumber(args, "limit", 1, 100);
+  if (!Number.isInteger(limit)) throw new Error("limit must be an integer");
+  const read = async (
+    table: string,
+    select: string,
+    order: string,
+    deleted = false,
+  ) => {
+    let request = context.client.from(table).select(select, { count: "exact" })
+      .eq("org_id", context.principal.orgId).order(order, { ascending: false })
+      .limit(limit);
+    if (vehicleId) request = request.eq("vehicle_id", vehicleId);
+    if (deleted) request = request.is("deleted_at", null);
+    const result: any = await request;
+    const records = rows(result, `operational ${table}`);
+    return {
+      total: result.count ?? records.length,
+      returned: records.length,
+      records,
+    };
+  };
+  const selected = (name: string) =>
+    recordType === "all" || recordType === name;
+  const [inspections, documents, listings, enquiries] = await Promise.all([
+    selected("inspections")
+      ? read(
+        "inspections",
+        "id, vehicle_id, inspection_type, inspection_date, inspector_name, mechanic_party_id, overall_manual_score, accident_status, summary, status, created_at",
+        "inspection_date",
+      )
+      : null,
+    selected("documents")
+      ? read(
+        "vehicle_documents",
+        "id, vehicle_id, document_type, issue_date, expiry_date, issuer, verification_status, verified_at, version, created_at",
+        "created_at",
+        true,
+      )
+      : null,
+    selected("listings")
+      ? read(
+        "listings",
+        "id, vehicle_id, asking_price, minimum_price, status, listed_at, public_slug, created_at",
+        "created_at",
+      )
+      : null,
+    selected("enquiries")
+      ? read(
+        "enquiries",
+        "id, vehicle_id, listing_id, buyer_party_id, enquiry_date, channel, offered_price, status, follow_up_date, assigned_to, created_at",
+        "enquiry_date",
+      )
+      : null,
+  ]);
+  const groups = { inspections, documents, listings, enquiries };
+  const entities: ToolEntity[] = [];
+  for (const [type, group] of Object.entries(groups)) {
+    for (const item of group?.records ?? []) {
+      const source = entity(
+        type.slice(0, -1),
+        item.id,
+        `${type.slice(0, -1)} ${item.id}`,
+      );
+      if (source) entities.push(source);
+    }
+  }
+  return {
+    ok: true,
+    data: { vehicle_id: vehicleId, ...groups },
+    entities,
+    truncated: Object.values(groups).some((group) =>
+      group !== null && Number(group.total) > group.returned
+    ),
+  };
+}
+
+async function getCompliancePolicies(
+  context: ToolExecutionContext,
+  raw: unknown,
+): Promise<ToolResult> {
+  const args = asRecord(raw);
+  const activeOnly = bool(args, "active_only");
+  const policyType = nullableString(args, "policy_type", 80);
+  const limit = requiredNumber(args, "limit", 1, 100);
+  if (!Number.isInteger(limit)) throw new Error("limit must be an integer");
+  let request = context.client.from("compliance_policies").select(
+    "id, name, description, category, rule_type, params, severity, is_active, resolution_mode, created_at, updated_at",
+    { count: "exact" },
+  ).eq("org_id", context.principal.orgId).is("deleted_at", null)
+    .order("updated_at", { ascending: false }).limit(limit);
+  if (activeOnly) request = request.eq("is_active", true);
+  if (policyType) request = request.eq("rule_type", policyType);
+  const result: any = await request;
+  const policies = rows(result, "compliance policies");
+  return {
+    ok: true,
+    data: {
+      total: result.count ?? policies.length,
+      returned: policies.length,
+      policies,
+    },
+    entities: policies.map((policy) =>
+      entity("compliance_policy", policy.id, policy.name)!
+    ),
+    truncated: Number(result.count ?? policies.length) > policies.length,
+  };
+}
+
+async function getAdministrationOverview(
+  context: ToolExecutionContext,
+  raw: unknown,
+): Promise<ToolResult> {
+  const args = asRecord(raw);
+  const section = requiredString(args, "section", 20);
+  if (!["team", "audit", "both"].includes(section)) {
+    throw new Error("section is not supported");
+  }
+  const entityType = nullableString(args, "entity_type", 80);
+  const limit = requiredNumber(args, "limit", 1, 100);
+  if (!Number.isInteger(limit)) throw new Error("limit must be an integer");
+  const teamPromise = section === "team" || section === "both"
+    ? context.client.from("memberships").select(
+      "id, user_id, role, status, display_name, email, invited_at, joined_at, created_at",
+      { count: "exact" },
+    ).eq("org_id", context.principal.orgId).order("created_at", {
+      ascending: false,
+    }).limit(limit)
+    : Promise.resolve({ data: [], error: null, count: 0 });
+  let auditRequest: any = context.client.from("audit_logs").select(
+    "id, entity_type, entity_id, action, performed_by, performed_at, reason, source, changed_fields",
+    { count: "exact" },
+  ).eq("org_id", context.principal.orgId).order("performed_at", {
+    ascending: false,
+  }).limit(limit);
+  if (entityType) auditRequest = auditRequest.eq("entity_type", entityType);
+  const auditPromise = section === "audit" || section === "both"
+    ? auditRequest
+    : Promise.resolve({ data: [], error: null, count: 0 });
+  const [teamResult, auditResult]: any[] = await Promise.all([
+    teamPromise,
+    auditPromise,
+  ]);
+  const team = rows(teamResult, "team overview");
+  const audit = rows(auditResult, "audit overview");
+  return {
+    ok: true,
+    data: {
+      team: {
+        total: teamResult.count ?? team.length,
+        returned: team.length,
+        records: team,
+      },
+      audit: {
+        total: auditResult.count ?? audit.length,
+        returned: audit.length,
+        records: audit,
+      },
+    },
+    entities: audit.map((item) =>
+      entity("audit_log", item.id, `${item.entity_type} ${item.action}`)!
+    ),
+    truncated: Number(teamResult.count ?? team.length) > team.length ||
+      Number(auditResult.count ?? audit.length) > audit.length,
   };
 }
 
@@ -704,39 +1158,18 @@ async function acknowledgeAlert(
   const args = asRecord(raw);
   const alertId = requiredString(args, "alert_id", 64);
   if (!isUuid(alertId)) throw new Error("alert_id must be a UUID");
-  const currentResult = await context.client.from("alerts")
-    .select("id, vehicle_id, title, status").eq("id", alertId)
-    .eq("org_id", context.principal.orgId).maybeSingle();
-  const current = one(currentResult, "read alert");
-  if (!current) {
-    return {
-      ok: false,
-      error: { code: "NOT_FOUND", message: "Alert not found or not visible" },
-    };
-  }
-  if (current.status !== "Open") {
-    return {
-      ok: false,
-      error: {
-        code: "INVALID_STATE",
-        message: `Alert is already ${String(current.status).toLowerCase()}`,
-      },
-      entities: [entity("alert", current.id, current.title)!],
-    };
-  }
-  const result = await context.client.from("alerts").update({
-    status: "Acknowledged",
-    acknowledged_at: new Date().toISOString(),
-  }).eq("id", alertId).eq("org_id", context.principal.orgId)
-    .eq("status", "Open")
-    .select("id, vehicle_id, title, status, acknowledged_at").maybeSingle();
-  const updated = one(result, "acknowledge alert");
+  const result = await context.client.rpc("assistant_acknowledge_alert", {
+    p_org_id: context.principal.orgId,
+    p_alert_id: alertId,
+  });
+  const updated = Array.isArray(result.data) ? result.data[0] : result.data;
+  if (result.error) throw new ToolDatabaseError("acknowledge alert");
   if (!updated) {
     return {
       ok: false,
       error: {
         code: "CONFLICT",
-        message: "Alert changed before it could be acknowledged",
+        message: "The alert is not open or is no longer visible",
       },
     };
   }
@@ -778,10 +1211,9 @@ async function createProposal(
     target_type: parsed.targetType,
     target_id: parsed.targetId,
   });
-  const idempotencyKey =
-    `proposal:${context.runId ?? context.conversationId}:${
-      localHash.slice(0, 32)
-    }`;
+  const idempotencyKey = `proposal:${context.runId ?? context.conversationId}:${
+    localHash.slice(0, 32)
+  }`;
   const localizedTitle = actionTitle(spec.actionType, context.locale);
   const preview = {
     title: localizedTitle,
@@ -910,6 +1342,24 @@ export async function executeTool(
       case "get_partner_portfolio":
         result = await getPartnerPortfolio(context, raw);
         break;
+      case "search_parties":
+        result = await searchParties(context, raw);
+        break;
+      case "search_partners":
+        result = await searchPartners(context, raw);
+        break;
+      case "get_finance_overview":
+        result = await getFinanceOverview(context, raw);
+        break;
+      case "get_operational_records":
+        result = await getOperationalRecords(context, raw);
+        break;
+      case "get_compliance_policies":
+        result = await getCompliancePolicies(context, raw);
+        break;
+      case "get_administration_overview":
+        result = await getAdministrationOverview(context, raw);
+        break;
       case "acknowledge_alert":
         result = await acknowledgeAlert(context, raw);
         break;
@@ -946,4 +1396,3 @@ export async function executeTool(
     };
   }
 }
-

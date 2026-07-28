@@ -1,4 +1,3 @@
-
 export const REASONING_EFFORTS = [
   "none",
   "low",
@@ -35,9 +34,8 @@ export interface AssistantConfig {
   safetySalt: string;
   rpc: {
     createProposal: string;
-    confirmAction: string;
-    createVehicle: string;
-    completeSale: string;
+    confirmAndCreateVehicle: string;
+    confirmAndCompleteSale: string;
   };
 }
 
@@ -63,9 +61,27 @@ function configuredEffort(): ReasoningEffort {
     : "low";
 }
 
+export function usableActionTokenSecret(
+  value: string | undefined,
+): string | null {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  if (new TextEncoder().encode(normalized).byteLength < 32) {
+    return null;
+  }
+  return normalized;
+}
+
 export function loadAssistantConfig(): AssistantConfig {
   const supabaseUrl = env("SUPABASE_URL");
   const supabaseAnonKey = env("SUPABASE_ANON_KEY");
+  const configuredActionSecret = env("ASSISTANT_ACTION_TOKEN_SECRET");
+  const actionTokenSecret = usableActionTokenSecret(configuredActionSecret);
+  if (configuredActionSecret && !actionTokenSecret) {
+    console.error(
+      "ASSISTANT_ACTION_TOKEN_SECRET must contain at least 32 bytes; assistant writes are disabled",
+    );
+  }
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(
       "SUPABASE_URL and SUPABASE_ANON_KEY are required for assistant-turn",
@@ -100,7 +116,7 @@ export function loadAssistantConfig(): AssistantConfig {
       10_000,
       60_000,
     ),
-    actionTokenSecret: env("ASSISTANT_ACTION_TOKEN_SECRET") ?? null,
+    actionTokenSecret,
     actionTtlSeconds: boundedInteger(
       "ASSISTANT_ACTION_TTL_SECONDS",
       600,
@@ -112,13 +128,11 @@ export function loadAssistantConfig(): AssistantConfig {
     rpc: {
       createProposal: env("ASSISTANT_RPC_CREATE_PROPOSAL") ??
         "assistant_create_action_proposal",
-      confirmAction: env("ASSISTANT_RPC_CONFIRM_ACTION") ??
-        "assistant_confirm_action",
-      createVehicle: env("ASSISTANT_RPC_CREATE_VEHICLE") ??
-        "assistant_create_vehicle_with_purchase",
-      completeSale: env("ASSISTANT_RPC_COMPLETE_SALE") ??
-        "assistant_complete_vehicle_sale",
+      confirmAndCreateVehicle:
+        env("ASSISTANT_RPC_CONFIRM_AND_CREATE_VEHICLE") ??
+          "assistant_confirm_and_create_vehicle_with_purchase",
+      confirmAndCompleteSale: env("ASSISTANT_RPC_CONFIRM_AND_COMPLETE_SALE") ??
+        "assistant_confirm_and_complete_vehicle_sale",
     },
   };
 }
-

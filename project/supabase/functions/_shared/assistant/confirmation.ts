@@ -79,13 +79,35 @@ function assertBinding(
 function assertProposal(
   proposal: StoredActionProposal,
   payload: ActionTokenPayload,
-): void {
+): "execute" | "replay" {
+  if (
+    proposal.id !== payload.proposalId ||
+    proposal.orgId !== payload.orgId ||
+    proposal.requestedByUserId !== payload.userId ||
+    proposal.conversationId !== payload.conversationId
+  ) {
+    throw new AssistantHttpError(
+      409,
+      "ACTION_PROPOSAL_BINDING_MISMATCH",
+      "The proposed action no longer belongs to this confirmation.",
+    );
+  }
   if (proposal.actionType !== payload.actionType) {
     throw new AssistantHttpError(
       409,
       "ACTION_MISMATCH",
       "The proposed action no longer matches this confirmation.",
     );
+  }
+  if (proposal.argumentHash !== payload.argumentHash) {
+    throw new AssistantHttpError(
+      409,
+      "ACTION_ARGUMENTS_CHANGED",
+      "The action details changed after this confirmation was issued. Ask the assistant to propose it again.",
+    );
+  }
+  if (proposal.status === "completed" && isRecord(proposal.outcome)) {
+    return "replay";
   }
   if (proposal.status !== "proposed") {
     throw new AssistantHttpError(
@@ -101,19 +123,10 @@ function assertProposal(
       "This confirmation has expired. Ask the assistant to propose the action again.",
     );
   }
-  if (proposal.argumentHash !== payload.argumentHash) {
-    throw new AssistantHttpError(
-      409,
-      "ACTION_ARGUMENTS_CHANGED",
-      "The action details changed after this confirmation was issued. Ask the assistant to propose it again.",
-    );
-  }
+  return "execute";
 }
 
-function rpcError(
-  error: SupabaseErrorLike,
-  phase: "confirm" | "execute",
-): AssistantHttpError {
+function rpcError(error: SupabaseErrorLike): AssistantHttpError {
   const detail = (error.message ?? "").slice(0, 300);
   switch (error.code) {
     case "28000":
@@ -141,7 +154,7 @@ function rpcError(
         "This confirmation has expired. Ask the assistant to propose the action again.",
       );
     case "22023":
-      return phase === "confirm"
+      return /arguments changed/i.test(detail)
         ? new AssistantHttpError(
           409,
           "ACTION_ARGUMENTS_CHANGED",
@@ -159,19 +172,10 @@ function rpcError(
         detail || "A matching record already exists.",
       );
     default:
-      if (phase === "execute") {
-        return new AssistantHttpError(
-          422,
-          "ACTION_EXECUTION_FAILED",
-          detail || "The action could not be completed.",
-        );
-      }
-      console.error("assistant confirmation rpc failed", error.code, detail);
       return new AssistantHttpError(
-        500,
-        "ACTION_FAILED",
-        "The action could not be completed. Verify the record before retrying.",
-        true,
+        422,
+        "ACTION_EXECUTION_FAILED",
+        detail || "The action could not be completed.",
       );
   }
 }
@@ -397,7 +401,7 @@ export async function runConfirmedAction(
   try {
     onStatus?.("assistant.status.revalidating");
     const proposal = await persistence.loadActionProposal(payload.proposalId);
-    assertProposal(proposal, payload);
+    const proposalState = assertProposal(proposal, payload);
 
     const spec = actionSpecByType(payload.actionType);
     if (!spec) {
@@ -415,48 +419,50 @@ export async function runConfirmedAction(
       );
     }
 
-    // Stored arguments are dispatched verbatim: the command RPC recomputes
-    // the argument hash from them, so any re-derivation would break it.
-    let parsed: ReturnType<typeof parseCanonicalProposalArguments>;
-    try {
-      parsed = parseCanonicalProposalArguments(
-        payload.actionType,
-        proposal.arguments,
-      );
-    } catch {
-      throw new AssistantHttpError(
-        409,
-        "ACTION_ARGUMENTS_INVALID",
-        "The stored action details are no longer valid. Ask the assistant to propose the action again.",
-      );
+    let data: unknown = proposal.outcome;
+    if (proposalState === "execute") {
+      // Stored arguments are dispatched verbatim. The atomic RPC confirms
+      // and executes in one database transaction, then recomputes the
+      // argument hash from this exact command payload.
+      let parsed: ReturnType<typeof parseCanonicalProposalArguments>;
+      try {
+        parsed = parseCanonicalProposalArguments(
+          payload.actionType,
+          proposal.arguments,
+        );
+      } catch {
+        throw new AssistantHttpError(
+          409,
+          "ACTION_ARGUMENTS_INVALID",
+          "The stored action details are no longer valid. Ask the assistant to propose the action again.",
+        );
+      }
+
+      onStatus?.("assistant.status.executing");
+      const response = payload.actionType === "vehicle.create_with_purchase"
+        ? await client.rpc(config.rpc.confirmAndCreateVehicle, {
+          p_proposal_id: payload.proposalId,
+          p_confirmation_token: payload.confirmationToken,
+          p_expected_argument_hash: payload.argumentHash,
+          p_org_id: parsed.orgId,
+          p_idempotency_key: proposal.idempotencyKey,
+          p_vehicle: parsed.vehicle,
+          p_purchase: parsed.purchase,
+          p_payment: parsed.payment,
+          p_listing: parsed.listing,
+        })
+        : await client.rpc(config.rpc.confirmAndCompleteSale, {
+          p_proposal_id: payload.proposalId,
+          p_confirmation_token: payload.confirmationToken,
+          p_expected_argument_hash: payload.argumentHash,
+          p_org_id: parsed.orgId,
+          p_idempotency_key: proposal.idempotencyKey,
+          p_vehicle_id: parsed.vehicleId,
+          p_sale: parsed.sale,
+        });
+      if (response.error) throw rpcError(response.error);
+      data = response.data;
     }
-
-    const { error: confirmError } = await client.rpc(config.rpc.confirmAction, {
-      p_proposal_id: payload.proposalId,
-      p_confirmation_token: payload.confirmationToken,
-      p_expected_argument_hash: payload.argumentHash,
-    });
-    if (confirmError) throw rpcError(confirmError, "confirm");
-
-    onStatus?.("assistant.status.executing");
-    const { data, error } = payload.actionType === "vehicle.create_with_purchase"
-      ? await client.rpc(config.rpc.createVehicle, {
-        p_org_id: parsed.orgId,
-        p_action_proposal_id: proposal.id,
-        p_idempotency_key: proposal.idempotencyKey,
-        p_vehicle: parsed.vehicle,
-        p_purchase: parsed.purchase,
-        p_payment: parsed.payment,
-        p_listing: parsed.listing,
-      })
-      : await client.rpc(config.rpc.completeSale, {
-        p_org_id: parsed.orgId,
-        p_action_proposal_id: proposal.id,
-        p_idempotency_key: proposal.idempotencyKey,
-        p_vehicle_id: parsed.vehicleId,
-        p_sale: parsed.sale,
-      });
-    if (error) throw rpcError(error, "execute");
 
     const turn = receiptTurn(
       payload,

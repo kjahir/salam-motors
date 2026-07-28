@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { getAppLocale } from "@/i18n";
 import { useAuth } from "@/lib/useAuth";
 import { requestAssistantTurn } from "./api";
+import { assistantErrorTranslationKey } from "./errors";
 import {
   createFallbackTurn,
   type AssistantAction,
@@ -65,7 +66,8 @@ function nowId(prefix: string): string {
 }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const activeLocale = getAppLocale(i18n.resolvedLanguage);
   const { user, role, membership, partner, orgId } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
@@ -100,6 +102,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     abortRef.current = null;
     setIsBusy(false);
     setStatusText("");
+    setStreamingText("");
   }, []);
 
   const clearConversation = useCallback(() => {
@@ -133,6 +136,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const principalKind = membership ? "staff" : partner ? "partner" : "unlinked";
     const principalKey = user?.id && orgId
       ? [
+          activeLocale,
           user.id,
           orgId,
           principalKind,
@@ -147,12 +151,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       clearConversation();
     }
     principalRef.current = principalKey;
-  }, [clearConversation, membership, orgId, partner, role, user?.id]);
+  }, [activeLocale, clearConversation, membership, orgId, partner, role, user?.id]);
 
   const sendMessage = useCallback(
     async (rawMessage: string) => {
       const message = rawMessage.trim();
-      if (!message || isBusy) return;
+      if (!message || isBusy || abortRef.current) return;
 
       lastUserMessageRef.current = message;
       const userMessage: AssistantChatMessage = {
@@ -185,7 +189,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           {
             conversationId,
             message,
-            locale: getAppLocale(),
+            locale: activeLocale,
             context: appContext,
             stream: true,
           },
@@ -207,8 +211,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           controller.signal,
         );
 
-        setConversationId(response.conversationId ?? response.turn.conversationId);
         if (abortRef.current !== controller) return;
+        setConversationId(response.conversationId ?? response.turn.conversationId);
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessageId
@@ -225,16 +229,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         const aborted = error instanceof DOMException && error.name === "AbortError";
         const text = aborted
           ? t("assistant.status.stopped")
-          : error instanceof Error
-            ? error.message
-            : t("assistant.errors.generic");
+          : t(assistantErrorTranslationKey(error));
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessageId
               ? {
                   ...item,
                   text,
-                  turn: createFallbackTurn(text, getAppLocale(), aborted ? "neutral" : "danger"),
+                  turn: createFallbackTurn(text, activeLocale, aborted ? "neutral" : "danger"),
                   status: aborted ? "complete" : "failed",
                   error: aborted ? undefined : text,
                 }
@@ -250,12 +252,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [appContext, conversationId, isBusy, localizeStatus, t],
+    [activeLocale, appContext, conversationId, isBusy, localizeStatus, t],
   );
 
   const executeAction = useCallback(
     async (token: string) => {
-      if (isBusy) return;
+      if (isBusy || abortRef.current) return;
       const assistantMessageId = nowId("assistant-action");
       setMessages((current) => [
         ...current,
@@ -277,7 +279,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           {
             conversationId,
             message: "Execute the confirmed action.",
-            locale: getAppLocale(),
+            locale: activeLocale,
             context: appContext,
             stream: true,
             action: { token },
@@ -289,8 +291,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           },
           controller.signal,
         );
-        setConversationId(response.conversationId ?? response.turn.conversationId);
         if (abortRef.current !== controller) return;
+        setConversationId(response.conversationId ?? response.turn.conversationId);
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessageId
@@ -299,16 +301,19 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           ),
         );
       } catch (error) {
-        const text = error instanceof Error ? error.message : t("assistant.errors.actionFailed");
+        const aborted = error instanceof DOMException && error.name === "AbortError";
+        const text = aborted
+          ? t("assistant.status.stopped")
+          : t(assistantErrorTranslationKey(error, true));
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessageId
               ? {
                   ...item,
                   text,
-                  turn: createFallbackTurn(text, getAppLocale(), "danger"),
-                  status: "failed",
-                  error: text,
+                  turn: createFallbackTurn(text, activeLocale, aborted ? "neutral" : "danger"),
+                  status: aborted ? "complete" : "failed",
+                  error: aborted ? undefined : text,
                 }
               : item,
           ),
@@ -321,7 +326,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [appContext, conversationId, isBusy, localizeStatus, t],
+    [activeLocale, appContext, conversationId, isBusy, localizeStatus, t],
   );
 
   const handleAction = useCallback(

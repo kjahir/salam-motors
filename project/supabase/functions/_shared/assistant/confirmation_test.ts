@@ -41,14 +41,15 @@ const config = {
   maxToolCalls: 10,
   maxOutputTokens: 3200,
   openAiTimeoutMs: 45000,
+  maxTurnMs: 30000,
   actionTokenSecret: SECRET,
   actionTtlSeconds: 600,
   safetySalt: "test",
   rpc: {
     createProposal: "assistant_create_action_proposal",
-    confirmAction: "assistant_confirm_action",
-    createVehicle: "assistant_create_vehicle_with_purchase",
-    completeSale: "assistant_complete_vehicle_sale",
+    confirmAndCreateVehicle:
+      "assistant_confirm_and_create_vehicle_with_purchase",
+    confirmAndCompleteSale: "assistant_confirm_and_complete_vehicle_sale",
   },
 } as AssistantConfig;
 
@@ -113,8 +114,7 @@ interface StubState {
 
 function stubs(options: {
   proposal?: StoredActionProposal;
-  confirmError?: { code: string; message: string };
-  executeError?: { code: string; message: string };
+  rpcError?: { code: string; message: string };
   executeResult?: Record<string, unknown>;
 }): {
   state: StubState;
@@ -125,16 +125,9 @@ function stubs(options: {
   const client = {
     rpc(name: string, params: Record<string, unknown>) {
       state.rpcCalls.push({ name, params });
-      if (name === config.rpc.confirmAction) {
-        return Promise.resolve(
-          options.confirmError
-            ? { data: null, error: options.confirmError }
-            : { data: [{ proposal_status: "confirmed" }], error: null },
-        );
-      }
       return Promise.resolve(
-        options.executeError
-          ? { data: null, error: options.executeError }
+        options.rpcError
+          ? { data: null, error: options.rpcError }
           : { data: options.executeResult ?? {}, error: null },
       );
     },
@@ -226,6 +219,29 @@ Deno.test("principal mismatch fails before any persistence write", async () => {
   assert(state.rpcCalls.length === 0, "no RPC should be called");
 });
 
+Deno.test("proposal binding drift is rejected before execution", async () => {
+  const token = await signActionToken(salePayload(), SECRET);
+  const { state, client, persistence } = stubs({
+    proposal: saleProposal({
+      conversationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    }),
+  });
+
+  await expectHttpError(
+    () =>
+      runConfirmedAction({
+        client,
+        persistence,
+        principal,
+        config,
+        request: request(token),
+      }),
+    409,
+    "ACTION_PROPOSAL_BINDING_MISMATCH",
+  );
+  assert(state.rpcCalls.length === 0, "no RPC should be called");
+});
+
 Deno.test("already-processed proposal is rejected", async () => {
   const token = await signActionToken(salePayload(), SECRET);
   const { state, client, persistence } = stubs({
@@ -270,11 +286,11 @@ Deno.test("argument hash drift is rejected", async () => {
   assert(state.rpcCalls.length === 0, "no RPC should be called");
 });
 
-Deno.test("confirm RPC permission failure maps to 403", async () => {
+Deno.test("atomic RPC permission failure maps to 403", async () => {
   const token = await signActionToken(salePayload(), SECRET);
   const { state, client, persistence } = stubs({
     proposal: saleProposal(),
-    confirmError: { code: "42501", message: "Step-up authentication required" },
+    rpcError: { code: "42501", message: "Step-up authentication required" },
   });
   const error = await expectHttpError(
     () =>
@@ -292,7 +308,7 @@ Deno.test("confirm RPC permission failure maps to 403", async () => {
     error.message.includes("Step-up"),
     "database message should surface",
   );
-  assert(state.rpcCalls.length === 1, "execution must not run after 42501");
+  assert(state.rpcCalls.length === 1, "only the atomic RPC should run");
 });
 
 Deno.test("sale completion dispatches stored arguments verbatim", async () => {
@@ -319,9 +335,20 @@ Deno.test("sale completion dispatches stored arguments verbatim", async () => {
     request: request(token),
   });
 
-  assert(state.rpcCalls.length === 2, "confirm then execute");
-  const execute = state.rpcCalls[1];
-  assert(execute.name === config.rpc.completeSale, "wrong execute RPC");
+  assert(
+    state.rpcCalls.length === 1,
+    "confirmation and execution must be atomic",
+  );
+  const execute = state.rpcCalls[0];
+  assert(
+    execute.name === config.rpc.confirmAndCompleteSale,
+    "wrong atomic RPC",
+  );
+  assert(
+    execute.params.p_confirmation_token === "raw-confirmation-token-value" &&
+      execute.params.p_expected_argument_hash === "hash-1",
+    "confirmation binding must be passed to the atomic RPC",
+  );
   assert(execute.params.p_org_id === ORG_ID, "org must come from stored args");
   assert(execute.params.p_vehicle_id === VEHICLE_ID, "vehicle id mismatch");
   assert(
@@ -394,8 +421,11 @@ Deno.test("vehicle onboarding dispatches stored arguments verbatim", async () =>
     request: request(token),
   });
 
-  const execute = state.rpcCalls[1];
-  assert(execute.name === config.rpc.createVehicle, "wrong execute RPC");
+  const execute = state.rpcCalls[0];
+  assert(
+    execute.name === config.rpc.confirmAndCreateVehicle,
+    "wrong atomic RPC",
+  );
   assert(
     JSON.stringify(execute.params.p_vehicle) ===
       JSON.stringify(createArguments.vehicle),
@@ -409,5 +439,48 @@ Deno.test("vehicle onboarding dispatches stored arguments verbatim", async () =>
   assert(
     block.details.some((detail) => detail.value === "SM-0042"),
     "receipt should include the stock number",
+  );
+});
+
+Deno.test("completed proposal replay returns its stored receipt without another RPC", async () => {
+  const token = await signActionToken(salePayload(), SECRET);
+  const outcome = {
+    vehicle_id: VEHICLE_ID,
+    sale_id: "77777777-7777-4777-8777-777777777777",
+    status: "SOLD",
+    net_revenue: 505000,
+    total_vehicle_cost: 400000,
+    gross_profit: 105000,
+    distribution_count: 2,
+    unallocated_profit: 0,
+  };
+  const { state, client, persistence } = stubs({
+    proposal: saleProposal({ status: "completed", outcome }),
+  });
+
+  const result = await runConfirmedAction({
+    client,
+    persistence,
+    principal,
+    config,
+    request: request(token),
+  });
+
+  assert(
+    state.rpcCalls.length === 0,
+    "a completed action must not execute again",
+  );
+  const block = result.turn.blocks[0];
+  assert(
+    block.type === "action_receipt",
+    "stored outcome should render a receipt",
+  );
+  assert(
+    block.status === "success",
+    "replayed receipt should remain successful",
+  );
+  assert(
+    state.finishRunInputs[0]?.status === "completed",
+    "the replay run should complete",
   );
 });

@@ -3,8 +3,8 @@
 import { safetyIdentifier } from "./action-token.ts";
 import { actionSpecByTool } from "./actions.ts";
 import {
-  REASONING_EFFORTS,
   type AssistantConfig,
+  REASONING_EFFORTS,
   type ReasoningEffort,
 } from "./config.ts";
 import { AssistantHttpError } from "./http.ts";
@@ -14,9 +14,9 @@ import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
 import {
   executeTool,
+  type ToolExecutionContext,
   toolRisk,
   toolsForPrincipal,
-  type ToolExecutionContext,
 } from "./tools.ts";
 import type {
   AssistantBlock,
@@ -30,11 +30,7 @@ import type {
   ToolEntity,
   ToolResult,
 } from "./types.ts";
-import {
-  asRecord,
-  isRecord,
-  normalizeModelTurn,
-} from "./validation.ts";
+import { asRecord, isRecord, normalizeModelTurn } from "./validation.ts";
 
 interface FunctionCall {
   type: "function_call";
@@ -79,6 +75,12 @@ const READ_ONLY_TOOLS = new Set([
   "get_dashboard_ageing",
   "get_alerts_compliance",
   "get_partner_portfolio",
+  "search_parties",
+  "search_partners",
+  "get_finance_overview",
+  "get_operational_records",
+  "get_compliance_policies",
+  "get_administration_overview",
 ]);
 
 // Reads that surface finance or compliance data, plus every write-proposal
@@ -87,6 +89,11 @@ const READ_ONLY_TOOLS = new Set([
 // config.reasoningEffort as one static value for the whole turn.
 const FINANCE_OR_COMPLIANCE_READ_TOOLS = new Set([
   "get_partner_portfolio",
+  "search_parties",
+  "search_partners",
+  "get_finance_overview",
+  "get_compliance_policies",
+  "get_administration_overview",
   "get_alerts_compliance",
 ]);
 
@@ -111,9 +118,41 @@ function reasoningEffortForRound(
   return current >= floor ? config.reasoningEffort : "medium";
 }
 
-// Safety margin (beyond one worst-case model round trip) reserved before
-// deciding a round can no longer safely afford another tool round trip.
-const ROUND_DEADLINE_BUFFER_MS = 2_000;
+// Keep enough of the wall-clock budget for a final, text-only response after
+// tool execution. Model requests use the remaining per-round budget instead
+// of the (potentially larger) global OpenAI timeout.
+const FINAL_RESPONSE_RESERVE_MS = 10_000;
+const MIN_TOOL_DECISION_MS = 5_000;
+const DEADLINE_CLOCK_SKEW_MS = 250;
+
+export interface ModelRoundPlan {
+  forceFinal: boolean;
+  timeoutMs: number;
+}
+
+export function planModelRound(input: {
+  remainingMs: number;
+  configuredTimeoutMs: number;
+  round: number;
+  maxRounds: number;
+}): ModelRoundPlan {
+  const usableMs = Math.max(1, input.remainingMs - DEADLINE_CLOCK_SKEW_MS);
+  const isLastRound = input.round === input.maxRounds - 1;
+  const canAffordToolRound =
+    usableMs >= FINAL_RESPONSE_RESERVE_MS + MIN_TOOL_DECISION_MS;
+  const forceFinal = isLastRound || !canAffordToolRound;
+  const roundBudgetMs = forceFinal
+    ? usableMs
+    : usableMs - FINAL_RESPONSE_RESERVE_MS;
+
+  return {
+    forceFinal,
+    timeoutMs: Math.max(
+      1,
+      Math.min(input.configuredTimeoutMs, roundBudgetMs),
+    ),
+  };
+}
 
 function functionCalls(output: unknown[]): FunctionCall[] {
   return output.flatMap((item) => {
@@ -159,6 +198,7 @@ function parseArguments(value: string): Record<string, unknown> {
 async function requestResponses(
   config: AssistantConfig,
   body: Record<string, unknown>,
+  timeoutMs: number,
 ): Promise<ResponsesEnvelope> {
   if (!config.openAiApiKey) {
     throw new AssistantHttpError(
@@ -168,7 +208,7 @@ async function requestResponses(
     );
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.openAiTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${config.openAiBaseUrl}/responses`, {
       method: "POST",
@@ -179,7 +219,9 @@ async function requestResponses(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const payload = await response.json().catch(() => ({})) as ResponsesEnvelope;
+    const payload = await response.json().catch(
+      () => ({}),
+    ) as ResponsesEnvelope;
     if (!response.ok) {
       console.error(
         "OpenAI Responses request failed",
@@ -286,31 +328,103 @@ function groundProvenance(
   }
   const sources = turn.provenance.sources.flatMap(
     (source): AssistantSource[] => {
-    if (source.id) {
-      const canonical = evidence.get(`${source.entity}:${source.id}`);
-      return canonical
+      if (source.id) {
+        const canonical = evidence.get(`${source.entity}:${source.id}`);
+        return canonical
+          ? [{
+            entity: canonical.type,
+
+            id: canonical.id,
+            label: canonical.label,
+          }]
+          : [];
+      }
+      const matches = byType.get(source.entity) ?? [];
+      return matches.length
         ? [{
-          entity: canonical.type,
-          id: canonical.id,
-          label: canonical.label,
+          entity: source.entity,
+          label: source.label,
+          count: Math.min(source.count ?? matches.length, matches.length),
         }]
         : [];
-    }
-    const matches = byType.get(source.entity) ?? [];
-    return matches.length
-      ? [{
-        entity: source.entity,
-        label: source.label,
-        count: Math.min(source.count ?? matches.length, matches.length),
-      }]
-      : [];
-  });
+    },
+  );
   return {
     ...turn,
     provenance: {
       ...turn.provenance,
       sources,
       truncated: truncated || turn.provenance.truncated || undefined,
+    },
+  };
+}
+
+async function correctTurnLanguage(input: {
+  turn: AssistantTurn;
+  locale: string;
+  principal: AssistantPrincipal;
+  context: AssistantTurnRequest["context"];
+  conversationId: string;
+  config: AssistantConfig;
+  timeoutMs: number;
+  vehicleIds: ReadonlySet<string>;
+}): Promise<{ turn: AssistantTurn; usage: RunUsage }> {
+  const languageName = input.locale === "ta-IN"
+    ? "Tamil"
+    : input.locale === "hi-IN"
+    ? "Hindi"
+    : input.locale;
+  const response = await requestResponses(input.config, {
+    model: input.config.model,
+    reasoning: { effort: "low" },
+    instructions: `Rewrite the supplied AssistantTurn in ${languageName}.
+Translate only user-facing prose: answer.text, block titles/descriptions/labels/summaries/messages, follow-up labels/messages, and confirmation display text.
+Preserve the JSON structure, schemaVersion, locale, IDs, entity types, vehicle names, stock and registration numbers, money values, app status codes, dates, URLs, action tokens, risks, page names, parameter keys, and provenance exactly.
+Do not add, remove, infer, or alter facts. Return exactly the AssistantTurn JSON schema.`,
+    input: [{ role: "user", content: JSON.stringify(input.turn) }],
+    tools: [],
+    tool_choice: "none",
+    parallel_tool_calls: false,
+    text: { format: MODEL_TURN_FORMAT },
+    max_output_tokens: input.config.maxOutputTokens,
+    safety_identifier: await safetyIdentifier(
+      input.principal.userId,
+      input.config.safetySalt,
+    ),
+    store: false,
+  }, input.timeoutMs);
+  const rawText = outputText(response);
+  if (!rawText) {
+    throw new AssistantHttpError(
+      502,
+      "MODEL_OUTPUT_INVALID",
+      "The AI service returned an incomplete translated response.",
+      true,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new AssistantHttpError(
+      502,
+      "MODEL_OUTPUT_INVALID",
+      "The AI service returned an invalid translated response.",
+      true,
+    );
+  }
+  return {
+    turn: normalizeModelTurn(
+      parsed,
+      input.conversationId,
+      input.locale,
+      input.principal,
+      input.context,
+      new Set(input.vehicleIds),
+    ),
+    usage: {
+      inputTokens: response.usage?.input_tokens ?? 0,
+      outputTokens: response.usage?.output_tokens ?? 0,
     },
   };
 }
@@ -389,15 +503,21 @@ export async function runOpenAITurn(
   for (let round = 0; round < input.config.maxToolRounds; round += 1) {
     input.onStatus?.("assistant.status.thinking");
 
-    // Once the remaining turn budget can no longer safely absorb another
-    // full model round trip (or this is the last permitted round), force a
-    // text-only response instead of letting the run either blow past the
-    // deadline or exhaust maxToolRounds into a hard error.
     const remainingMs = deadlineAt - Date.now();
-    const isLastRound = round === input.config.maxToolRounds - 1;
-    const deadlineClose =
-      remainingMs <= input.config.openAiTimeoutMs + ROUND_DEADLINE_BUFFER_MS;
-    const forceFinal = isLastRound || deadlineClose;
+    if (remainingMs <= DEADLINE_CLOCK_SKEW_MS) {
+      throw new AssistantHttpError(
+        504,
+        "MODEL_TIMEOUT",
+        "The AI service took too long to respond.",
+        true,
+      );
+    }
+    const roundPlan = planModelRound({
+      remainingMs,
+      configuredTimeoutMs: input.config.openAiTimeoutMs,
+      round,
+      maxRounds: input.config.maxToolRounds,
+    });
 
     const response = await requestResponses(input.config, {
       model: input.config.model,
@@ -412,7 +532,7 @@ export async function runOpenAITurn(
       }),
       input: replay,
       tools: toolsForPrincipal(input.principal),
-      tool_choice: forceFinal ? "none" : "auto",
+      tool_choice: roundPlan.forceFinal ? "none" : "auto",
       parallel_tool_calls: true,
       text: { format: MODEL_TURN_FORMAT },
       max_output_tokens: input.config.maxOutputTokens,
@@ -422,7 +542,7 @@ export async function runOpenAITurn(
       ),
       include: ["reasoning.encrypted_content"],
       store: false,
-    });
+    }, roundPlan.timeoutMs);
     usage.inputTokens += response.usage?.input_tokens ?? 0;
     usage.outputTokens += response.usage?.output_tokens ?? 0;
     const output = Array.isArray(response.output) ? response.output : [];
@@ -430,7 +550,7 @@ export async function runOpenAITurn(
     // tool_choice:"none" guarantees a text-only response, but calls is also
     // forced empty defensively so a forced-final round always resolves to a
     // real (if partial) answer instead of ever re-entering tool execution.
-    const calls = forceFinal ? [] : functionCalls(output);
+    const calls = roundPlan.forceFinal ? [] : functionCalls(output);
 
     if (!calls.length) {
       const rawText = outputText(response);
@@ -464,14 +584,8 @@ export async function runOpenAITurn(
         input.request.locale,
         input.principal,
         input.request.context,
-        vehicleIds,
       );
-      turn = canonicalizeConfirmationBlocks(turn, issuedProposals);
-      turn = groundProvenance(turn, evidence, anyTruncated);
-
-      // Language-mismatch is observability-only for now: flag and log, no
-      // corrective re-prompt round.
-      const conformance = checkScriptConformance(
+      let conformance = checkScriptConformance(
         input.request.locale,
         turn.answer.text,
       );
@@ -486,7 +600,42 @@ export async function runOpenAITurn(
           input.request.locale,
           conformance.ratio ?? 0,
         );
+        input.onStatus?.("assistant.status.finalizing");
+        const remainingForCorrection = Math.min(
+          input.config.openAiTimeoutMs,
+          deadlineAt - Date.now() - DEADLINE_CLOCK_SKEW_MS,
+        );
+        if (remainingForCorrection > 1_000) {
+          const corrected = await correctTurnLanguage({
+            turn,
+            locale: input.request.locale,
+            principal: input.principal,
+            context: input.request.context,
+            conversationId: input.conversationId,
+            config: input.config,
+            timeoutMs: remainingForCorrection,
+            vehicleIds,
+          });
+          usage.inputTokens += corrected.usage.inputTokens;
+          usage.outputTokens += corrected.usage.outputTokens;
+          turn = corrected.turn;
+          conformance = checkScriptConformance(
+            input.request.locale,
+            turn.answer.text,
+          );
+          if (conformance.checked && conformance.mismatch) {
+            throw new AssistantHttpError(
+              502,
+              "MODEL_LANGUAGE_MISMATCH",
+              "The AI service could not produce an answer in the selected language.",
+              true,
+            );
+          }
+        }
       }
+
+      turn = canonicalizeConfirmationBlocks(turn, issuedProposals);
+      turn = groundProvenance(turn, evidence, anyTruncated);
 
       return { turn, usage };
     }
@@ -543,4 +692,3 @@ export async function runOpenAITurn(
 export function isProposalTool(name: string): boolean {
   return Boolean(actionSpecByTool(name));
 }
-

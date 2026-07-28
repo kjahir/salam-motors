@@ -19,6 +19,7 @@ export const ASSISTANT_PAGES = [
   "history",
   "policies",
   "team",
+  "audit",
 ] as const;
 export type AssistantPage = (typeof ASSISTANT_PAGES)[number];
 
@@ -29,6 +30,7 @@ const PAGE_ROLES: Partial<
   partners: ["owner", "manager", "accountant"],
   finance: ["owner", "manager", "accountant"],
   team: ["owner", "manager"],
+  audit: ["owner", "manager"],
 };
 const MOBILE_PAGES = new Set<AssistantPage>([
   "dashboard",

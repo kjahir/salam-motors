@@ -58,6 +58,48 @@ export const CAPABILITIES: readonly Capability[] = [
     roles: ["owner", "manager", "accountant", "partner"],
   },
   {
+    id: "parties.search",
+    toolName: "search_parties",
+    description: "Find authorized sellers, buyers, and mechanics",
+    risk: "read",
+    roles: ALL_STAFF,
+  },
+  {
+    id: "partners.search",
+    toolName: "search_partners",
+    description: "Find investment partners",
+    risk: "read",
+    roles: ["owner", "manager", "accountant"],
+  },
+  {
+    id: "finance.overview",
+    toolName: "get_finance_overview",
+    description: "Read role-authorized finance and report data",
+    risk: "read",
+    roles: ["owner", "manager", "accountant"],
+  },
+  {
+    id: "operations.records",
+    toolName: "get_operational_records",
+    description: "Read inspections, documents, listings, and enquiries",
+    risk: "read",
+    roles: ALL_STAFF,
+  },
+  {
+    id: "compliance.policies",
+    toolName: "get_compliance_policies",
+    description: "Read compliance policy configuration",
+    risk: "read",
+    roles: ALL_STAFF,
+  },
+  {
+    id: "administration.overview",
+    toolName: "get_administration_overview",
+    description: "Read authorized team and audit information",
+    risk: "read",
+    roles: ["owner", "manager"],
+  },
+  {
     id: "alert.acknowledge",
     toolName: "acknowledge_alert",
     description: "Acknowledge an explicitly identified alert",
@@ -94,4 +136,3 @@ export function canUseTool(
 ): boolean {
   return capabilitiesFor(principal).some((item) => item.toolName === toolName);
 }
-

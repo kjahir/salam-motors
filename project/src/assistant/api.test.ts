@@ -14,6 +14,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import { requestAssistantTurn } from "./api";
+import { AssistantApiError } from "./errors";
 
 const request: AssistantTurnRequest = {
   message: "Show ageing inventory",
@@ -84,6 +85,36 @@ describe("assistant API client", () => {
     await expect(requestAssistantTurn(request)).rejects.toThrow("session has expired");
   });
 
+  it("preserves backend error metadata for localized presentation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "ASSISTANT_BUSY",
+              message: "The assistant is receiving too many requests.",
+              retryable: true,
+            },
+          }),
+          { status: 429, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    try {
+      await requestAssistantTurn(request);
+      throw new Error("expected request to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AssistantApiError);
+      expect(error).toMatchObject({
+        code: "ASSISTANT_BUSY",
+        status: 429,
+        retryable: true,
+      });
+    }
+  });
+
   it("surfaces the message from the backend's nested error envelope", async () => {
     vi.stubGlobal(
       "fetch",
@@ -129,6 +160,29 @@ describe("assistant API client", () => {
     await expect(requestAssistantTurn(request)).rejects.toThrow("Too many requests");
   });
 
+  it("preserves metadata from an SSE error event", async () => {
+    const payload = [
+      'event: error\ndata: {"status":504,"code":"MODEL_TIMEOUT","message":"Too slow","retryable":true}',
+      "event: done\ndata: {}",
+      "",
+    ].join("\n\n");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(payload, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    );
+
+    await expect(requestAssistantTurn(request)).rejects.toMatchObject({
+      code: "MODEL_TIMEOUT",
+      status: 504,
+      retryable: true,
+    });
+  });
+
   it("falls back to a generic message for unparseable error bodies", async () => {
     vi.stubGlobal(
       "fetch",
@@ -142,5 +196,23 @@ describe("assistant API client", () => {
     await expect(requestAssistantTurn(request)).rejects.toThrow(
       "The assistant request failed (502).",
     );
+  });
+
+  it("classifies an invalid successful JSON response for localization", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<html>not JSON</html>", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(requestAssistantTurn(request)).rejects.toMatchObject({
+      code: "MODEL_OUTPUT_INVALID",
+      status: 502,
+      retryable: true,
+    });
   });
 });
