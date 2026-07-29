@@ -7,14 +7,14 @@ import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
-import { computeCostBreakdown, computeProfit, computeOverallScore, computePartnerFunding, documentCompleteness, computeEstimatedProfitRange } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
+import { computeCostBreakdown, computeProfit, computeOverallScore, documentCompleteness, computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicleFull, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
 import { evaluateVehicleCompliance, findViolatingRecordIds, acknowledgeViolation, isHardBlocking, type ComplianceViolation } from "@/lib/compliance";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { SEVERITY_RANK } from "@/lib/constants";
 import type { UploadedFile } from "@/lib/uploadedFile";
-import type { VehicleWithRelations, Partner, InspectionItem, CompliancePolicy, AppSettings } from "@/lib/types";
+import type { VehicleWithRelations, InspectionItem, CompliancePolicy, AppSettings } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 import { MobileDocumentsTab } from "./MobileDocumentsTab";
 import { MobileExpensesTab } from "./MobileExpensesTab";
@@ -23,38 +23,25 @@ import { MobileSaleTab } from "./MobileSaleTab";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
 
-export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab, highlightPolicyId, autoAdd }: {
+export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab, highlightPolicyId }: {
   vehicleId: string;
   onNavigate: MobileNavigate;
   onBack: () => void;
   initialTab?: string;
   highlightPolicyId?: string;
-  autoAdd?: boolean;
 }) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
-  const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [showDelete, setShowDelete] = useState(false);
-  // One-shot flag for the mobile "+" -> Expense/Document/Sales autoAdd targets: re-armed
-  // whenever a fresh navigation lands here (vehicleId/initialTab change), and flipped off
-  // as soon as the target tab consumes it -- so switching tabs manually afterwards (which
-  // remounts the tab component) never reopens the add sheet a second time.
-  const [autoAddActive, setAutoAddActive] = useState(Boolean(autoAdd));
   const { t } = useTranslation();
   const trStatus = (value: string) => t("status." + value, { defaultValue: value.replace(/_/g, " ") });
 
   useEffect(() => {
     if (initialTab) setTab(initialTab);
   }, [initialTab, highlightPolicyId, vehicleId]);
-
-  useEffect(() => {
-    setAutoAddActive(Boolean(autoAdd));
-  }, [autoAdd, initialTab, vehicleId]);
-
-  const consumeAutoAdd = () => setAutoAddActive(false);
 
   const reload = async () => {
     const v = await fetchVehicleFull(vehicleId);
@@ -65,15 +52,13 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [v, p, pol, st] = await Promise.all([
+      const [v, pol, st] = await Promise.all([
         fetchVehicleFull(vehicleId),
-        fetchPartners(),
         fetchCompliancePolicies(),
         fetchAppSettings(),
       ]);
       if (cancelled) return;
       setVehicle(v);
-      setPartners(p);
       setPolicies(pol);
       setSettings(st);
       setLoading(false);
@@ -91,7 +76,6 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
     () => computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh),
     [cost, marginLow, marginHigh],
   );
-  const funding = useMemo(() => computePartnerFunding(vehicle?.investments ?? []), [vehicle]);
   const latestInspection = (vehicle?.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
   const inspectionItems = useMemo(() => latestInspection?.items ?? [], [latestInspection]);
   const overallScore = useMemo(() => computeOverallScore(inspectionItems), [inspectionItems]);
@@ -188,20 +172,15 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
             onNavigate={onNavigate}
           />
         )}
-        {tab === "documents" && <MobileDocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} autoAdd={autoAddActive} onAutoAddConsumed={consumeAutoAdd} />}
-        {tab === "expenses" && <MobileExpensesTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} autoAdd={autoAddActive} onAutoAddConsumed={consumeAutoAdd} />}
-        {tab === "inspection" && <MobileInspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
+        {tab === "documents" && <MobileDocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} onNavigate={onNavigate} />}
+        {tab === "expenses" && <MobileExpensesTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} onNavigate={onNavigate} />}
+        {tab === "inspection" && <MobileInspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} onNavigate={onNavigate} />}
         {tab === "sale" && (
           <MobileSaleTab
             vehicle={vehicle}
-            cost={cost}
             profit={profit}
-            funding={funding}
-            partners={partners}
             complianceViolations={complianceViolations}
-            onChanged={reload}
-            autoAdd={autoAddActive}
-            onAutoAddConsumed={consumeAutoAdd}
+            onNavigate={onNavigate}
           />
         )}
       </div>

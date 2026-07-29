@@ -672,9 +672,10 @@
     "estProfit": "மதிப்பிடப்பட்ட லாபம்"
   },
   "mobileAdd": {
-    "title": "நீங்கள் எதைச் சேர்க்க விரும்புகிறீர்கள்?",
     "chooseVehicle": "ஒரு வாகனத்தைத் தேர்ந்தெடுக்கவும்",
-    "noVehicles": "வாகனங்கள் எதுவும் கிடைக்கவில்லை"
+    "noVehicles": "வாகனங்கள் எதுவும் கிடைக்கவில்லை",
+    "openMenu": "சேர்",
+    "closeMenu": "மூடு"
   },
   "mobileVehicle": {
     "vehicle": "வாகனம்",
@@ -755,7 +756,15 @@
     "saveFailed": "செலவை சேமிக்க முடியவில்லை",
     "deleteConfirm": "இந்த செலவை நீக்கவா?",
     "removed": "செலவு நீக்கப்பட்டது",
-    "deleteFailed": "நீக்க முடியவில்லை"
+    "deleteFailed": "நீக்க முடியவில்லை",
+    "addExpenses": "செலவுகளைச் சேர்",
+    "description": "விளக்கம்",
+    "paidBy": "செலுத்தியவர்",
+    "addRow": "வரிசை சேர்",
+    "saveCount_one": "{{count}} செலவைச் சேமி",
+    "saveCount_other": "{{count}} செலவுகளைச் சேமி",
+    "addedCount_one": "{{count}} செலவு சேர்க்கப்பட்டது",
+    "addedCount_other": "{{count}} செலவுகள் சேர்க்கப்பட்டன"
   },
   "mobileInspection": {
     "overall": "மொத்தம்",
@@ -764,7 +773,13 @@
     "weightTap": "எடை {{weight}}% · மாற்ற தட்டவும்",
     "pass": "பாஸ்",
     "fail": "ஃபெயில்",
-    "pending": "நிலுவை"
+    "pending": "நிலுவை",
+    "addTitle": "ஆய்வு சேர்",
+    "save": "ஆய்வைச் சேமி",
+    "saved": "ஆய்வு பதிவு செய்யப்பட்டது",
+    "saveFailed": "ஆய்வை சேமிக்க முடியவில்லை",
+    "summary": "சுருக்கம் (விருப்பத்தேர்வு)",
+    "summaryPlaceholder": "ஒட்டுமொத்த நிலை குறிப்புகள்…"
   },
   "mobileDocuments": {
     "prepFailed": "ஆவண பட்டியலை தயார் செய்ய முடியவில்லை",

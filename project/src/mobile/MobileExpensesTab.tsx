@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, Spinner, EmptyState, Sheet, Button, Field, Select, Input } from "./ui/primitives";
@@ -12,13 +12,15 @@ import { syncVehicleAlerts } from "@/lib/compliance";
 import { formatINR, formatDate } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import type { Expense, VehicleWithRelations } from "@/lib/types";
+import type { MobileNavigate } from "./MobileApp";
 
-const emptyForm = { category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" };
-
-export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, onAutoAddConsumed }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[]; autoAdd?: boolean; onAutoAddConsumed?: () => void }) {
-  const [sheetOpen, setSheetOpen] = useState(false);
+// Editing an existing expense stays a lightweight inline Sheet (it's a quick field tweak
+// on a record already on screen). Adding new expenses now lives on its own full-screen
+// page (MobileAddExpense.tsx, batch entry) reached via onNavigate — see MobileApp.tsx's
+// "+" icon row and the "Add" button below.
+export function MobileExpensesTab({ vehicle, onChanged, highlightIds, onNavigate }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[]; onNavigate: MobileNavigate }) {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState({ category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" });
   const [submitting, setSubmitting] = useState(false);
   const [evidenceFiles, setEvidenceFiles] = useState<UploadedFile[]>([]);
   const [originalBillUrls, setOriginalBillUrls] = useState<string[]>([]);
@@ -26,9 +28,9 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, o
   const [evidenceLightbox, setEvidenceLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const { user } = useAuth();
   const { t } = useTranslation();
   const trStatus = (value: string) => t("status." + value, { defaultValue: value });
-  const { user } = useAuth();
 
   useEffect(() => {
     if (!highlightIds || highlightIds.length === 0) return;
@@ -40,21 +42,12 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightIds?.join(",")]);
 
-  const resetSheet = () => {
-    setSheetOpen(false);
+  const closeEdit = () => {
     setEditingExpense(null);
-    setForm(emptyForm);
+    setForm({ category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" });
     setEvidenceFiles([]);
     setOriginalBillUrls([]);
     setUploadSessionId(crypto.randomUUID());
-  };
-
-  const openAdd = () => {
-    setEditingExpense(null);
-    setForm(emptyForm);
-    setEvidenceFiles([]);
-    setOriginalBillUrls([]);
-    setSheetOpen(true);
   };
 
   const openEdit = (e: Expense) => {
@@ -63,24 +56,13 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, o
     const existing = e.bill_urls?.length ? e.bill_urls : e.bill_url ? [e.bill_url] : [];
     setEvidenceFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
     setOriginalBillUrls(existing);
-    setSheetOpen(true);
   };
-
-  // Reached via the mobile "+" -> Expense autoAdd target: opens the add sheet once on
-  // mount, guarded so it doesn't reopen on re-renders (e.g. after onChanged() refetches).
-  const autoAddFired = useRef(false);
-  useEffect(() => {
-    if (!autoAdd || autoAddFired.current) return;
-    autoAddFired.current = true;
-    openAdd();
-    onAutoAddConsumed?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoAdd]);
 
   const expenses = vehicle.expenses ?? [];
   const total = expenses.filter((e) => e.approval_status === "Approved" || e.approval_status === "Paid").reduce((s, e) => s + e.amount, 0);
 
   const handleSave = async () => {
+    if (!editingExpense) return;
     if (!form.amount || Number(form.amount) <= 0) {
       toast(t("mobileExpenses.validAmount"), "error");
       return;
@@ -89,41 +71,21 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, o
     try {
       const billUrls = evidenceFiles.map((f) => f.path);
       const removedPaths = diffRemovedPaths(originalBillUrls, evidenceFiles);
-
-      if (editingExpense) {
-        const { error } = await supabase
-          .from("expenses")
-          .update({
-            category: form.category,
-            amount: Number(form.amount),
-            vendor: form.vendor || null,
-            bill_available: billUrls.length > 0,
-            bill_url: billUrls[0] ?? null,
-            bill_urls: billUrls,
-          })
-          .eq("id", editingExpense.id);
-        if (error) throw error;
-        if (removedPaths.length > 0) await supabase.storage.from("finance-proofs").remove(removedPaths);
-        toast(t("mobileExpenses.updated"), "success");
-      } else {
-        // Mobile-logged expenses save immediately with no approval step, matching the
-        // design's one-tap flow — they count toward cost/profit right away.
-        const { error } = await supabase.from("expenses").insert({
-          vehicle_id: vehicle.id,
+      const { error } = await supabase
+        .from("expenses")
+        .update({
           category: form.category,
           amount: Number(form.amount),
           vendor: form.vendor || null,
           bill_available: billUrls.length > 0,
           bill_url: billUrls[0] ?? null,
           bill_urls: billUrls,
-          approval_status: "Approved",
-          approved_by: user?.email ?? "Unknown",
-          approved_at: new Date().toISOString(),
-        });
-        if (error) throw error;
-        toast(t("mobileExpenses.added"), "success");
-      }
-      resetSheet();
+        })
+        .eq("id", editingExpense.id);
+      if (error) throw error;
+      if (removedPaths.length > 0) await supabase.storage.from("finance-proofs").remove(removedPaths);
+      toast(t("mobileExpenses.updated"), "success");
+      closeEdit();
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
@@ -176,7 +138,7 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, o
           <p className="text-[10px] text-mobile-text-muted uppercase"> {t("mobileExpenses.totalExpenses")}</p>
           <p className="text-lg font-poppins font-bold text-mobile-text mt-0.5">{formatINR(total)}</p>
         </div>
-        <Button size="sm" onClick={openAdd}><Plus size={14} /> {t("mobileExpenses.add")}</Button>
+        <Button size="sm" onClick={() => onNavigate("add-expense", { vehicleId: vehicle.id })}><Plus size={14} /> {t("mobileExpenses.add")}</Button>
       </Card>
 
       {expenses.length === 0 ? (
@@ -213,12 +175,12 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, o
       )}
 
       <Sheet
-        open={sheetOpen}
-        onClose={resetSheet}
-        title={editingExpense ? t("mobileExpenses.editExpense") : t("mobileExpenses.addExpense")}
+        open={editingExpense !== null}
+        onClose={closeEdit}
+        title={t("mobileExpenses.editExpense")}
         footer={
           <div className="flex gap-3 w-full">
-            <Button variant="secondary" className="flex-1" onClick={resetSheet}> {t("mobileExpenses.cancel")}</Button>
+            <Button variant="secondary" className="flex-1" onClick={closeEdit}> {t("mobileExpenses.cancel")}</Button>
             <Button className="flex-1" onClick={handleSave} loading={submitting}>{submitting ? <Spinner size={14} /> : null} {t("mobileExpenses.save")}</Button>
           </div>
         }
