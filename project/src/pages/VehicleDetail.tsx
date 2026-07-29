@@ -916,8 +916,6 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
   const { t } = useTranslation();
   const insp = (vehicle.inspections ?? [])[0] as (NonNullable<VehicleWithRelations["inspections"]>[number] & { items?: InspectionItem[] }) | undefined;
   const [mechanics, setMechanics] = useState<Party[]>([]);
-  const [showLinkMechanic, setShowLinkMechanic] = useState(false);
-  const [selectedMechanic, setSelectedMechanic] = useState("");
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({ mechanic_party_id: "", rating: "3", feedback_text: "", areas_of_concern: "", recommended_actions: "" });
   const [showAddInspection, setShowAddInspection] = useState(false);
@@ -1012,29 +1010,6 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
 
   const feedback = (vehicle.mechanic_feedback ?? []) as (MechanicInspectionFeedback & { mechanic?: Party | null })[];
 
-  const handleLinkMechanic = async () => {
-    if (!insp || !selectedMechanic) {
-      toast("Select a mechanic to link", "error");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const { error } = await supabase
-        .from("inspections")
-        .update({ mechanic_party_id: selectedMechanic })
-        .eq("id", insp.id);
-      if (error) throw error;
-      toast("Mechanic linked as inspector", "success");
-      setShowLinkMechanic(false);
-      setSelectedMechanic("");
-      onChanged();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to link mechanic", "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleAddFeedback = async () => {
     if (!feedbackForm.mechanic_party_id || !feedbackForm.feedback_text.trim()) {
       toast("Select a mechanic and enter feedback text", "error");
@@ -1064,17 +1039,11 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
     }
   };
 
-  const addInspectionModal = (
-    <Modal
-      open={showAddInspection}
-      onClose={() => { setShowAddInspection(false); resetInspectionForm(); }}
-      title="Add Inspection"
-      size="lg"
-      footer={<>
-        <button onClick={() => { setShowAddInspection(false); resetInspectionForm(); }} className="btn-secondary">Cancel</button>
-        <button onClick={handleAddInspection} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Save Inspection</button>
-      </>}
-    >
+  const addInspectionPanel = showAddInspection ? (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="font-medium text-slate-800">Add Inspection</h4>
+      </div>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Inspection Type" required>
@@ -1142,9 +1111,19 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
             </div>
           )}
         </div>
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+          <button onClick={() => { setShowAddInspection(false); resetInspectionForm(); }} className="btn-secondary">Cancel</button>
+          <button onClick={handleAddInspection} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Save Inspection</button>
+        </div>
       </div>
-    </Modal>
-  );
+    </Card>
+  ) : null;
+
+  const saveItemField = async (id: string, patch: Record<string, unknown>) => {
+    const { error } = await supabase.from("inspection_items").update(patch).eq("id", id);
+    if (error) throw new Error(error.message);
+    onChanged();
+  };
 
   if (!insp) {
     return (
@@ -1154,10 +1133,10 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
             icon={<ClipboardCheck size={20} />}
             title="No inspection recorded"
             description="Add an inspection to capture condition scores for this vehicle."
-            action={<button onClick={() => setShowAddInspection(true)} className="btn-primary"><Plus size={16} /> Add Inspection</button>}
+            action={!showAddInspection ? <button onClick={() => setShowAddInspection(true)} className="btn-primary"><Plus size={16} /> Add Inspection</button> : undefined}
           />
         </Card>
-        {addInspectionModal}
+        {addInspectionPanel}
       </>
     );
   }
@@ -1167,8 +1146,9 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
-        <button onClick={() => setShowAddInspection(true)} className="btn-secondary btn-sm"><Plus size={14} /> Add New Inspection</button>
+        {!showAddInspection && <button onClick={() => setShowAddInspection(true)} className="btn-secondary btn-sm"><Plus size={14} /> Add New Inspection</button>}
       </div>
+      {addInspectionPanel}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <Card className="p-5">
           <h3 className="font-semibold text-slate-900 mb-4">Inspection Summary</h3>
@@ -1180,15 +1160,26 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
             <Spec label="Inspector" value={insp.inspector_name} />
             <div className="pt-2">
               <p className="text-xs text-slate-500">Assigned Mechanic</p>
-              <div className="mt-1 flex items-center justify-between gap-2">
-                {mechanic ? (
-                  <Badge color="brand"><Wrench size={11} className="mr-1" />{mechanic.full_name}</Badge>
-                ) : (
-                  <span className="text-xs text-slate-400">No mechanic linked</span>
-                )}
-                <button onClick={() => setShowLinkMechanic(true)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">
-                  {mechanic ? "Change" : "Link"}
-                </button>
+              <div className="mt-1">
+                <InlineEditableField
+                  type="select"
+                  value={insp.mechanic_party_id ?? ""}
+                  options={mechanics.map((m) => ({ value: m.id, label: `${m.full_name} · ${m.mobile ?? "No mobile"}` }))}
+                  placeholder="Not linked"
+                  formatDisplay={() =>
+                    mechanic ? (
+                      <Badge color="brand"><Wrench size={11} className="mr-1" />{mechanic.full_name}</Badge>
+                    ) : (
+                      <span className="text-xs text-slate-400">No mechanic linked</span>
+                    )
+                  }
+                  onSave={async (next) => {
+                    const { error } = await supabase.from("inspections").update({ mechanic_party_id: next || null }).eq("id", insp.id);
+                    if (error) throw new Error(error.message);
+                    toast("Mechanic linked as inspector", "success");
+                    onChanged();
+                  }}
+                />
               </div>
             </div>
             <Spec label="Date" value={formatDate(insp.inspection_date, { withTime: true })} />
@@ -1215,31 +1206,67 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
         <Card className="p-5 lg:col-span-2">
           <h3 className="font-semibold text-slate-900 mb-4">Component Scores</h3>
           {items.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {items.map((item: InspectionItem) => (
-                <div key={item.id} className="flex items-center gap-4">
-                  <div className="w-40 shrink-0">
-                    <p className="text-sm font-medium text-slate-800">{item.category}</p>
-                    <p className="text-xs text-slate-400">Weight {item.weight}%</p>
-                  </div>
-                  <div className="flex-1">
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${(item.score ?? 0) >= 80 ? "bg-emerald-500" : (item.score ?? 0) >= 60 ? "bg-amber-500" : "bg-red-500"}`}
-                        style={{ width: `${item.score ?? 0}%` }}
+                <div key={item.id} className="rounded-lg border border-slate-100 p-2.5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-40 shrink-0">
+                      <p className="text-sm font-medium text-slate-800">{item.category}</p>
+                      <p className="text-xs text-slate-400">Weight {item.weight}%</p>
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${(item.score ?? 0) >= 80 ? "bg-emerald-500" : (item.score ?? 0) >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${item.score ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="w-16 text-right">
+                      <InlineEditableField
+                        type="number"
+                        value={item.score ?? 0}
+                        className="justify-end font-mono font-semibold text-sm"
+                        onSave={(next) => saveItemField(item.id, { score: Number(next) })}
+                      />
+                    </div>
+                    <div className="w-28 text-right">
+                      <InlineEditableField
+                        type="select"
+                        value={item.condition_level ?? ""}
+                        options={[...CONDITION_LEVELS]}
+                        className="justify-end"
+                        formatDisplay={(v) => (
+                          <Badge color={
+                            v === "Excellent" ? "emerald"
+                              : v === "Good" ? "green"
+                                : v === "Fair" ? "amber"
+                                  : v === "Poor" || v === "Critical" ? "red" : "slate"
+                          }>{String(v) || "—"}</Badge>
+                        )}
+                        onSave={(next) => saveItemField(item.id, { condition_level: String(next) })}
                       />
                     </div>
                   </div>
-                  <div className="w-16 text-right">
-                    <span className="font-mono font-semibold text-sm">{item.score ?? "—"}</span>
-                  </div>
-                  <div className="w-24 text-right">
-                    <Badge color={
-                      item.condition_level === "Excellent" ? "emerald"
-                        : item.condition_level === "Good" ? "green"
-                          : item.condition_level === "Fair" ? "amber"
-                            : item.condition_level === "Poor" || item.condition_level === "Critical" ? "red" : "slate"
-                    }>{item.condition_level ?? "—"}</Badge>
+                  <div className="mt-2 sm:pl-44 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <div className="flex items-center gap-1.5">
+                      <span>Action:</span>
+                      <InlineEditableField
+                        type="text"
+                        value={item.recommended_action ?? ""}
+                        placeholder="None"
+                        onSave={(next) => saveItemField(item.id, { recommended_action: String(next) || null })}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span>Est. Cost:</span>
+                      <InlineEditableField
+                        type="number"
+                        value={item.estimated_cost ?? 0}
+                        formatDisplay={(v) => formatINR(Number(v))}
+                        onSave={(next) => saveItemField(item.id, { estimated_cost: Number(next) })}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1264,10 +1291,65 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
       </div>
 
       {/* Mechanic Inspection Feedback section */}
+      {showFeedback && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-medium text-slate-800">Add Mechanic Inspection Feedback</h4>
+          </div>
+          <div className="space-y-4">
+            <Field label="Mechanic" required>
+              {mechanics.length === 0 ? (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                  No mechanics found. Add a mechanic from the Parties page first.
+                </div>
+              ) : (
+                <Select
+                  value={feedbackForm.mechanic_party_id}
+                  onChange={(v) => setFeedbackForm((f) => ({ ...f, mechanic_party_id: v }))}
+                  placeholder="Select mechanic"
+                  options={mechanics.map((m) => ({ value: m.id, label: `${m.full_name} · ${m.mobile ?? "—"}` }))}
+                />
+              )}
+            </Field>
+            <Field label="Rating" required>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setFeedbackForm((f) => ({ ...f, rating: String(r) }))}
+                    className="p-1"
+                  >
+                    <Star
+                      size={24}
+                      className={r <= Number(feedbackForm.rating) ? "fill-amber-400 text-amber-400" : "text-slate-300 hover:text-amber-300"}
+                    />
+                  </button>
+                ))}
+                <span className="text-sm text-slate-500 ml-2">{feedbackForm.rating}/5</span>
+              </div>
+            </Field>
+            <Field label="Feedback" required>
+              <textarea className="input" rows={3} value={feedbackForm.feedback_text} onChange={(e) => setFeedbackForm((f) => ({ ...f, feedback_text: e.target.value }))} placeholder="Overall inspection feedback from the mechanic…" />
+            </Field>
+            <Field label="Areas of Concern">
+              <input className="input" value={feedbackForm.areas_of_concern} onChange={(e) => setFeedbackForm((f) => ({ ...f, areas_of_concern: e.target.value }))} placeholder="e.g. Engine noise, worn brake pads" />
+            </Field>
+            <Field label="Recommended Actions">
+              <input className="input" value={feedbackForm.recommended_actions} onChange={(e) => setFeedbackForm((f) => ({ ...f, recommended_actions: e.target.value }))} placeholder="e.g. Replace brake pads, oil change" />
+            </Field>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setShowFeedback(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleAddFeedback} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Submit Feedback</button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 flex items-center gap-2"><Wrench size={18} className="text-slate-400" /> Mechanic Inspection Feedback</h3>
-          <button onClick={() => setShowFeedback(true)} className="btn-primary btn-sm"><Plus size={14} /> Add Feedback</button>
+          {!showFeedback && <button onClick={() => setShowFeedback(true)} className="btn-primary btn-sm"><Plus size={14} /> Add Feedback</button>}
         </div>
         {feedback.length > 0 ? (
           <div className="space-y-3">
@@ -1314,90 +1396,6 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
         )}
       </Card>
 
-      {/* Link mechanic modal */}
-      <Modal
-        open={showLinkMechanic}
-        onClose={() => setShowLinkMechanic(false)}
-        title="Link Mechanic as Inspector"
-        description="Assign a mechanic from Parties to this inspection"
-        footer={<>
-          <button onClick={() => setShowLinkMechanic(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleLinkMechanic} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Link Mechanic</button>
-        </>}
-      >
-        {mechanics.length === 0 ? (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
-            No mechanics found in Parties. Add a mechanic with party type "Mechanic" from the Parties page first.
-          </div>
-        ) : (
-          <Field label="Select Mechanic" required>
-            <Select
-              value={selectedMechanic}
-              onChange={setSelectedMechanic}
-              placeholder="Choose a mechanic"
-              options={mechanics.map((m) => ({ value: m.id, label: `${m.full_name} · ${m.mobile ?? "No mobile"} · ${(m.party_subtype ?? "").replace(/_/g, " ")}` }))}
-            />
-          </Field>
-        )}
-      </Modal>
-
-      {/* Add feedback modal */}
-      <Modal
-        open={showFeedback}
-        onClose={() => setShowFeedback(false)}
-        title="Add Mechanic Inspection Feedback"
-        size="lg"
-        footer={<>
-          <button onClick={() => setShowFeedback(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleAddFeedback} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Submit Feedback</button>
-        </>}
-      >
-        <div className="space-y-4">
-          <Field label="Mechanic" required>
-            {mechanics.length === 0 ? (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-                No mechanics found. Add a mechanic from the Parties page first.
-              </div>
-            ) : (
-              <Select
-                value={feedbackForm.mechanic_party_id}
-                onChange={(v) => setFeedbackForm((f) => ({ ...f, mechanic_party_id: v }))}
-                placeholder="Select mechanic"
-                options={mechanics.map((m) => ({ value: m.id, label: `${m.full_name} · ${m.mobile ?? "—"}` }))}
-              />
-            )}
-          </Field>
-          <Field label="Rating" required>
-            <div className="flex items-center gap-2">
-              {[1, 2, 3, 4, 5].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setFeedbackForm((f) => ({ ...f, rating: String(r) }))}
-                  className="p-1"
-                >
-                  <Star
-                    size={24}
-                    className={r <= Number(feedbackForm.rating) ? "fill-amber-400 text-amber-400" : "text-slate-300 hover:text-amber-300"}
-                  />
-                </button>
-              ))}
-              <span className="text-sm text-slate-500 ml-2">{feedbackForm.rating}/5</span>
-            </div>
-          </Field>
-          <Field label="Feedback" required>
-            <textarea className="input" rows={3} value={feedbackForm.feedback_text} onChange={(e) => setFeedbackForm((f) => ({ ...f, feedback_text: e.target.value }))} placeholder="Overall inspection feedback from the mechanic…" />
-          </Field>
-          <Field label="Areas of Concern">
-            <input className="input" value={feedbackForm.areas_of_concern} onChange={(e) => setFeedbackForm((f) => ({ ...f, areas_of_concern: e.target.value }))} placeholder="e.g. Engine noise, worn brake pads" />
-          </Field>
-          <Field label="Recommended Actions">
-            <input className="input" value={feedbackForm.recommended_actions} onChange={(e) => setFeedbackForm((f) => ({ ...f, recommended_actions: e.target.value }))} placeholder="e.g. Replace brake pads, oil change" />
-          </Field>
-        </div>
-      </Modal>
-
-      {addInspectionModal}
     </div>
   );
 }
@@ -1526,18 +1524,65 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
     }
   };
 
+  const saveField = async (id: string, patch: Record<string, unknown>) => {
+    const { error } = await supabase.from("vehicle_documents").update(patch).eq("id", id);
+    if (error) throw new Error(error.message);
+    syncVehicleAlerts(vehicle.id).catch(() => {});
+    onChanged();
+  };
+
   return (
     <div className="space-y-5">
+      {showAdd && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-medium text-slate-800">Add Document</h4>
+          </div>
+          <div className="space-y-4">
+            <Field label="Document Type" required>
+              <Select value={form.document_type} onChange={(v) => setForm((f) => ({ ...f, document_type: v }))} options={DOCUMENT_TYPES} />
+            </Field>
+
+            <FileUploadGrid
+              bucket="vehicle-documents"
+              pathPrefix={`${vehicle.id}/${uploadSessionId}`}
+              value={documentFiles}
+              onChange={setDocumentFiles}
+              label="Document File / Photo"
+              hint="Upload a photo or scan of the physical document — add multiple pages if needed (max 10MB each)"
+            />
+
+            <Field label="Document Number">
+              <input className="input" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} placeholder="TN22AB1234" />
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Issue Date"><input className="input" type="date" value={form.issue_date} onChange={(e) => setForm((f) => ({ ...f, issue_date: e.target.value }))} /></Field>
+              <Field label="Expiry Date"><input className="input" type="date" value={form.expiry_date} onChange={(e) => setForm((f) => ({ ...f, expiry_date: e.target.value }))} /></Field>
+            </div>
+            <Field label="Issuing Organisation"><input className="input" value={form.issuer} onChange={(e) => setForm((f) => ({ ...f, issuer: e.target.value }))} placeholder="RTO Chennai" /></Field>
+            <Field label="Verification Status">
+              <Select value={form.verification_status} onChange={(v) => setForm((f) => ({ ...f, verification_status: v }))} options={DOCUMENT_VERIFICATION_STATUSES} />
+            </Field>
+            <Field label="Notes"><input className="input" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={resetAddForm} className="btn-secondary">Cancel</button>
+              <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add Document</button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900">Vehicle Documents</h3>
-          <button onClick={() => setShowAdd(true)} className="btn-primary btn-sm"><Plus size={14} /> Add Document</button>
+          {!showAdd && <button onClick={() => setShowAdd(true)} className="btn-primary btn-sm"><Plus size={14} /> Add Document</button>}
         </div>
         {vehicle.documents && vehicle.documents.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
                 <th className="pb-2 font-medium">Type</th><th className="pb-2 font-medium">Number</th>
+                <th className="pb-2 font-medium">Issuer</th><th className="pb-2 font-medium">Issue Date</th>
                 <th className="pb-2 font-medium">File</th><th className="pb-2 font-medium">Expiry</th>
                 <th className="pb-2 font-medium">Status</th><th className="pb-2"></th>
               </tr></thead>
@@ -1548,8 +1593,41 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
                     id={`document-row-${d.id}`}
                     className={`hover:bg-slate-50 transition-colors ${activeHighlights.has(d.id) ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}
                   >
-                    <td className="py-2.5"><span className="font-medium text-slate-900">{d.document_type}</span>{d.issuer && <p className="text-xs text-slate-500">{d.issuer}</p>}</td>
-                    <td className="py-2.5 font-mono text-xs text-slate-600">{d.document_number || "—"}</td>
+                    <td className="py-2.5">
+                      <span className="font-medium text-slate-900">{d.document_type}</span>
+                      <InlineEditableField
+                        type="text"
+                        value={d.notes ?? ""}
+                        placeholder="Add notes"
+                        onSave={(next) => saveField(d.id, { notes: String(next) || null })}
+                        className="text-xs text-slate-500 block"
+                      />
+                    </td>
+                    <td className="py-2.5 font-mono text-xs text-slate-600">
+                      <InlineEditableField
+                        type="text"
+                        value={d.document_number ?? ""}
+                        placeholder="Add number"
+                        onSave={(next) => saveField(d.id, { document_number: String(next) || null })}
+                      />
+                    </td>
+                    <td className="py-2.5 text-slate-600">
+                      <InlineEditableField
+                        type="text"
+                        value={d.issuer ?? ""}
+                        placeholder="Add issuer"
+                        onSave={(next) => saveField(d.id, { issuer: String(next) || null })}
+                      />
+                    </td>
+                    <td className="py-2.5 text-slate-500 text-xs">
+                      <InlineEditableField
+                        type="text"
+                        value={d.issue_date ?? ""}
+                        placeholder="YYYY-MM-DD"
+                        formatDisplay={(v) => (v ? formatDate(String(v)) : "—")}
+                        onSave={(next) => saveField(d.id, { issue_date: String(next) || null })}
+                      />
+                    </td>
                     <td className="py-2.5">
                       {(d.file_urls?.length ?? (d.file_url ? 1 : 0)) > 0 ? (
                         <button
@@ -1562,7 +1640,15 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
                         <span className="text-xs text-slate-400">No file</span>
                       )}
                     </td>
-                    <td className="py-2.5 text-slate-500 text-xs">{formatDate(d.expiry_date)}</td>
+                    <td className="py-2.5 text-slate-500 text-xs">
+                      <InlineEditableField
+                        type="text"
+                        value={d.expiry_date ?? ""}
+                        placeholder="YYYY-MM-DD"
+                        formatDisplay={(v) => (v ? formatDate(String(v)) : "—")}
+                        onSave={(next) => saveField(d.id, { expiry_date: String(next) || null })}
+                      />
+                    </td>
                     <td className="py-2.5"><VerificationBadge status={d.verification_status} /></td>
                     <td className="py-2.5 text-right">
                       {d.verification_status !== "Verified" && <button onClick={() => handleVerify(d)} className="text-brand-600 hover:text-brand-700 text-xs font-medium mr-2">Verify</button>}
@@ -1577,45 +1663,6 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
           <EmptyState icon={<FileText size={20} />} title="No documents" description="Add RC, insurance, PUC, and other vehicle documents." />
         )}
       </Card>
-
-      <Modal
-        open={showAdd}
-        onClose={resetAddForm}
-        title="Add Document"
-        size="lg"
-        footer={<>
-          <button onClick={resetAddForm} className="btn-secondary">Cancel</button>
-          <button onClick={handleAdd} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Add</button>
-        </>}
-      >
-        <div className="space-y-4">
-          <Field label="Document Type" required>
-            <Select value={form.document_type} onChange={(v) => setForm((f) => ({ ...f, document_type: v }))} options={DOCUMENT_TYPES} />
-          </Field>
-
-          <FileUploadGrid
-            bucket="vehicle-documents"
-            pathPrefix={`${vehicle.id}/${uploadSessionId}`}
-            value={documentFiles}
-            onChange={setDocumentFiles}
-            label="Document File / Photo"
-            hint="Upload a photo or scan of the physical document — add multiple pages if needed (max 10MB each)"
-          />
-
-          <Field label="Document Number">
-            <input className="input" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} placeholder="TN22AB1234" />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Issue Date"><input className="input" type="date" value={form.issue_date} onChange={(e) => setForm((f) => ({ ...f, issue_date: e.target.value }))} /></Field>
-            <Field label="Expiry Date"><input className="input" type="date" value={form.expiry_date} onChange={(e) => setForm((f) => ({ ...f, expiry_date: e.target.value }))} /></Field>
-          </div>
-          <Field label="Issuing Organisation"><input className="input" value={form.issuer} onChange={(e) => setForm((f) => ({ ...f, issuer: e.target.value }))} placeholder="RTO Chennai" /></Field>
-          <Field label="Verification Status">
-            <Select value={form.verification_status} onChange={(v) => setForm((f) => ({ ...f, verification_status: v }))} options={DOCUMENT_VERIFICATION_STATUSES} />
-          </Field>
-          <Field label="Notes"><input className="input" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
-        </div>
-      </Modal>
 
       {docLightbox && (
         <Lightbox
