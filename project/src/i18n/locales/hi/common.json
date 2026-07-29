@@ -382,7 +382,12 @@
     "partnerFunding": "पार्टनर फंडिंग",
     "fundingPct": "वाहन फंडिंग का {{pct}}",
     "yes": "हाँ",
-    "no": "नहीं"
+    "no": "नहीं",
+    "nonBlockingIssues_one": "{{count}} गैर-अवरोधक समस्या: {{list}}",
+    "nonBlockingIssues_other": "{{count}} गैर-अवरोधक समस्याएं: {{list}}",
+    "acknowledgeAndProceed": "स्वीकार करें और आगे बढ़ें",
+    "saleBlockedTitle": "बिक्री अवरुद्ध — अनुपालन समस्या",
+    "saleBlockedDescription": "बिक्री दर्ज करने से पहले इन्हें हल करें: {{issues}}"
   },
   "compliancePolicies": {
     "policies": {
@@ -467,7 +472,8 @@
     "defaultsAdded_other": "{{count}} डिफॉल्ट नीतियां जोड़ी गईं",
     "defaultsFailed": "लोड नहीं हुआ defaults",
     "namePlaceholder": "आरसी बुक आवश्यक",
-    "descriptionPlaceholder": "अन्य स्टाफ के लिए वैकल्पिक संदर्भ"
+    "descriptionPlaceholder": "अन्य स्टाफ के लिए वैकल्पिक संदर्भ",
+    "autoOnlyWarning": "\"कार्रवाई आवश्यक\" एक पूर्ण अवरोध है — यह गंभीरता की परवाह किए बिना बिक्री पूर्ण होने से रोकता है।"
   },
   "financePage": {
     "failedToLoad": "लोड करने में विफल",
@@ -717,7 +723,10 @@
     "notes": "नोट्स",
     "belowCostHint": "आवश्यक: यह बिक्री कुल लागत से कम है",
     "belowCostWarning": "यह बिक्री लागत से कम है - नोट्स में कारण आवश्यक है।",
-    "sheetDescription": "{{stock}} · कुल लागत {{cost}}"
+    "sheetDescription": "{{stock}} · कुल लागत {{cost}}",
+    "nonBlockingIssues_one": "{{count}} गैर-अवरोधक समस्या: {{list}}",
+    "nonBlockingIssues_other": "{{count}} गैर-अवरोधक समस्याएं: {{list}}",
+    "acknowledgeAndProceed": "स्वीकार करें और आगे बढ़ें"
   },
   "mobileExpenses": {
     "totalExpenses": "कुल खर्च",

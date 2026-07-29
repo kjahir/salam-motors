@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { formatINR } from "./format";
 import type { Partner, VehicleWithRelations } from "./types";
 import type { CostBreakdown, PartnerFunding } from "./calc";
+import { isHardBlocking, type ComplianceViolation } from "./compliance";
 
 export interface CompleteSaleInput {
   buyer_party_id: string;
@@ -29,14 +30,19 @@ export async function completeSale(
   partners: Partner[],
   input: CompleteSaleInput,
   performedBy: string,
+  complianceViolations: ComplianceViolation[],
 ): Promise<void> {
   if (!input.buyer_party_id || !input.sale_price || input.sale_price <= 0) {
     throw new Error("Select buyer and enter sale price");
   }
-  const openCriticalAlerts = (vehicle.alerts ?? []).filter((a) => a.status === "Open" && a.severity === "Critical");
-  if (openCriticalAlerts.length > 0) {
+  // Hard block on resolution_mode, not severity: only auto_only policies (RC book, purchase
+  // payments must match price, by default — plus any custom policy an admin has deliberately
+  // made auto_only) can stop a sale. Everything else is dealer-acknowledgeable and does not
+  // belong here; the caller is responsible for having the dealer acknowledge those first.
+  const hardBlockingViolations = complianceViolations.filter(isHardBlocking);
+  if (hardBlockingViolations.length > 0) {
     throw new Error(
-      `This vehicle has ${openCriticalAlerts.length} open Critical alert${openCriticalAlerts.length > 1 ? "s" : ""} (${openCriticalAlerts.map((a) => a.title).join(", ")}). Resolve them before recording a sale.`,
+      `This vehicle has ${hardBlockingViolations.length} unresolved compliance issue${hardBlockingViolations.length > 1 ? "s" : ""} that must be fixed before completing a sale (${hardBlockingViolations.map((v) => v.name).join(", ")}).`,
     );
   }
   const netRevenue = input.sale_price + input.buyer_charges - input.discount;

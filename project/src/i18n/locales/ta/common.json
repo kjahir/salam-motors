@@ -382,7 +382,12 @@
     "partnerFunding": "கூட்டாளர் நிதியளிப்பு",
     "fundingPct": "வாகன நிதியளிப்பில் {{pct}}",
     "yes": "ஆம்",
-    "no": "இல்லை"
+    "no": "இல்லை",
+    "nonBlockingIssues_one": "{{count}} தடுக்காத சிக்கல்: {{list}}",
+    "nonBlockingIssues_other": "{{count}} தடுக்காத சிக்கல்கள்: {{list}}",
+    "acknowledgeAndProceed": "ஒப்புக்கொண்டு தொடரவும்",
+    "saleBlockedTitle": "விற்பனை தடுக்கப்பட்டது — இணக்கச் சிக்கல்",
+    "saleBlockedDescription": "விற்பனையைப் பதிவு செய்யும் முன் இவற்றைத் தீர்க்கவும்: {{issues}}"
   },
   "compliancePolicies": {
     "policies": {
@@ -467,7 +472,8 @@
     "defaultsAdded_other": "{{count}} இயல்புநிலை கொள்கைகள் சேர்க்கப்பட்டன",
     "defaultsFailed": "ஏற்ற முடியவில்லை defaults",
     "namePlaceholder": "RC புத்தகம் தேவை",
-    "descriptionPlaceholder": "பிற பணியாளர்களுக்கான விருப்பப் பின்னணி"
+    "descriptionPlaceholder": "பிற பணியாளர்களுக்கான விருப்பப் பின்னணி",
+    "autoOnlyWarning": "\"நடவடிக்கை தேவை\" ஒரு முழுமையான தடையாகும் — தீவிரத்தன்மையைப் பொருட்படுத்தாமல் இது விற்பனை முடிவடைவதைத் தடுக்கிறது."
   },
   "financePage": {
     "failedToLoad": "ஏற்ற முடியவில்லை",
@@ -717,7 +723,10 @@
     "notes": "குறிப்புகள்",
     "belowCostHint": "தேவை: இந்த விற்பனை மொத்த செலவை விட குறைவு",
     "belowCostWarning": "இந்த விற்பனை செலவை விட குறைவு - குறிப்புகளில் காரணம் தேவை.",
-    "sheetDescription": "{{stock}} · மொத்த செலவு {{cost}}"
+    "sheetDescription": "{{stock}} · மொத்த செலவு {{cost}}",
+    "nonBlockingIssues_one": "{{count}} தடுக்காத சிக்கல்: {{list}}",
+    "nonBlockingIssues_other": "{{count}} தடுக்காத சிக்கல்கள்: {{list}}",
+    "acknowledgeAndProceed": "ஒப்புக்கொண்டு தொடரவும்"
   },
   "mobileExpenses": {
     "totalExpenses": "மொத்த செலவுகள்",

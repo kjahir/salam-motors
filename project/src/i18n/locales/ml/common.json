@@ -382,7 +382,12 @@
     "partnerFunding": "പങ്കാളി ഫണ്ടിംഗ്",
     "fundingPct": "വാഹന ഫണ്ടിംഗിന്റെ {{pct}}",
     "yes": "അതെ",
-    "no": "ഇല്ല"
+    "no": "ഇല്ല",
+    "nonBlockingIssues_one": "{{count}} തടസ്സമല്ലാത്ത പ്രശ്നം: {{list}}",
+    "nonBlockingIssues_other": "{{count}} തടസ്സമല്ലാത്ത പ്രശ്നങ്ങൾ: {{list}}",
+    "acknowledgeAndProceed": "അംഗീകരിച്ച് തുടരുക",
+    "saleBlockedTitle": "വിൽപ്പന തടഞ്ഞു — അനുസരണ പ്രശ്നം",
+    "saleBlockedDescription": "വിൽപ്പന രേഖപ്പെടുത്തുന്നതിന് മുമ്പ് ഇവ പരിഹരിക്കുക: {{issues}}"
   },
   "compliancePolicies": {
     "policies": {
@@ -467,7 +472,8 @@
     "defaultsAdded_other": "{{count}} സ്ഥിരസ്ഥിതി നയങ്ങൾ ചേർത്തു",
     "defaultsFailed": "സ്ഥിരസ്ഥിതികൾ ലോഡ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു",
     "namePlaceholder": "RC ബുക്ക് ആവശ്യമാണ്",
-    "descriptionPlaceholder": "മറ്റ് ജീവനക്കാർക്കുള്ള ഐച്ഛിക വിവരണം"
+    "descriptionPlaceholder": "മറ്റ് ജീവനക്കാർക്കുള്ള ഐച്ഛിക വിവരണം",
+    "autoOnlyWarning": "\"നടപടി ആവശ്യമാണ്\" എന്നത് ഒരു പൂർണ്ണ തടസ്സമാണ് — തീവ്രത കണക്കിലെടുക്കാതെ ഇത് വിൽപ്പന പൂർത്തിയാക്കുന്നത് തടയുന്നു."
   },
   "financePage": {
     "failedToLoad": "ലോഡ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു",
@@ -717,7 +723,10 @@
     "paymentMethod": "പേയ്മെന്റ് രീതി",
     "notes": "കുറിപ്പുകൾ",
     "belowCostHint": "ആവശ്യമാണ്: ഈ വിൽപ്പന മൊത്തം ചെലവിനേക്കാൾ കുറവാണ്",
-    "belowCostWarning": "ഈ വിൽപ്പന ചെലവിനേക്കാൾ കുറവാണ് - കുറിപ്പുകളിൽ ഒരു കാരണം ആവശ്യമാണ്."
+    "belowCostWarning": "ഈ വിൽപ്പന ചെലവിനേക്കാൾ കുറവാണ് - കുറിപ്പുകളിൽ ഒരു കാരണം ആവശ്യമാണ്.",
+    "nonBlockingIssues_one": "{{count}} തടസ്സമല്ലാത്ത പ്രശ്നം: {{list}}",
+    "nonBlockingIssues_other": "{{count}} തടസ്സമല്ലാത്ത പ്രശ്നങ്ങൾ: {{list}}",
+    "acknowledgeAndProceed": "അംഗീകരിച്ച് തുടരുക"
   },
   "mobileExpenses": {
     "totalExpenses": "മൊത്തം ചെലവുകൾ",

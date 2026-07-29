@@ -382,7 +382,12 @@
     "partnerFunding": "Partner Funding",
     "fundingPct": "{{pct}} of vehicle funding",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "nonBlockingIssues_one": "{{count}} non-blocking issue: {{list}}",
+    "nonBlockingIssues_other": "{{count}} non-blocking issues: {{list}}",
+    "acknowledgeAndProceed": "Acknowledge and proceed",
+    "saleBlockedTitle": "Sale blocked — compliance issue",
+    "saleBlockedDescription": "Resolve these before recording a sale: {{issues}}"
   },
   "compliancePolicies": {
     "policies": {
@@ -467,7 +472,8 @@
     "defaultsAdded_other": "{{count}} default policies added",
     "defaultsFailed": "Failed to load defaults",
     "namePlaceholder": "RC book required",
-    "descriptionPlaceholder": "Optional context for other staff"
+    "descriptionPlaceholder": "Optional context for other staff",
+    "autoOnlyWarning": "\"Requires action\" is a hard block — it stops a sale from completing, regardless of severity."
   },
   "financePage": {
     "failedToLoad": "Failed to load",
@@ -717,7 +723,10 @@
     "paymentMethod": "Payment Method",
     "notes": "Notes",
     "belowCostHint": "Required: this sale is below total cost",
-    "belowCostWarning": "This sale is below cost - a reason is required in notes."
+    "belowCostWarning": "This sale is below cost - a reason is required in notes.",
+    "nonBlockingIssues_one": "{{count}} non-blocking issue: {{list}}",
+    "nonBlockingIssues_other": "{{count}} non-blocking issues: {{list}}",
+    "acknowledgeAndProceed": "Acknowledge and proceed"
   },
   "mobileExpenses": {
     "totalExpenses": "Total Expenses",

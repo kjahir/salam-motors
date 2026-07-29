@@ -272,8 +272,8 @@ export const COMPLIANCE_EVIDENCE_ENTITY_LABELS: Record<string, string> = {
 export const COMPLIANCE_RESOLUTION_MODES = ["manual", "auto_only"] as const;
 
 export const COMPLIANCE_RESOLUTION_MODE_LABELS: Record<string, string> = {
-  manual: "Manual — Acknowledge/Resolve allowed",
-  auto_only: "Requires action — only clears automatically when fixed",
+  manual: "Manual — Acknowledge/Resolve allowed, dealer-acknowledgeable at sale time",
+  auto_only: "Hard block — blocks completing a sale until fixed, regardless of severity",
 };
 
 export interface DefaultCompliancePolicy {
@@ -286,13 +286,18 @@ export interface DefaultCompliancePolicy {
   resolution_mode: (typeof COMPLIANCE_RESOLUTION_MODES)[number];
 }
 
+// Only the two policies that guard against an unregistered/undocumented vehicle changing
+// hands (RC book) or money not reconciling to the agreed price (amount reconciliation) stay
+// `auto_only` — hard blockers on completing a sale. Every other default is dealer-
+// acknowledgeable (`manual`): it still raises an alert and shows up as a violation, but a
+// dealer can consciously acknowledge it and proceed with the sale instead of being blocked.
 export const DEFAULT_COMPLIANCE_POLICIES: DefaultCompliancePolicy[] = [
   { name: "RC book required", description: "Every vehicle must have its Registration Certificate attached.", category: "document", rule_type: "document_required", params: { document_type: "RC book" }, severity: "Critical", resolution_mode: "auto_only" },
-  { name: "Insurance required", description: "Every vehicle must have proof of insurance attached.", category: "document", rule_type: "document_required", params: { document_type: "Insurance" }, severity: "High", resolution_mode: "auto_only" },
-  { name: "PUC required", description: "Every vehicle must have a valid PUC certificate attached.", category: "document", rule_type: "document_required", params: { document_type: "PUC" }, severity: "Warning", resolution_mode: "auto_only" },
-  { name: "Seller identity required", description: "Every vehicle must have the seller's ID proof attached.", category: "document", rule_type: "document_required", params: { document_type: "Seller identity" }, severity: "Warning", resolution_mode: "auto_only" },
-  { name: "Purchase payments need proof", description: "Every purchase payment must have a supporting screenshot or receipt.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "purchase_payment" }, severity: "High", resolution_mode: "auto_only" },
-  { name: "Expenses need bills", description: "Every submitted or approved expense must have a bill or receipt attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "expense" }, severity: "Warning", resolution_mode: "auto_only" },
-  { name: "Vehicle investments need proof", description: "Every investment tied to a specific vehicle must have supporting proof attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "investment" }, severity: "Warning", resolution_mode: "auto_only" },
+  { name: "Insurance required", description: "Every vehicle must have proof of insurance attached.", category: "document", rule_type: "document_required", params: { document_type: "Insurance" }, severity: "High", resolution_mode: "manual" },
+  { name: "PUC required", description: "Every vehicle must have a valid PUC certificate attached.", category: "document", rule_type: "document_required", params: { document_type: "PUC" }, severity: "Warning", resolution_mode: "manual" },
+  { name: "Seller identity required", description: "Every vehicle must have the seller's ID proof attached.", category: "document", rule_type: "document_required", params: { document_type: "Seller identity" }, severity: "Warning", resolution_mode: "manual" },
+  { name: "Purchase payments need proof", description: "Every purchase payment must have a supporting screenshot or receipt.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "purchase_payment" }, severity: "High", resolution_mode: "manual" },
+  { name: "Expenses need bills", description: "Every submitted or approved expense must have a bill or receipt attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "expense" }, severity: "Warning", resolution_mode: "manual" },
+  { name: "Vehicle investments need proof", description: "Every investment tied to a specific vehicle must have supporting proof attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "investment" }, severity: "Warning", resolution_mode: "manual" },
   { name: "Purchase payments must match price", description: "Total purchase payments must reconcile exactly to the agreed price plus broker commission and other fees.", category: "financial_reconciliation", rule_type: "amount_reconciliation", params: { target: "purchase_payments_vs_purchase_price", tolerance: 0.01 }, severity: "Critical", resolution_mode: "auto_only" },
 ];
