@@ -382,7 +382,12 @@
     "partnerFunding": "ಪಾರ್ಟ್ನರ್ ಧನಸಹಾಯ",
     "fundingPct": "ವಾಹನ ಧನಸಹಾಯದ {{pct}}",
     "yes": "ಹೌದು",
-    "no": "ಇಲ್ಲ"
+    "no": "ಇಲ್ಲ",
+    "nonBlockingIssues_one": "{{count}} ತಡೆಯದ ಸಮಸ್ಯೆ: {{list}}",
+    "nonBlockingIssues_other": "{{count}} ತಡೆಯದ ಸಮಸ್ಯೆಗಳು: {{list}}",
+    "acknowledgeAndProceed": "ಒಪ್ಪಿಕೊಂಡು ಮುಂದುವರಿಸಿ",
+    "saleBlockedTitle": "ಮಾರಾಟ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ — ಅನುಸರಣೆ ಸಮಸ್ಯೆ",
+    "saleBlockedDescription": "ಮಾರಾಟ ದಾಖಲಿಸುವ ಮೊದಲು ಇವುಗಳನ್ನು ಪರಿಹರಿಸಿ: {{issues}}"
   },
   "compliancePolicies": {
     "policies": {
@@ -467,7 +472,8 @@
     "defaultsAdded_other": "{{count}} ಡೀಫಾಲ್ಟ್ ನೀತಿಗಳು ಸೇರಿಸಲಾಗಿದೆ",
     "defaultsFailed": "ಡೀಫಾಲ್ಟ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
     "namePlaceholder": "RC ಪುಸ್ತಕ ಅಗತ್ಯವಿದೆ",
-    "descriptionPlaceholder": "ಇತರ ಸಿಬ್ಬಂದಿಗೆ ಐಚ್ಛಿಕ ಸನ್ನಿವೇಶ"
+    "descriptionPlaceholder": "ಇತರ ಸಿಬ್ಬಂದಿಗೆ ಐಚ್ಛಿಕ ಸನ್ನಿವೇಶ",
+    "autoOnlyWarning": "\"ಕ್ರಮ ಅಗತ್ಯವಿದೆ\" ಎಂಬುದು ಸಂಪೂರ್ಣ ನಿರ್ಬಂಧ — ತೀವ್ರತೆಯನ್ನು ಲೆಕ್ಕಿಸದೆ ಇದು ಮಾರಾಟ ಪೂರ್ಣಗೊಳ್ಳುವುದನ್ನು ತಡೆಯುತ್ತದೆ."
   },
   "financePage": {
     "failedToLoad": "ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
@@ -717,7 +723,10 @@
     "paymentMethod": "ಪಾವತಿ ವಿಧಾನ",
     "notes": "ಟಿಪ್ಪಣಿಗಳು",
     "belowCostHint": "ಅಗತ್ಯವಿದೆ: ಈ ಮಾರಾಟ ಒಟ್ಟು ವೆಚ್ಚಕ್ಕಿಂತ ಕಡಿಮೆ ಇದೆ",
-    "belowCostWarning": "ಈ ಮಾರಾಟ ವೆಚ್ಚಕ್ಕಿಂತ ಕಡಿಮೆ ಇದೆ - ಟಿಪ್ಪಣಿಗಳಲ್ಲಿ ಕಾರಣ ಅಗತ್ಯವಿದೆ."
+    "belowCostWarning": "ಈ ಮಾರಾಟ ವೆಚ್ಚಕ್ಕಿಂತ ಕಡಿಮೆ ಇದೆ - ಟಿಪ್ಪಣಿಗಳಲ್ಲಿ ಕಾರಣ ಅಗತ್ಯವಿದೆ.",
+    "nonBlockingIssues_one": "{{count}} ತಡೆಯದ ಸಮಸ್ಯೆ: {{list}}",
+    "nonBlockingIssues_other": "{{count}} ತಡೆಯದ ಸಮಸ್ಯೆಗಳು: {{list}}",
+    "acknowledgeAndProceed": "ಒಪ್ಪಿಕೊಂಡು ಮುಂದುವರಿಸಿ"
   },
   "mobileExpenses": {
     "totalExpenses": "ಒಟ್ಟು ಖರ್ಚುಗಳು",

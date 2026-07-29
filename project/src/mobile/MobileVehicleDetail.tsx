@@ -11,7 +11,7 @@ import { formatINR, formatINRRange, formatDate, formatPercent, daysSince } from 
 import { computeCostBreakdown, computeProfit, computeOverallScore, computePartnerFunding, documentCompleteness, computeEstimatedProfitRange } from "@/lib/calc";
 import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
-import { evaluateVehicleCompliance, findViolatingRecordIds } from "@/lib/compliance";
+import { evaluateVehicleCompliance, findViolatingRecordIds, acknowledgeViolation, isHardBlocking, type ComplianceViolation } from "@/lib/compliance";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { PAYMENT_METHODS, SEVERITY_RANK } from "@/lib/constants";
@@ -271,7 +271,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   overallScore: number | null;
   docCompleteness: ReturnType<typeof documentCompleteness>;
   funding: ReturnType<typeof computePartnerFunding>;
-  complianceViolations: ReturnType<typeof evaluateVehicleCompliance>;
+  complianceViolations: ComplianceViolation[];
   partners: Partner[];
   onChanged: () => void;
   onNavigate: MobileNavigate;
@@ -279,13 +279,46 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   const [showSale, setShowSale] = useState(false);
   const [form, setForm] = useState({ buyer_party_id: "", sale_price: "", discount: "0", buyer_charges: "0", payment_method: "UPI", notes: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
+  const [acknowledgingAll, setAcknowledgingAll] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const { t } = useTranslation();
   const trStatus = (value: string) => t("status." + value, { defaultValue: value });
 
   const isBelowCost = Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost;
-  const openCriticalAlerts = (vehicle.alerts ?? []).filter((a) => a.status === "Open" && a.severity === "Critical");
+  // Hard block: only auto_only violations stop the sale outright; manual-resolution
+  // violations are dealer-acknowledgeable, same predicate as desktop's SaleTab.
+  const hardBlockingViolations = complianceViolations.filter(isHardBlocking);
+  const manualViolations = complianceViolations.filter((v) => !isHardBlocking(v));
+  const unacknowledgedManual = manualViolations.filter(
+    (v) => vehicle.alerts?.find((a) => a.policy_id === v.policyId)?.status !== "Acknowledged",
+  );
+
+  const handleAcknowledge = async (v: ComplianceViolation) => {
+    setAcknowledgingId(v.policyId);
+    try {
+      await acknowledgeViolation(vehicle.id, v.policyId);
+      toast(t("alertsPage.actionAcknowledged"), "success");
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t("alertsPage.actionFailed"), "error");
+    } finally {
+      setAcknowledgingId(null);
+    }
+  };
+
+  const handleAcknowledgeAll = async () => {
+    setAcknowledgingAll(true);
+    try {
+      await Promise.all(unacknowledgedManual.map((v) => acknowledgeViolation(vehicle.id, v.policyId)));
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t("alertsPage.actionFailed"), "error");
+    } finally {
+      setAcknowledgingAll(false);
+    }
+  };
 
   const handleRecordSale = async () => {
     setSubmitting(true);
@@ -307,6 +340,7 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
           notes: form.notes,
         },
         user?.email ?? t("auth.user"),
+        complianceViolations,
       );
       toast(t("mobileVehicle.saleRecorded"), "success");
       setShowSale(false);
@@ -333,11 +367,11 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
             <Spec label={t("mobileVehicle.returnOnCost")} value={formatPercent(profit?.returnOnCostPct)} />
           </div>
         </Card>
-      ) : openCriticalAlerts.length > 0 ? (
+      ) : hardBlockingViolations.length > 0 ? (
         <Card className="p-4">
-          <h3 className="text-sm font-poppins font-semibold text-mobile-error"> {t("mobileVehicle.saleBlocked")}</h3>
+          <h3 className="text-sm font-poppins font-semibold text-mobile-error"> {t("vehicleDetail.saleBlockedTitle")}</h3>
           <p className="text-xs text-mobile-text-muted mt-0.5">
-            {t("mobileVehicle.resolveBeforeSale", { alerts: openCriticalAlerts.map((a) => a.title).join(", ") })}
+            {t("vehicleDetail.saleBlockedDescription", { issues: hardBlockingViolations.map((v) => v.name).join(", ") })}
           </p>
         </Card>
       ) : (
@@ -369,12 +403,29 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
             </Tag>
           </div>
           {complianceViolations.length > 0 && (
-            <ul className="space-y-1">
-              {complianceViolations.map((v) => (
-                <li key={v.policyId} className="text-xs text-mobile-text-muted flex items-start gap-1.5">
-                  <span className="text-mobile-border mt-0.5">•</span> {v.name}
-                </li>
-              ))}
+            <ul className="space-y-1.5">
+              {complianceViolations.map((v) => {
+                const alert = vehicle.alerts?.find((a) => a.policy_id === v.policyId);
+                const acknowledged = alert?.status === "Acknowledged";
+                return (
+                  <li key={v.policyId} className="text-xs text-mobile-text-muted flex items-start justify-between gap-2">
+                    <span className="flex items-start gap-1.5"><span className="text-mobile-border mt-0.5">•</span> {v.name}</span>
+                    {!isHardBlocking(v) && (
+                      acknowledged ? (
+                        <Tag color="neutral">{t("status.Acknowledged")}</Tag>
+                      ) : (
+                        <button
+                          onClick={() => handleAcknowledge(v)}
+                          disabled={acknowledgingId === v.policyId}
+                          className="text-mobile-primary font-medium shrink-0"
+                        >
+                          {acknowledgingId === v.policyId ? <Spinner size={12} /> : t("alertsPage.acknowledge")}
+                        </button>
+                      )
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -417,11 +468,24 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
         footer={
           <div className="flex gap-3 w-full">
             <Button variant="secondary" className="flex-1" onClick={() => setShowSale(false)}> {t("mobileVehicle.cancel")}</Button>
-            <Button className="flex-1" onClick={handleRecordSale} loading={submitting} disabled={openCriticalAlerts.length > 0}> {t("mobileVehicle.completeSale")}</Button>
+            <Button className="flex-1" onClick={handleRecordSale} loading={submitting} disabled={hardBlockingViolations.length > 0 || unacknowledgedManual.length > 0}> {t("mobileVehicle.completeSale")}</Button>
           </div>
         }
       >
         <div className="space-y-4">
+          {manualViolations.length > 0 && (
+            <div className="rounded-xl bg-mobile-warning-bg p-3 text-xs text-mobile-warning space-y-2">
+              <p className="font-medium flex items-start gap-1.5">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                {t("mobileVehicle.nonBlockingIssues", { count: manualViolations.length, list: manualViolations.map((v) => v.name).join(", ") })}
+              </p>
+              {unacknowledgedManual.length > 0 ? (
+                <Button size="sm" variant="secondary" onClick={handleAcknowledgeAll} loading={acknowledgingAll}>{t("mobileVehicle.acknowledgeAndProceed")}</Button>
+              ) : (
+                <p className="text-mobile-success">{t("status.Acknowledged")}</p>
+              )}
+            </div>
+          )}
           <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
           <Field label={t("mobileVehicle.salePrice")} required>
             <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" />

@@ -7,6 +7,15 @@ export interface ComplianceViolation {
   category: string;
   severity: string;
   ruleType: string;
+  resolutionMode: string;
+}
+
+// A violation is a genuine hard blocker on completing a sale only when its policy is
+// `auto_only` — the two default policies (RC book, purchase-payments-must-match-price) plus
+// any custom policy an admin has deliberately marked the same way. Every other violation is
+// dealer-acknowledgeable: it stays visible and actionable, but doesn't stop the sale.
+export function isHardBlocking(violation: Pick<ComplianceViolation, "resolutionMode">): boolean {
+  return violation.resolutionMode === "auto_only";
 }
 
 interface ViolatedRow {
@@ -64,7 +73,14 @@ export function evaluateVehicleCompliance(vehicle: VehicleWithRelations, policie
     else if (policy.rule_type === "evidence_required") violated = hasMissingEvidence(vehicle, policy);
     else if (policy.rule_type === "amount_reconciliation") violated = isAmountMismatched(vehicle, policy);
     if (violated) {
-      violations.push({ policyId: policy.id, name: policy.name, category: policy.category, severity: policy.severity, ruleType: policy.rule_type });
+      violations.push({
+        policyId: policy.id,
+        name: policy.name,
+        category: policy.category,
+        severity: policy.severity,
+        ruleType: policy.rule_type,
+        resolutionMode: policy.resolution_mode,
+      });
     }
   }
   return violations;
@@ -161,6 +177,35 @@ export async function syncVehicleAlerts(vehicleId: string): Promise<void> {
     .eq("violated", true);
   if (error) throw error;
   await upsertAlertsForVehicle(vehicleId, (data ?? []) as ViolatedRow[]);
+}
+
+// Acknowledges the Open alert (if any) backing a manual-resolution violation — same
+// status/acknowledged_at update Alerts.tsx's handleAction("acknowledge") does, just reached
+// from a policyId instead of an alert id. Used by the OverviewTab violation list and the
+// Record Sale "acknowledge and proceed" control, both of which only have the live violation
+// (policyId), not necessarily an already-synced alert row. Syncs first so a violation that
+// hasn't had its alert row created/updated yet (e.g. just-edited data) still resolves to one.
+// auto_only violations are never passed here — the UI never offers Acknowledge for them.
+// The sync is best-effort (swallowed on failure), same as every other syncVehicleAlerts call
+// site in this codebase — e.g. an unrelated auto_only alert that the DB won't let this sync
+// auto-resolve outside sync_org_compliance_alerts() must not block acknowledging this one.
+export async function acknowledgeViolation(vehicleId: string, policyId: string): Promise<void> {
+  await syncVehicleAlerts(vehicleId).catch(() => {});
+  const { data, error } = await supabase
+    .from("alerts")
+    .select("id")
+    .eq("vehicle_id", vehicleId)
+    .eq("policy_id", policyId)
+    .eq("status", "Open")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return; // violation cleared before we could acknowledge it — nothing to do
+  const { error: updErr } = await supabase
+    .from("alerts")
+    .update({ status: "Acknowledged", acknowledged_at: new Date().toISOString() })
+    .eq("id", data.id);
+  if (updErr) throw updErr;
 }
 
 export async function syncAllVehiclesCompliance(): Promise<void> {

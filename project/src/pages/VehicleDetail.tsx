@@ -44,7 +44,7 @@ import { PartyPickerField } from "@/components/PartyPickerField";
 import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
 import { diffRemovedPaths, isImageName, type UploadedFile } from "@/lib/uploadedFile";
-import { evaluateVehicleCompliance, syncVehicleAlerts, findViolatingRecordIds, type ComplianceViolation } from "@/lib/compliance";
+import { evaluateVehicleCompliance, syncVehicleAlerts, findViolatingRecordIds, acknowledgeViolation, isHardBlocking, type ComplianceViolation } from "@/lib/compliance";
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -267,7 +267,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         {tab === "expenses" && <ExpensesTab vehicle={vehicle} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
         {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
         {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
-        {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} onChanged={reload} />}
+        {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} complianceViolations={complianceViolations} onChanged={reload} />}
       </div>
     </div>
   );
@@ -359,6 +359,22 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
+
+  const handleAcknowledge = async (v: ComplianceViolation) => {
+    setAcknowledgingId(v.policyId);
+    try {
+      await acknowledgeViolation(vehicle.id, v.policyId);
+      toast(t("alertsPage.actionAcknowledged"), "success");
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t("alertsPage.actionFailed"), "error");
+    } finally {
+      setAcknowledgingId(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
     <PhotosCard vehicle={vehicle} onChanged={onChanged} />
@@ -425,12 +441,29 @@ function OverviewTab({ vehicle, cost, profit, overallScore, docCompleteness, fun
             />
           </div>
           {complianceViolations.length > 0 && (
-            <ul className="space-y-1">
-              {complianceViolations.map((v) => (
-                <li key={v.policyId} className="text-xs text-slate-500 flex items-start gap-1.5">
-                  <span className="text-slate-300 mt-0.5">•</span> {v.name}
-                </li>
-              ))}
+            <ul className="space-y-1.5">
+              {complianceViolations.map((v) => {
+                const alert = vehicle.alerts?.find((a) => a.policy_id === v.policyId);
+                const acknowledged = alert?.status === "Acknowledged";
+                return (
+                  <li key={v.policyId} className="text-xs text-slate-500 flex items-start justify-between gap-2">
+                    <span className="flex items-start gap-1.5"><span className="text-slate-300 mt-0.5">•</span> {v.name}</span>
+                    {!isHardBlocking(v) && (
+                      acknowledged ? (
+                        <Badge color="slate">{t("status.Acknowledged")}</Badge>
+                      ) : (
+                        <button
+                          onClick={() => handleAcknowledge(v)}
+                          disabled={acknowledgingId === v.policyId}
+                          className="text-brand-600 hover:text-brand-700 font-medium shrink-0"
+                        >
+                          {acknowledgingId === v.policyId ? <Spinner size={12} /> : t("alertsPage.acknowledge")}
+                        </button>
+                      )
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -1568,7 +1601,7 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
 }
 
 // ============ SALE & PROFIT ============
-function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHigh, onChanged }: {
+function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHigh, complianceViolations, onChanged }: {
   vehicle: VehicleWithRelations;
   cost: ReturnType<typeof computeCostBreakdown>;
   profit: ReturnType<typeof computeProfit> | null;
@@ -1576,6 +1609,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
   partners: Partner[];
   marginLow: number;
   marginHigh: number;
+  complianceViolations: ComplianceViolation[];
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
@@ -1592,12 +1626,31 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
     notes: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
   const sale = vehicle.sale;
   const distributions = vehicle.profit_distributions ?? [];
-  const openCriticalAlerts = (vehicle.alerts ?? []).filter((a) => a.status === "Open" && a.severity === "Critical");
+  // Hard block: only auto_only violations (RC book, amount reconciliation by default) stop
+  // the sale outright. Manual-resolution violations are dealer-acknowledgeable below.
+  const hardBlockingViolations = complianceViolations.filter(isHardBlocking);
+  const manualViolations = complianceViolations.filter((v) => !isHardBlocking(v));
+  const unacknowledgedManual = manualViolations.filter(
+    (v) => vehicle.alerts?.find((a) => a.policy_id === v.policyId)?.status !== "Acknowledged",
+  );
+
+  const handleAcknowledgeAll = async () => {
+    setAcknowledging(true);
+    try {
+      await Promise.all(unacknowledgedManual.map((v) => acknowledgeViolation(vehicle.id, v.policyId)));
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t("alertsPage.actionFailed"), "error");
+    } finally {
+      setAcknowledging(false);
+    }
+  };
 
   const handleRecordSale = async () => {
     setSubmitting(true);
@@ -1619,6 +1672,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
           notes: form.notes,
         },
         user?.email ?? "Unknown",
+        complianceViolations,
       );
       toast("Sale recorded and profit calculated", "success");
       setShowBuyers(false);
@@ -1741,11 +1795,11 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
       </Card>
 
       <Card className="p-5">
-        {openCriticalAlerts.length > 0 ? (
+        {hardBlockingViolations.length > 0 ? (
           <EmptyState
             icon={<AlertTriangle size={20} />}
-            title="Sale blocked — open Critical alerts"
-            description={`Resolve these before recording a sale: ${openCriticalAlerts.map((a) => a.title).join(", ")}`}
+            title={t("vehicleDetail.saleBlockedTitle")}
+            description={t("vehicleDetail.saleBlockedDescription", { issues: hardBlockingViolations.map((v) => v.name).join(", ") })}
           />
         ) : (
           <EmptyState
@@ -1765,10 +1819,25 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
         size="lg"
         footer={<>
           <button onClick={() => setShowBuyers(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleRecordSale} disabled={submitting || openCriticalAlerts.length > 0} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Complete Sale</button>
+          <button onClick={handleRecordSale} disabled={submitting || hardBlockingViolations.length > 0 || unacknowledgedManual.length > 0} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Complete Sale</button>
         </>}
       >
         <div className="space-y-4">
+          {manualViolations.length > 0 && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-2">
+              <p className="font-medium flex items-start gap-1.5">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                {t("vehicleDetail.nonBlockingIssues", { count: manualViolations.length, list: manualViolations.map((v) => v.name).join(", ") })}
+              </p>
+              {unacknowledgedManual.length > 0 ? (
+                <button type="button" onClick={handleAcknowledgeAll} disabled={acknowledging} className="btn-secondary btn-sm">
+                  {acknowledging ? <Spinner size={12} /> : null} {t("vehicleDetail.acknowledgeAndProceed")}
+                </button>
+              ) : (
+                <p className="flex items-center gap-1.5 text-emerald-700"><CheckCircle2 size={14} /> {t("status.Acknowledged")}</p>
+              )}
+            </div>
+          )}
           <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
           <div className="grid grid-cols-3 gap-4">
             <Field label="Sale Price (₹)" required><input className="input" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" /></Field>

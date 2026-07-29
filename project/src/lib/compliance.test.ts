@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 // exercise here). Mock it out so the test file doesn't need real VITE_SUPABASE_* env vars.
 vi.mock("./supabase", () => ({ supabase: {} }));
 
-import { evaluateVehicleCompliance, findViolatingRecordIds } from "./compliance";
+import { evaluateVehicleCompliance, findViolatingRecordIds, isHardBlocking } from "./compliance";
 import type {
   CompliancePolicy,
   Expense,
@@ -287,6 +287,26 @@ describe("evaluateVehicleCompliance - aggregation and active flag", () => {
     });
     const violations = evaluateVehicleCompliance(vehicle, policies);
     expect(violations.map((v) => v.policyId).sort()).toEqual(["p1", "p2", "p3"]);
+  });
+});
+
+describe("evaluateVehicleCompliance - resolution_mode propagation", () => {
+  it("carries each policy's resolution_mode onto its violation", () => {
+    const policies = [
+      makePolicy({ id: "p1", rule_type: "document_required", params: { document_type: "RC" }, resolution_mode: "auto_only" }),
+      makePolicy({ id: "p2", rule_type: "document_required", params: { document_type: "Insurance" }, resolution_mode: "manual" }),
+    ];
+    const vehicle = makeVehicle({ documents: [] });
+    const violations = evaluateVehicleCompliance(vehicle, policies);
+    expect(violations.find((v) => v.policyId === "p1")?.resolutionMode).toBe("auto_only");
+    expect(violations.find((v) => v.policyId === "p2")?.resolutionMode).toBe("manual");
+  });
+});
+
+describe("isHardBlocking", () => {
+  it("is true only for auto_only violations", () => {
+    expect(isHardBlocking({ resolutionMode: "auto_only" })).toBe(true);
+    expect(isHardBlocking({ resolutionMode: "manual" })).toBe(false);
   });
 });
 
