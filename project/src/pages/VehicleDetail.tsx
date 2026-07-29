@@ -24,6 +24,8 @@ import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge, StatusBadge, VerificationBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Modal } from "@/components/ui/Modal";
+import { SideNav } from "@/components/ui/SideNav";
+import { InlineEditableField } from "@/components/ui/InlineEditableField";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { EditVehicleModal } from "@/components/EditVehicleModal";
@@ -43,7 +45,7 @@ import { supabase } from "@/lib/supabase";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
-import { diffRemovedPaths, isImageName, type UploadedFile } from "@/lib/uploadedFile";
+import { isImageName, type UploadedFile } from "@/lib/uploadedFile";
 import { evaluateVehicleCompliance, syncVehicleAlerts, findViolatingRecordIds, acknowledgeViolation, isHardBlocking, type ComplianceViolation } from "@/lib/compliance";
 import {
   EXPENSE_CATEGORIES,
@@ -177,12 +179,12 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   const days = daysSince(vehicle.onboarded_at);
   const isSold = vehicle.current_status === "SOLD" || vehicle.current_status === "DELIVERED";
 
-  const tabs = [
-    { key: "overview", label: t("vehicleDetail.overview"), badge: (vehicle.alerts?.filter((a) => a.status === "Open").length ?? 0) > 0 ? <Badge color="red">{vehicle.alerts?.filter((a) => a.status === "Open").length}</Badge> : undefined },
-    { key: "expenses", label: t("vehicleDetail.expenses"), badge: <Badge color="slate">{vehicle.expenses?.length ?? 0}</Badge> },
-    { key: "inspection", label: t("vehicleDetail.inspection") },
-    { key: "documents", label: t("vehicleDetail.documents"), badge: <Badge color="slate">{vehicle.documents?.length ?? 0}</Badge> },
-    { key: "sale", label: t("vehicleDetail.saleProfit") },
+  const navItems = [
+    { key: "overview", label: t("vehicleDetail.overview"), icon: <Bike size={16} />, badge: (vehicle.alerts?.filter((a) => a.status === "Open").length ?? 0) > 0 ? <Badge color="red">{vehicle.alerts?.filter((a) => a.status === "Open").length}</Badge> : undefined },
+    { key: "expenses", label: t("vehicleDetail.expenses"), icon: <Receipt size={16} />, badge: <Badge color="slate">{vehicle.expenses?.length ?? 0}</Badge> },
+    { key: "inspection", label: t("vehicleDetail.inspection"), icon: <ClipboardCheck size={16} /> },
+    { key: "documents", label: t("vehicleDetail.documents"), icon: <FileText size={16} />, badge: <Badge color="slate">{vehicle.documents?.length ?? 0}</Badge> },
+    { key: "sale", label: t("vehicleDetail.saleProfit"), icon: <ShoppingCart size={16} /> },
   ];
 
   return (
@@ -248,26 +250,33 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         </Card>
       </div>
 
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      <div className="lg:hidden">
+        <Tabs tabs={navItems} active={tab} onChange={setTab} />
+      </div>
 
-      <div className="mt-5">
-        {tab === "overview" && (
-          <OverviewTab
-            vehicle={vehicle}
-            cost={cost}
-            profit={profit}
-            overallScore={overallScore}
-            docCompleteness={docCompleteness}
-            funding={funding}
-            complianceViolations={complianceViolations}
-            onNavigate={onNavigate}
-            onChanged={reload}
-          />
-        )}
-        {tab === "expenses" && <ExpensesTab vehicle={vehicle} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
-        {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
-        {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
-        {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} complianceViolations={complianceViolations} onChanged={reload} />}
+      <div className="mt-5 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-5">
+        <div className="hidden lg:block">
+          <SideNav items={navItems} active={tab} onChange={setTab} />
+        </div>
+        <div>
+          {tab === "overview" && (
+            <OverviewTab
+              vehicle={vehicle}
+              cost={cost}
+              profit={profit}
+              overallScore={overallScore}
+              docCompleteness={docCompleteness}
+              funding={funding}
+              complianceViolations={complianceViolations}
+              onNavigate={onNavigate}
+              onChanged={reload}
+            />
+          )}
+          {tab === "expenses" && <ExpensesTab vehicle={vehicle} cost={cost} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
+          {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
+          {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
+          {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} complianceViolations={complianceViolations} onChanged={reload} />}
+        </div>
       </div>
     </div>
   );
@@ -587,21 +596,27 @@ function Spec({ label, value }: { label: string; value: string | null | undefine
 
 
 // ============ EXPENSES ============
-const emptyExpenseForm = { category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false, approval_status: "Approved" };
+interface ExpenseDraftRow {
+  category: string;
+  amount: string;
+  vendor: string;
+  description: string;
+  paid_by_partner_id: string;
+  bill_available: boolean;
+}
 
-function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
+const emptyExpenseRow = (): ExpenseDraftRow => ({ category: "Spare parts", amount: "", vendor: "", description: "", paid_by_partner_id: "", bill_available: false });
+
+function ExpensesTab({ vehicle, cost, partners, onChanged, highlightIds }: {
   vehicle: VehicleWithRelations;
+  cost: ReturnType<typeof computeCostBreakdown>;
   partners: Partner[];
   onChanged: () => void;
   highlightIds?: string[];
 }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [form, setForm] = useState(emptyExpenseForm);
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [rows, setRows] = useState<ExpenseDraftRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [evidenceFiles, setEvidenceFiles] = useState<UploadedFile[]>([]);
-  const [originalBillUrls, setOriginalBillUrls] = useState<string[]>([]);
-  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { user } = useAuth();
@@ -616,93 +631,59 @@ function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightIds?.join(",")]);
 
-  const resetModal = () => {
-    setShowAdd(false);
-    setEditingExpense(null);
-    setForm(emptyExpenseForm);
-    setEvidenceFiles([]);
-    setOriginalBillUrls([]);
-    setUploadSessionId(crypto.randomUUID());
+  const openAddPanel = () => {
+    setRows((r) => (r.length === 0 ? [emptyExpenseRow()] : r));
+    setShowAddPanel(true);
   };
 
-  const openAdd = () => {
-    setEditingExpense(null);
-    setForm(emptyExpenseForm);
-    setEvidenceFiles([]);
-    setOriginalBillUrls([]);
-    setShowAdd(true);
+  const closeAddPanel = () => {
+    setShowAddPanel(false);
+    setRows([]);
   };
 
-  const openEdit = (e: Expense) => {
-    setEditingExpense(e);
-    setForm({
-      category: e.category,
-      amount: String(e.amount),
-      vendor: e.vendor ?? "",
-      description: e.description ?? "",
-      paid_by_partner_id: e.paid_by_partner_id ?? "",
-      bill_available: e.bill_available,
-      approval_status: e.approval_status,
-    });
-    const existing = e.bill_urls?.length ? e.bill_urls : e.bill_url ? [e.bill_url] : [];
-    setEvidenceFiles(existing.map((path) => ({ path, name: path.split("/").pop() ?? path })));
-    setOriginalBillUrls(existing);
-    setShowAdd(true);
-  };
+  const addRow = () => setRows((r) => [...r, emptyExpenseRow()]);
+  const updateRow = (idx: number, patch: Partial<ExpenseDraftRow>) =>
+    setRows((r) => r.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  const removeRow = (idx: number) => setRows((r) => r.filter((_, i) => i !== idx));
 
-  const handleSave = async () => {
-    if (!form.amount || Number(form.amount) <= 0) {
-      toast("Enter a valid amount", "error");
+  const handleSaveBatch = async () => {
+    if (rows.length === 0 || rows.some((r) => !r.amount || Number(r.amount) <= 0)) {
+      toast("Add at least one expense with a valid amount", "error");
       return;
     }
     setSubmitting(true);
     try {
-      const billUrls = evidenceFiles.map((f) => f.path);
-      const removedPaths = diffRemovedPaths(originalBillUrls, evidenceFiles);
-
-      if (editingExpense) {
-        const { error } = await supabase
-          .from("expenses")
-          .update({
-            category: form.category,
-            amount: Number(form.amount),
-            paid_by_partner_id: form.paid_by_partner_id || null,
-            vendor: form.vendor || null,
-            description: form.description || null,
-            bill_available: billUrls.length > 0,
-            bill_url: billUrls[0] ?? null,
-            bill_urls: billUrls,
-          })
-          .eq("id", editingExpense.id);
-        if (error) throw error;
-        if (removedPaths.length > 0) await supabase.storage.from("finance-proofs").remove(removedPaths);
-        toast("Expense updated", "success");
-      } else {
-        const { error } = await supabase.from("expenses").insert({
+      const { error } = await supabase.from("expenses").insert(
+        rows.map((r) => ({
           vehicle_id: vehicle.id,
-          category: form.category,
-          amount: Number(form.amount),
-          paid_by_partner_id: form.paid_by_partner_id || null,
-          vendor: form.vendor || null,
-          description: form.description || null,
-          bill_available: billUrls.length > 0,
-          bill_url: billUrls[0] ?? null,
-          bill_urls: billUrls,
-          approval_status: form.approval_status,
-          approved_by: form.approval_status === "Approved" ? (user?.email ?? "Unknown") : null,
-          approved_at: form.approval_status === "Approved" ? new Date().toISOString() : null,
-        });
-        if (error) throw error;
-        toast("Expense added", "success");
-      }
-      resetModal();
+          category: r.category,
+          amount: Number(r.amount),
+          paid_by_partner_id: r.paid_by_partner_id || null,
+          vendor: r.vendor.trim() || null,
+          description: r.description.trim() || null,
+          bill_available: r.bill_available,
+          approval_status: "Approved",
+          approved_by: user?.email ?? "Unknown",
+          approved_at: new Date().toISOString(),
+        })),
+      );
+      if (error) throw error;
+      toast(`${rows.length} expense${rows.length === 1 ? "" : "s"} added`, "success");
+      closeAddPanel();
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to save expense", "error");
+      toast(e instanceof Error ? e.message : "Failed to save expenses", "error");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const saveField = async (id: string, patch: Record<string, unknown>) => {
+    const { error } = await supabase.from("expenses").update(patch).eq("id", id);
+    if (error) throw new Error(error.message);
+    syncVehicleAlerts(vehicle.id).catch(() => {});
+    onChanged();
   };
 
   const handleDelete = async (id: string) => {
@@ -760,56 +741,156 @@ function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
 
   return (
     <div className="space-y-5">
+      <Card className="p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500">Purchase Value</span>
+          <span className="font-medium text-slate-800">{formatINR(cost.purchaseCost)}</span>
+        </div>
+        <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
+          <span className="font-semibold text-slate-900">Running Total (Vehicle Cost)</span>
+          <span className="text-lg font-bold text-slate-900">{formatINR(cost.totalVehicleCost)}</span>
+        </div>
+      </Card>
+
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="p-4"><p className="stat-label">Total Approved Expenses</p><p className="stat-value mt-1">{formatINR(total)}</p></Card>
         <Card className="p-4"><p className="stat-label">Pending Approval</p><p className="stat-value mt-1">{pending}</p></Card>
         <Card className="p-4"><p className="stat-label">Total Records</p><p className="stat-value mt-1">{vehicle.expenses?.length ?? 0}</p></Card>
       </div>
 
+      {showAddPanel && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-medium text-slate-800">Add Expenses</h4>
+            <button onClick={addRow} className="btn-secondary btn-sm"><Plus size={14} /> Add Row</button>
+          </div>
+          <div className="space-y-3">
+            {rows.map((row, idx) => (
+              <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end rounded-lg border border-slate-200 p-3">
+                <Field label="Category" required className="sm:col-span-2">
+                  <Select value={row.category} onChange={(v) => updateRow(idx, { category: v })} options={EXPENSE_CATEGORIES} />
+                </Field>
+                <Field label="Amount (₹)" required className="sm:col-span-2">
+                  <input className="input" type="number" value={row.amount} onChange={(e) => updateRow(idx, { amount: e.target.value })} placeholder="3500" />
+                </Field>
+                <Field label="Vendor" className="sm:col-span-2">
+                  <input className="input" value={row.vendor} onChange={(e) => updateRow(idx, { vendor: e.target.value })} placeholder="Sai Spares" />
+                </Field>
+                <Field label="Description" className="sm:col-span-3">
+                  <input className="input" value={row.description} onChange={(e) => updateRow(idx, { description: e.target.value })} placeholder="Brake pads + air filter" />
+                </Field>
+                <Field label="Paid By" className="sm:col-span-2">
+                  <Select value={row.paid_by_partner_id} onChange={(v) => updateRow(idx, { paid_by_partner_id: v })} placeholder="Business" options={partners.map((p) => ({ value: p.id, label: p.name }))} />
+                </Field>
+                <div className="sm:col-span-1 flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <input type="checkbox" checked={row.bill_available} onChange={(e) => updateRow(idx, { bill_available: e.target.checked })} className="rounded border-slate-300" />
+                    Bill
+                  </label>
+                  <button onClick={() => removeRow(idx)} className="btn-ghost btn-sm text-red-500 hover:text-red-700" title="Remove">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+            <button onClick={closeAddPanel} className="btn-secondary">Cancel</button>
+            <button onClick={handleSaveBatch} disabled={submitting || rows.length === 0} className="btn-primary">
+              {submitting ? <Spinner size={14} /> : null} Save {rows.length} Expense{rows.length === 1 ? "" : "s"}
+            </button>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900">Expense Records</h3>
-          <button onClick={openAdd} className="btn-primary btn-sm"><Plus size={14} /> Add Expense</button>
+          {!showAddPanel && <button onClick={openAddPanel} className="btn-primary btn-sm"><Plus size={14} /> Add Expenses</button>}
         </div>
         {vehicle.expenses && vehicle.expenses.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                <th className="pb-2 font-medium">Category</th><th className="pb-2 font-medium text-right">Amount</th>
+                <th className="pb-2 font-medium">Category</th><th className="pb-2 font-medium">Vendor</th><th className="pb-2 font-medium text-right">Amount</th>
                 <th className="pb-2 font-medium">Paid By</th><th className="pb-2 font-medium">Date</th>
                 <th className="pb-2 font-medium">Bill</th><th className="pb-2 font-medium">Status</th><th className="pb-2"></th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
-                {vehicle.expenses.map((e) => {
-                  const partner = partners.find((p) => p.id === e.paid_by_partner_id);
-                  return (
-                    <tr
-                      key={e.id}
-                      id={`expense-row-${e.id}`}
-                      className={`hover:bg-slate-50 transition-colors ${activeHighlights.has(e.id) ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}
-                    >
-                      <td className="py-2.5"><span className="font-medium text-slate-900">{e.category}</span>{e.description && <p className="text-xs text-slate-500">{e.description}</p>}</td>
-                      <td className="py-2.5 text-right font-medium">{formatINR(e.amount)}</td>
-                      <td className="py-2.5 text-slate-600">{partner?.name ?? "Business"}</td>
-                      <td className="py-2.5 text-slate-500 text-xs">{formatDate(e.expense_date)}</td>
-                      <td className="py-2.5">
-                        {e.bill_url ? (
-                          <button onClick={() => handleViewEvidence(e)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">View</button>
-                        ) : e.bill_available ? (
-                          <Badge color="emerald">Yes</Badge>
-                        ) : (
-                          <Badge color="slate">No</Badge>
-                        )}
-                      </td>
-                      <td className="py-2.5"><Badge color={e.approval_status === "Approved" ? "emerald" : e.approval_status === "Submitted" ? "amber" : e.approval_status === "Rejected" ? "red" : "slate"}>{e.approval_status}</Badge></td>
-                      <td className="py-2.5 text-right">
-                        {e.approval_status === "Submitted" && <button onClick={() => handleApprove(e)} className="text-brand-600 hover:text-brand-700 text-xs font-medium mr-2">Approve</button>}
-                        <button onClick={() => openEdit(e)} className="text-slate-400 hover:text-brand-600 p-1"><Pencil size={14} /></button>
-                        <button onClick={() => handleDelete(e.id)} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {vehicle.expenses.map((e) => (
+                  <tr
+                    key={e.id}
+                    id={`expense-row-${e.id}`}
+                    className={`hover:bg-slate-50 transition-colors ${activeHighlights.has(e.id) ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}
+                  >
+                    <td className="py-2.5">
+                      <InlineEditableField
+                        type="select"
+                        value={e.category}
+                        options={EXPENSE_CATEGORIES}
+                        onSave={(next) => saveField(e.id, { category: String(next) })}
+                        className="font-medium text-slate-900"
+                      />
+                      <InlineEditableField
+                        type="text"
+                        value={e.description ?? ""}
+                        placeholder="Add description"
+                        onSave={(next) => saveField(e.id, { description: String(next) || null })}
+                        className="text-xs text-slate-500"
+                      />
+                    </td>
+                    <td className="py-2.5 text-slate-600">
+                      <InlineEditableField
+                        type="text"
+                        value={e.vendor ?? ""}
+                        placeholder="Add vendor"
+                        onSave={(next) => saveField(e.id, { vendor: String(next) || null })}
+                      />
+                    </td>
+                    <td className="py-2.5 text-right font-medium">
+                      <InlineEditableField
+                        type="number"
+                        value={e.amount}
+                        formatDisplay={(v) => formatINR(Number(v))}
+                        onSave={(next) => saveField(e.id, { amount: Number(next) })}
+                        className="justify-end"
+                      />
+                    </td>
+                    <td className="py-2.5 text-slate-600">
+                      <InlineEditableField
+                        type="select"
+                        value={e.paid_by_partner_id ?? ""}
+                        options={partners.map((p) => ({ value: p.id, label: p.name }))}
+                        placeholder="Business"
+                        formatDisplay={(v) => (v ? partners.find((p) => p.id === v)?.name ?? String(v) : "Business")}
+                        onSave={(next) => saveField(e.id, { paid_by_partner_id: next || null })}
+                      />
+                    </td>
+                    <td className="py-2.5 text-slate-500 text-xs">{formatDate(e.expense_date)}</td>
+                    <td className="py-2.5">
+                      {e.bill_url ? (
+                        <button onClick={() => handleViewEvidence(e)} className="text-xs text-brand-600 hover:text-brand-700 font-medium">View</button>
+                      ) : e.bill_available ? (
+                        <Badge color="emerald">Yes</Badge>
+                      ) : (
+                        <Badge color="slate">No</Badge>
+                      )}
+                    </td>
+                    <td className="py-2.5">
+                      <InlineEditableField
+                        type="select"
+                        value={e.approval_status}
+                        options={EXPENSE_STATUSES}
+                        formatDisplay={(v) => <Badge color={v === "Approved" ? "emerald" : v === "Submitted" ? "amber" : v === "Rejected" ? "red" : "slate"}>{String(v)}</Badge>}
+                        onSave={(next) => saveField(e.id, { approval_status: String(next) })}
+                      />
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {e.approval_status === "Submitted" && <button onClick={() => handleApprove(e)} className="text-brand-600 hover:text-brand-700 text-xs font-medium mr-2">Approve</button>}
+                      <button onClick={() => handleDelete(e.id)} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -817,58 +898,6 @@ function ExpensesTab({ vehicle, partners, onChanged, highlightIds }: {
           <EmptyState icon={<Receipt size={20} />} title="No expenses recorded" description="Add refurbishment, transportation, or other vehicle expenses." />
         )}
       </Card>
-
-      <Modal
-        open={showAdd}
-        onClose={resetModal}
-        title={editingExpense ? "Edit Expense" : "Add Expense"}
-        footer={<>
-          <button onClick={resetModal} className="btn-secondary">Cancel</button>
-          <button onClick={handleSave} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} {editingExpense ? "Save Changes" : "Add Expense"}</button>
-        </>}
-      >
-        <div className="space-y-4">
-          <Field label="Category" required>
-            <Select value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v }))} options={EXPENSE_CATEGORIES} />
-          </Field>
-          <Field label="Amount (₹)" required>
-            <input className="input" type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="3500" />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Paid By">
-              <Select value={form.paid_by_partner_id} onChange={(v) => setForm((f) => ({ ...f, paid_by_partner_id: v }))} placeholder="Business" options={partners.map((p) => ({ value: p.id, label: p.name }))} />
-            </Field>
-            <Field label="Vendor">
-              <input className="input" value={form.vendor} onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Sai Spares" />
-            </Field>
-          </div>
-          <Field label="Description">
-            <input className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Brake pads + air filter" />
-          </Field>
-
-          <FileUploadGrid
-            bucket="finance-proofs"
-            pathPrefix={`expenses/${vehicle.id}/${uploadSessionId}`}
-            value={evidenceFiles}
-            onChange={setEvidenceFiles}
-            label="Evidence"
-            hint="Bill, receipt, or payment screenshot — add as many as you need (max 10MB each)"
-          />
-
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Bill Available">
-              <label className="flex items-center gap-2 mt-2">
-                <input type="checkbox" checked={form.bill_available} onChange={(e) => setForm((f) => ({ ...f, bill_available: e.target.checked }))} className="rounded border-slate-300" />
-                <span className="text-sm">Bill attached</span>
-              </label>
-            </Field>
-            <Field label="Approval Status">
-              <Select value={form.approval_status} onChange={(v) => setForm((f) => ({ ...f, approval_status: v }))} options={EXPENSE_STATUSES} />
-            </Field>
-          </div>
-        </div>
-      </Modal>
 
       {evidenceLightbox && (
         <Lightbox
