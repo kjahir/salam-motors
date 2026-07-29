@@ -671,6 +671,11 @@
     "profit": "लाभ",
     "estProfit": "अनुमानित लाभ"
   },
+  "mobileAdd": {
+    "title": "आप क्या जोड़ना चाहेंगे?",
+    "chooseVehicle": "एक वाहन चुनें",
+    "noVehicles": "कोई वाहन नहीं मिला"
+  },
   "mobileVehicle": {
     "vehicle": "वाहन",
     "edit": "संपादित करें",
@@ -681,10 +686,11 @@
     "totalCost": "कुल लागत",
     "profit": "लाभ",
     "estProfit": "अनुमानित लाभ",
-    "overview": "ओवरव्यू",
+    "overview": "वाहन",
     "documents": "दस्तावेज",
     "expenses": "खर्च",
     "inspection": "निरीक्षण",
+    "sales": "बिक्री",
     "photos": "फोटो",
     "saving": "सेव हो रहा है...",
     "photoHint": "फोटो जोड़ें - बाहरी, अंदरूनी, नुकसान आदि",
@@ -768,7 +774,11 @@
     "uploadedCount": "{{uploaded}}/{{total}} अपलोड हुए",
     "done": "हो गया",
     "saving": "सेव हो रहा है...",
-    "hint": "फोटो या स्कैन जोड़ें — आप कई पेज अटैच कर सकते हैं"
+    "hint": "फोटो या स्कैन जोड़ें — आप कई पेज अटैच कर सकते हैं",
+    "addAnother": "एक और दस्तावेज़ जोड़ें",
+    "addDocument": "दस्तावेज़ जोड़ें",
+    "documentType": "दस्तावेज़ प्रकार",
+    "added": "दस्तावेज़ जोड़ा गया"
   },
   "deleteVehicle": {
     "title": "{{stock}} हटाएं",
