@@ -405,8 +405,26 @@ export interface AppSettings {
   twitter_handle: string | null;
   whatsapp_business_number: string | null;
   website_url: string | null;
+  google_business_handle: string | null;
   updated_at: string;
   updated_by: string | null;
+}
+
+export type AdPlatform = "google_business_shared" | "google_business_dealer";
+export type AdPostStatus = "queued" | "posted" | "failed" | "skipped";
+
+export interface VehicleAdPost {
+  id: string;
+  vehicle_id: string;
+  listing_id: string | null;
+  platform: AdPlatform;
+  status: AdPostStatus;
+  creative: Record<string, unknown> | null;
+  external_post_id: string | null;
+  error_message: string | null;
+  posted_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export type AuditLogSource = "app" | "trigger" | "assistant" | "system";

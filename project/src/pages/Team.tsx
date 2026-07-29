@@ -36,6 +36,7 @@ export function Team() {
     twitter_handle: "",
     whatsapp_business_number: "",
     website_url: "",
+    google_business_handle: "",
   });
   const [savingCompany, setSavingCompany] = useState(false);
   const { toast } = useToast();
@@ -71,6 +72,7 @@ export function Team() {
       twitter_handle: appSettings.twitter_handle ?? "",
       whatsapp_business_number: appSettings.whatsapp_business_number ?? "",
       website_url: appSettings.website_url ?? "",
+      google_business_handle: appSettings.google_business_handle ?? "",
     });
   }, [orgId]);
 
@@ -101,6 +103,7 @@ export function Team() {
           twitter_handle: companyForm.twitter_handle.trim().replace(/^@/, "") || null,
           whatsapp_business_number: companyForm.whatsapp_business_number.trim() || null,
           website_url: companyForm.website_url.trim() || null,
+          google_business_handle: companyForm.google_business_handle.trim().replace(/^@/, "") || null,
         },
         user.email ?? user.id,
       );
@@ -274,6 +277,20 @@ export function Team() {
                 onChange={(e) => setCompanyForm((f) => ({ ...f, website_url: e.target.value }))}
                 placeholder="https://"
               />
+            </Field>
+            <Field label={t("teamPage.company.googleBusinessHandle", { defaultValue: "Google Business Profile Handle" })}>
+              <input
+                className="input"
+                value={companyForm.google_business_handle}
+                disabled={!canEditCompany}
+                onChange={(e) => setCompanyForm((f) => ({ ...f, google_business_handle: e.target.value }))}
+                placeholder="dealername"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {t("teamPage.company.googleBusinessHandleHint", {
+                  defaultValue: "Set this to also cross-post every listed vehicle to your own Google Business Profile, in addition to the shared VahanExchange listing feed.",
+                })}
+              </p>
             </Field>
           </div>
           {settings?.updated_at && (
