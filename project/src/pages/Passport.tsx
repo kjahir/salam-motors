@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   Wrench,
   Share2,
+  BadgeCheck,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
@@ -29,6 +30,16 @@ import { useAuth } from "@/lib/useAuth";
 import type { VehicleWithRelations, InspectionItem } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
+const PROTEAN_LOOKUP_ROLES = ["owner", "manager", "sales_executive", "accountant"] as const;
+
+type ProteanLookupType = "vehicle" | "insurance" | "challan";
+
+interface ProteanLookupState {
+  loading: ProteanLookupType | null;
+  results: Partial<Record<ProteanLookupType, { cached: boolean; payload: Record<string, unknown> }>>;
+  errors: Partial<Record<ProteanLookupType, string>>;
+}
+
 interface PassportProps {
   vehicleId: string;
   onNavigate: (page: PageKey, params?: NavigateParams) => void;
@@ -39,9 +50,10 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
+  const [proteanState, setProteanState] = useState<ProteanLookupState>({ loading: null, results: {}, errors: {} });
   const { toast } = useToast();
   const { t } = useTranslation();
-  const { orgName } = useAuth();
+  const { orgName, orgId, role } = useAuth();
 
   const reload = async () => {
     try {
@@ -104,6 +116,40 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
       toast(e instanceof Error ? e.message : t("passportPage.updateFailed"), "error");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  // Task 8 (Protean eGov lookups) surfaced here as a light "Verify Vehicle"
+  // panel — full lookup/eSign UI is out of scope for this pass (deferred to
+  // the broader UI work). Placeholder Protean credentials are provisioned
+  // on staging but not yet real, so this call is expected to fail with
+  // PROTEAN_NOT_CONFIGURED until an operator fills in real API keys; that
+  // failure is surfaced inline rather than as an opaque error.
+  const runProteanLookup = async (lookupType: ProteanLookupType) => {
+    if (!orgId || !vehicle.registration_number) return;
+    setProteanState((s) => ({ ...s, loading: lookupType, errors: { ...s.errors, [lookupType]: undefined } }));
+    try {
+      const { data, error } = await supabase.functions.invoke("protean-lookup", {
+        body: {
+          org_id: orgId,
+          vehicle_id: vehicle.id,
+          lookup_type: lookupType,
+          registration_number: vehicle.registration_number,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error.message ?? data.error.code ?? "Lookup failed");
+      setProteanState((s) => ({
+        ...s,
+        loading: null,
+        results: { ...s.results, [lookupType]: { cached: !!data.cached, payload: data.result?.response_payload ?? {} } },
+      }));
+    } catch (e) {
+      setProteanState((s) => ({
+        ...s,
+        loading: null,
+        errors: { ...s.errors, [lookupType]: e instanceof Error ? e.message : "Lookup failed" },
+      }));
     }
   };
 
@@ -234,6 +280,46 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
                 <p className="text-sm text-slate-500"> {t("passportPage.noDocuments")}</p>
               )}
             </Card>
+
+            {role && PROTEAN_LOOKUP_ROLES.includes(role as (typeof PROTEAN_LOOKUP_ROLES)[number]) && vehicle.registration_number && (
+              <Card className="p-5">
+                <h2 className="font-semibold text-slate-900 mb-1 flex items-center gap-2"><BadgeCheck size={16} /> Verify Vehicle</h2>
+                <p className="text-xs text-slate-500 mb-3">
+                  Cross-check this vehicle's registration against government records via Protean eGov.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(["vehicle", "insurance", "challan"] as ProteanLookupType[]).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => runProteanLookup(type)}
+                      disabled={proteanState.loading !== null}
+                      className="btn-secondary btn-sm"
+                    >
+                      {proteanState.loading === type ? <Spinner size={14} /> : null}
+                      {type === "vehicle" ? "RC Check" : type === "insurance" ? "Insurance" : "Challans"}
+                    </button>
+                  ))}
+                </div>
+                {(["vehicle", "insurance", "challan"] as ProteanLookupType[]).map((type) => {
+                  const result = proteanState.results[type];
+                  const errorMessage = proteanState.errors[type];
+                  if (!result && !errorMessage) return null;
+                  return (
+                    <div key={type} className="text-xs mt-2 p-2 rounded-md bg-slate-50 border border-slate-200">
+                      <span className="font-medium text-slate-700">{type}: </span>
+                      {errorMessage
+                        ? <span className="text-red-600">{errorMessage}</span>
+                        : (
+                          <span className="text-slate-600">
+                            {result?.cached ? "(cached) " : ""}
+                            {JSON.stringify(result?.payload ?? {})}
+                          </span>
+                        )}
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
 
             <Card className="p-5">
               <div className="flex items-center justify-between mb-3">
