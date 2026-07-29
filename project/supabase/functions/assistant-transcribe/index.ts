@@ -10,8 +10,11 @@ import {
   jsonResponse,
   toPublicError,
 } from "../_shared/assistant/http.ts";
-
-import { detectSpokenLocale } from "./language.ts";
+import {
+  transcribeWithGemini,
+  transcribeWithOpenAI,
+  TranscriptionProviderError,
+} from "./providers.ts";
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
@@ -31,7 +34,8 @@ Deno.serve(async (req) => {
 
   try {
     const config = loadAssistantConfig();
-    if (!config.openAiApiKey) {
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY")?.trim() ?? "";
+    if (!geminiApiKey && !config.openAiApiKey) {
       throw new AssistantHttpError(
         503,
         "TRANSCRIPTION_UNAVAILABLE",
@@ -72,50 +76,68 @@ Deno.serve(async (req) => {
       );
     }
 
-    const upstreamForm = new FormData();
-    upstreamForm.append("file", audio, audio.name || "ask-salam.webm");
-    upstreamForm.append(
-      "model",
-      Deno.env.get("OPENAI_TRANSCRIPTION_MODEL") ?? "gpt-4o-mini-transcribe",
-    );
-    upstreamForm.append("response_format", "json");
-    upstreamForm.append(
-      "prompt",
-      "Vehicle dealership conversation. The speaker may use English, Tamil, Hindi, or mix these languages. Transcribe exactly in the spoken language and native script.",
-    );
-
-    const response = await fetch(
-      `${config.openAiBaseUrl}/audio/transcriptions`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${config.openAiApiKey}` },
-        body: upstreamForm,
-      },
-    );
-    const payload = await response.json().catch(() => ({})) as {
-      text?: unknown;
-    };
-    if (!response.ok) {
-      console.error("assistant transcription failed", response.status);
-      throw new AssistantHttpError(
-        response.status === 429 ? 429 : 502,
-        response.status === 429 ? "TRANSCRIPTION_BUSY" : "TRANSCRIPTION_FAILED",
-        response.status === 429
+    let result;
+    try {
+      result = geminiApiKey
+        ? await transcribeWithGemini({
+          audio,
+          apiKey: geminiApiKey,
+          model: Deno.env.get("GEMINI_TRANSCRIPTION_MODEL") ??
+            "gemini-3.5-flash-lite",
+          baseUrl: Deno.env.get("GEMINI_BASE_URL"),
+        })
+        : await transcribeWithOpenAI({
+          audio,
+          apiKey: config.openAiApiKey!,
+          model: Deno.env.get("OPENAI_TRANSCRIPTION_MODEL") ??
+            "gpt-4o-mini-transcribe",
+          baseUrl: config.openAiBaseUrl,
+        });
+    } catch (error) {
+      if (
+        geminiApiKey && config.openAiApiKey &&
+        error instanceof TranscriptionProviderError
+      ) {
+        console.warn("Gemini transcription failed; using OpenAI fallback", {
+          status: error.status,
+        });
+        result = await transcribeWithOpenAI({
+          audio,
+          apiKey: config.openAiApiKey,
+          model: Deno.env.get("OPENAI_TRANSCRIPTION_MODEL") ??
+            "gpt-4o-mini-transcribe",
+          baseUrl: config.openAiBaseUrl,
+        });
+      } else {
+        throw error;
+      }
+    }
+    return jsonResponse(result);
+  } catch (error) {
+    if (error instanceof TranscriptionProviderError) {
+      console.error("assistant transcription failed", {
+        provider: error.provider,
+        status: error.status,
+      });
+      const busy = error.status === 429;
+      const empty = error.status === 422;
+      const publicError = new AssistantHttpError(
+        empty ? 422 : busy ? 429 : 502,
+        empty
+          ? "TRANSCRIPTION_EMPTY"
+          : busy
+          ? "TRANSCRIPTION_BUSY"
+          : "TRANSCRIPTION_FAILED",
+        empty
+          ? "No speech was detected."
+          : busy
           ? "Voice transcription is busy. Please try again shortly."
           : "Voice input could not be transcribed.",
-        response.status >= 500 || response.status === 429,
+        busy || error.status >= 500,
       );
+      const response = toPublicError(publicError);
+      return jsonResponse(response.body, response.status);
     }
-    const text = typeof payload.text === "string" ? payload.text.trim() : "";
-    if (!text) {
-      throw new AssistantHttpError(
-        422,
-        "TRANSCRIPTION_EMPTY",
-        "No speech was detected.",
-      );
-    }
-    return jsonResponse({ text, locale: detectSpokenLocale(text) });
-  } catch (error) {
     const publicError = toPublicError(error);
     return jsonResponse(publicError.body, publicError.status);
   }
