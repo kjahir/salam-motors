@@ -23,7 +23,6 @@ import { PageHeader, Tabs, Field, Select, Spinner } from "@/components/ui/Primit
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge, StatusBadge, VerificationBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
-import { Modal } from "@/components/ui/Modal";
 import { SideNav } from "@/components/ui/SideNav";
 import { InlineEditableField } from "@/components/ui/InlineEditableField";
 import { useToast } from "@/components/ui/useToast";
@@ -1870,79 +1869,81 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
         </div>
       </Card>
 
-      <Card className="p-5">
-        {hardBlockingViolations.length > 0 ? (
-          <EmptyState
-            icon={<AlertTriangle size={20} />}
-            title={t("vehicleDetail.saleBlockedTitle")}
-            description={t("vehicleDetail.saleBlockedDescription", { issues: hardBlockingViolations.map((v) => v.name).join(", ") })}
-          />
-        ) : (
-          <EmptyState
-            icon={<ShoppingCart size={20} />}
-            title="No sale recorded"
-            description="Record a sale to calculate profit and partner distributions."
-            action={<button onClick={() => setShowBuyers(true)} className="btn-primary"><ShoppingCart size={16} /> Record Sale</button>}
-          />
-        )}
-      </Card>
-
-      <Modal
-        open={showBuyers}
-        onClose={() => setShowBuyers(false)}
-        title="Record Sale"
-        description={`${vehicle.stock_number} · Total cost ${formatINR(cost.totalVehicleCost)}`}
-        size="lg"
-        footer={<>
-          <button onClick={() => setShowBuyers(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleRecordSale} disabled={submitting || hardBlockingViolations.length > 0 || unacknowledgedManual.length > 0} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Complete Sale</button>
-        </>}
-      >
-        <div className="space-y-4">
-          {manualViolations.length > 0 && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-2">
-              <p className="font-medium flex items-start gap-1.5">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                {t("vehicleDetail.nonBlockingIssues", { count: manualViolations.length, list: manualViolations.map((v) => v.name).join(", ") })}
-              </p>
-              {unacknowledgedManual.length > 0 ? (
-                <button type="button" onClick={handleAcknowledgeAll} disabled={acknowledging} className="btn-secondary btn-sm">
-                  {acknowledging ? <Spinner size={12} /> : null} {t("vehicleDetail.acknowledgeAndProceed")}
-                </button>
-              ) : (
-                <p className="flex items-center gap-1.5 text-emerald-700"><CheckCircle2 size={14} /> {t("status.Acknowledged")}</p>
-              )}
-            </div>
+      {!showBuyers && (
+        <Card className="p-5">
+          {hardBlockingViolations.length > 0 ? (
+            <EmptyState
+              icon={<AlertTriangle size={20} />}
+              title={t("vehicleDetail.saleBlockedTitle")}
+              description={t("vehicleDetail.saleBlockedDescription", { issues: hardBlockingViolations.map((v) => v.name).join(", ") })}
+            />
+          ) : (
+            <EmptyState
+              icon={<ShoppingCart size={20} />}
+              title="No sale recorded"
+              description="Record a sale to calculate profit and partner distributions."
+              action={<button onClick={() => setShowBuyers(true)} className="btn-primary"><ShoppingCart size={16} /> Record Sale</button>}
+            />
           )}
-          <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
-          <div className="grid grid-cols-3 gap-4">
-            <Field label="Sale Price (₹)" required><input className="input" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" /></Field>
-            <Field label="Discount (₹)"><input className="input" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} /></Field>
-            <Field label="Buyer Charges (₹)"><input className="input" type="number" value={form.buyer_charges} onChange={(e) => setForm((f) => ({ ...f, buyer_charges: e.target.value }))} /></Field>
+        </Card>
+      )}
+
+      {showBuyers && (
+        <Card className="p-5">
+          <div className="mb-4">
+            <h4 className="font-medium text-slate-800">Record Sale</h4>
+            <p className="text-xs text-slate-500 mt-0.5">{vehicle.stock_number} · Total cost {formatINR(cost.totalVehicleCost)}</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Payment Method"><Select value={form.payment_method} onChange={(v) => setForm((f) => ({ ...f, payment_method: v }))} options={PAYMENT_METHODS} /></Field>
-            <Field label="Delivery Location"><input className="input" value={form.delivery_location} onChange={(e) => setForm((f) => ({ ...f, delivery_location: e.target.value }))} placeholder="Chennai" /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Payment Status" required>
-              <Select value={form.payment_status} onChange={(v) => setForm((f) => ({ ...f, payment_status: v }))} options={PAYMENT_STATUSES} />
-            </Field>
-            <Field label="Delivery Status" required>
-              <Select value={form.delivery_status} onChange={(v) => setForm((f) => ({ ...f, delivery_status: v }))} options={DELIVERY_STATUSES} />
-            </Field>
-          </div>
-          <Field label="Notes" required={Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost}>
-            <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost ? "Required: explain why this vehicle is being sold below cost" : "Optional notes"} />
-            {Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost && (
-              <p className="text-xs text-red-600 mt-1">This sale is below cost — a reason is required.</p>
+          <div className="space-y-4">
+            {manualViolations.length > 0 && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-2">
+                <p className="font-medium flex items-start gap-1.5">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  {t("vehicleDetail.nonBlockingIssues", { count: manualViolations.length, list: manualViolations.map((v) => v.name).join(", ") })}
+                </p>
+                {unacknowledgedManual.length > 0 ? (
+                  <button type="button" onClick={handleAcknowledgeAll} disabled={acknowledging} className="btn-secondary btn-sm">
+                    {acknowledging ? <Spinner size={12} /> : null} {t("vehicleDetail.acknowledgeAndProceed")}
+                  </button>
+                ) : (
+                  <p className="flex items-center gap-1.5 text-emerald-700"><CheckCircle2 size={14} /> {t("status.Acknowledged")}</p>
+                )}
+              </div>
             )}
-          </Field>
-          <div className="rounded-lg bg-brand-50 border border-brand-200 p-3 text-xs text-brand-800">
-            On completion, the vehicle will be marked SOLD, profit calculated as (Net Revenue − Total Cost), and profit distributed to partners based on their allocation percentages.
+            <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Sale Price (₹)" required><input className="input" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" /></Field>
+              <Field label="Discount (₹)"><input className="input" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} /></Field>
+              <Field label="Buyer Charges (₹)"><input className="input" type="number" value={form.buyer_charges} onChange={(e) => setForm((f) => ({ ...f, buyer_charges: e.target.value }))} /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Payment Method"><Select value={form.payment_method} onChange={(v) => setForm((f) => ({ ...f, payment_method: v }))} options={PAYMENT_METHODS} /></Field>
+              <Field label="Delivery Location"><input className="input" value={form.delivery_location} onChange={(e) => setForm((f) => ({ ...f, delivery_location: e.target.value }))} placeholder="Chennai" /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Payment Status" required>
+                <Select value={form.payment_status} onChange={(v) => setForm((f) => ({ ...f, payment_status: v }))} options={PAYMENT_STATUSES} />
+              </Field>
+              <Field label="Delivery Status" required>
+                <Select value={form.delivery_status} onChange={(v) => setForm((f) => ({ ...f, delivery_status: v }))} options={DELIVERY_STATUSES} />
+              </Field>
+            </div>
+            <Field label="Notes" required={Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost}>
+              <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost ? "Required: explain why this vehicle is being sold below cost" : "Optional notes"} />
+              {Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost && (
+                <p className="text-xs text-red-600 mt-1">This sale is below cost — a reason is required.</p>
+              )}
+            </Field>
+            <div className="rounded-lg bg-brand-50 border border-brand-200 p-3 text-xs text-brand-800">
+              On completion, the vehicle will be marked SOLD, profit calculated as (Net Revenue − Total Cost), and profit distributed to partners based on their allocation percentages.
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setShowBuyers(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleRecordSale} disabled={submitting || hardBlockingViolations.length > 0 || unacknowledgedManual.length > 0} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Complete Sale</button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Card>
+      )}
     </div>
   );
 }
