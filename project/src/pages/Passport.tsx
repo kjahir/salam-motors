@@ -111,6 +111,12 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
       const { error } = await supabase.from("listings").update({ status: nextStatus }).eq("id", listing.id);
       if (error) throw error;
       toast(nextStatus === "Active" ? t("passportPage.published") : t("passportPage.unpublished"), "success");
+      if (nextStatus === "Active") {
+        // Best-effort: the DB trigger already queued vehicle_ad_posts rows
+        // regardless of this call succeeding, so a lost network call here
+        // just means the ad stays queued until manually retried later.
+        supabase.functions.invoke("post-vehicle-ad", { body: { vehicle_id: vehicleId } }).catch(() => {});
+      }
       await reload();
     } catch (e) {
       toast(e instanceof Error ? e.message : t("passportPage.updateFailed"), "error");

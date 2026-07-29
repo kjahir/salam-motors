@@ -33,6 +33,7 @@ import type {
   AssistantAuditTurn,
   AssistantAuditToolCall,
   AssistantTraceEvent,
+  VehicleAdPost,
 } from "./types";
 
 export async function fetchAppSettings(): Promise<AppSettings> {
@@ -52,13 +53,22 @@ export async function updateAppSettings(
 }
 
 export async function updateCompanyPreferences(
-  patch: Pick<AppSettings, "preferred_language" | "instagram_handle" | "twitter_handle" | "whatsapp_business_number" | "website_url">,
+  patch: Pick<AppSettings, "preferred_language" | "instagram_handle" | "twitter_handle" | "whatsapp_business_number" | "website_url" | "google_business_handle">,
   updatedBy: string,
 ): Promise<void> {
   const { error } = await supabase
     .from("app_settings")
     .update({ ...patch, updated_by: updatedBy });
   if (error) throw error;
+}
+
+export async function fetchVehicleAdPosts(vehicleId: string): Promise<VehicleAdPost[]> {
+  const { data, error } = await supabase
+    .from("vehicle_ad_posts")
+    .select("*")
+    .eq("vehicle_id", vehicleId);
+  if (error) throw error;
+  return (data ?? []) as VehicleAdPost[];
 }
 
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
