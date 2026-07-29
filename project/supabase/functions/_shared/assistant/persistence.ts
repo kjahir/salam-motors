@@ -18,6 +18,36 @@ function isOptionalSchemaError(error: SupabaseErrorLike | null): boolean {
     /does not exist|schema cache|could not find/i.test(message);
 }
 
+const TRACE_BLOCKED_KEY =
+  /(api[_-]?key|secret|password|authorization|bearer|confirmation[_-]?token|action[_-]?token|access[_-]?token|refresh[_-]?token|hidden[_-]?reasoning|chain[_-]?of[_-]?thought|raw[_-]?(payload|prompt|response)|system[_-]?prompt)/i;
+
+export function sanitizeTraceDetails(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitize = (input: unknown, depth: number): unknown => {
+    if (depth > 4) return "[depth-limited]";
+    if (
+      input === null || typeof input === "boolean" || typeof input === "number"
+    ) return input;
+    if (typeof input === "string") return input.slice(0, 500);
+    if (Array.isArray(input)) {
+      return input.slice(0, 40).map((item) => sanitize(item, depth + 1));
+    }
+    if (typeof input !== "object") return String(input).slice(0, 500);
+    const output: Record<string, unknown> = {};
+    for (
+      const [key, item] of Object.entries(input as Record<string, unknown>)
+        .slice(0, 80)
+    ) {
+      output[key] = TRACE_BLOCKED_KEY.test(key)
+        ? "[redacted]"
+        : sanitize(item, depth + 1);
+    }
+    return output;
+  };
+  return sanitize(value, 0) as Record<string, unknown>;
+}
+
 function messageText(content: unknown): string | null {
   if (typeof content === "string") return content;
   if (
@@ -39,7 +69,13 @@ free-text fields inside the two proposal tools' vehicle/purchase/sale
 objects.
 */
 const ARGUMENT_ALLOW_LIST: Readonly<Record<string, readonly string[]>> = {
-  search_inventory: ["status", "category", "min_price", "max_price", "include_sold"],
+  search_inventory: [
+    "status",
+    "category",
+    "min_price",
+    "max_price",
+    "include_sold",
+  ],
   get_vehicle_360: ["vehicle_id"],
   get_dashboard_ageing: ["include_sold", "ageing_threshold_days"],
   get_alerts_compliance: ["vehicle_id", "status", "severity", "alert_type"],
@@ -283,6 +319,54 @@ export class AssistantPersistence {
       .eq("requested_by_user_id", this.principal.userId);
   }
 
+  async logTrace(
+    runId: string | null,
+    conversationId: string,
+    event: {
+      category:
+        | "request"
+        | "context"
+        | "model"
+        | "tool"
+        | "validation"
+        | "persistence"
+        | "response"
+        | "error";
+      eventKey: string;
+      status:
+        | "started"
+        | "completed"
+        | "failed"
+        | "skipped"
+        | "info"
+        | "flagged";
+      summary: string;
+      details?: Record<string, unknown>;
+      durationMs?: number;
+    },
+  ): Promise<void> {
+    if (!runId || !this.serverClient) return;
+    const { error } = await this.serverClient
+      .from("assistant_trace_events")
+      .insert({
+        org_id: this.principal.orgId,
+        conversation_id: conversationId,
+        run_id: runId,
+        actor_user_id: this.principal.userId,
+        category: event.category,
+        event_key: event.eventKey,
+        status: event.status,
+        summary: event.summary.slice(0, 300),
+        details_redacted: sanitizeTraceDetails(event.details ?? {}),
+        duration_ms: event.durationMs === undefined
+          ? null
+          : Math.max(0, Math.round(event.durationMs)),
+      });
+    if (error && !isOptionalSchemaError(error)) {
+      console.warn("assistant trace persistence failed", error.code);
+    }
+  }
+
   async logToolCall(
     runId: string | null,
     conversationId: string,
@@ -364,7 +448,10 @@ export class AssistantPersistence {
       },
     );
     if (auditError) {
-      console.warn("assistant tool-call security audit failed", auditError.code);
+      console.warn(
+        "assistant tool-call security audit failed",
+        auditError.code,
+      );
     }
   }
 
@@ -455,4 +542,3 @@ export class AssistantPersistence {
       .eq("created_by_user_id", this.principal.userId);
   }
 }
-

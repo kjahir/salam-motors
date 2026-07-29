@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ScrollText, AlertTriangle, ChevronDown, ChevronRight, ChevronLeft, X, Bot } from "lucide-react";
+import { ScrollText, AlertTriangle, ChevronDown, ChevronRight, ChevronLeft, X, Bot, Activity } from "lucide-react";
 import { PageHeader, Tabs, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -10,9 +10,16 @@ import {
   fetchAuditLogs,
   fetchAssistantTurns,
   fetchAssistantToolCallsForRun,
+  fetchAssistantTraceForRun,
   type AuditLogFilters,
 } from "@/lib/queries";
-import type { AuditLog, AssistantAuditTurn, AssistantAuditToolCall, ToolEntitySummary } from "@/lib/types";
+import type {
+  AuditLog,
+  AssistantAuditTurn,
+  AssistantAuditToolCall,
+  AssistantTraceEvent,
+  ToolEntitySummary,
+} from "@/lib/types";
 
 const ENTITY_TYPE_OPTIONS = [
   "vehicle",
@@ -294,6 +301,7 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [toolCallsByRun, setToolCallsByRun] = useState<Record<string, AssistantAuditToolCall[]>>({});
+  const [traceByRun, setTraceByRun] = useState<Record<string, AssistantTraceEvent[]>>({});
   const [loadingRunId, setLoadingRunId] = useState<string | null>(null);
   const pageSize = 20;
 
@@ -321,13 +329,18 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
       return;
     }
     setExpandedRunId(runId);
-    if (!toolCallsByRun[runId]) {
+    if (!toolCallsByRun[runId] || !traceByRun[runId]) {
       setLoadingRunId(runId);
       try {
-        const calls = await fetchAssistantToolCallsForRun(runId);
+        const [calls, trace] = await Promise.all([
+          fetchAssistantToolCallsForRun(runId),
+          fetchAssistantTraceForRun(runId),
+        ]);
         setToolCallsByRun((prev) => ({ ...prev, [runId]: calls }));
+        setTraceByRun((prev) => ({ ...prev, [runId]: trace }));
       } catch {
         setToolCallsByRun((prev) => ({ ...prev, [runId]: [] }));
+        setTraceByRun((prev) => ({ ...prev, [runId]: [] }));
       } finally {
         setLoadingRunId(null);
       }
@@ -367,6 +380,7 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
           {turns.map((turn) => {
             const isExpanded = expandedRunId === turn.run_id;
             const calls = toolCallsByRun[turn.run_id];
+            const trace = traceByRun[turn.run_id];
             return (
               <div key={turn.run_id} className="px-4 py-3">
                 <div className="flex items-center gap-3 flex-wrap cursor-pointer" onClick={() => toggleExpanded(turn.run_id)}>
@@ -388,6 +402,33 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
                 {isExpanded && (
                   <div className="mt-3 ml-6 space-y-3">
                     <TurnStage label={t("auditPage.assistantTurn.query")} text={turn.user_message_text} />
+
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <Activity size={14} className="text-brand-600" />
+                        <p className="text-xs font-semibold text-slate-700">
+                          {t("auditPage.assistantTurn.executionTrace")}
+                        </p>
+                        {trace && <Badge color="slate">{trace.length}</Badge>}
+                      </div>
+                      {loadingRunId === turn.run_id ? (
+                        <Spinner size={18} />
+                      ) : trace && trace.length > 0 ? (
+                        <div className="border-l border-slate-200 pl-3">
+                          {trace.map((event, index) => (
+                            <TraceEventRow
+                              key={event.id}
+                              event={event}
+                              isLast={index === trace.length - 1}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">
+                          {t("auditPage.assistantTurn.noTrace")}
+                        </p>
+                      )}
+                    </div>
 
                     <div>
                       <p className="text-xs font-medium text-slate-500 mb-1.5">{t("auditPage.assistantTurn.toolCalls")}</p>
@@ -448,6 +489,54 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
         <button onClick={() => setPage((p) => p + 1)} disabled={turns.length < pageSize} className="btn-ghost btn-sm disabled:opacity-40">
           {t("auditPage.pagination.next")} <ChevronRight size={14} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+function TraceEventRow({ event, isLast }: { event: AssistantTraceEvent; isLast: boolean }) {
+  const { t } = useTranslation();
+  const statusColor = event.status === "failed"
+    ? "red"
+    : event.status === "flagged"
+      ? "amber"
+      : event.status === "completed"
+        ? "emerald"
+        : "slate";
+  const details = Object.keys(event.details_redacted ?? {}).length > 0
+    ? event.details_redacted
+    : null;
+
+  return (
+    <div className={`relative pb-3 ${isLast ? "" : ""}`}>
+      <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full border-2 border-white bg-brand-500 ring-1 ring-slate-200" />
+      <div className="rounded border border-slate-200 bg-white px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] font-semibold text-slate-700">
+            {event.event_key}
+          </span>
+          <Badge color={statusColor}>{event.status}</Badge>
+          <Badge color="slate">{event.category}</Badge>
+          {event.duration_ms !== null && (
+            <span className="ml-auto font-mono text-[10px] text-slate-400">
+              {event.duration_ms} ms
+            </span>
+          )}
+          <span className="text-[10px] text-slate-400">
+            {formatDate(event.occurred_at, { withTime: true })}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-slate-700">{event.summary}</p>
+        {details && (
+          <details className="mt-1.5">
+            <summary className="cursor-pointer text-[10px] font-medium text-brand-700">
+              {t("auditPage.assistantTurn.traceDetails")}
+            </summary>
+            <pre className="mt-1 max-h-52 overflow-auto whitespace-pre-wrap break-all bg-slate-50 p-2 font-mono text-[10px] leading-relaxed text-slate-600">
+              {JSON.stringify(details, null, 2)}
+            </pre>
+          </details>
+        )}
       </div>
     </div>
   );

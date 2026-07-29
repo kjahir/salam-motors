@@ -32,6 +32,7 @@ import type {
   Membership,
   AssistantAuditTurn,
   AssistantAuditToolCall,
+  AssistantTraceEvent,
 } from "./types";
 
 export async function fetchAppSettings(): Promise<AppSettings> {
@@ -414,6 +415,19 @@ export async function fetchAssistantTurns(
   });
   if (error) throw error;
   return (data ?? []) as AssistantAuditTurn[];
+}
+
+export async function fetchAssistantTraceForRun(
+  runId: string,
+): Promise<AssistantTraceEvent[]> {
+  const { data, error } = await supabase
+    .from("assistant_trace_events")
+    .select("id, run_id, category, event_key, status, summary, details_redacted, duration_ms, occurred_at")
+    .eq("run_id", runId)
+    .order("occurred_at", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AssistantTraceEvent[];
 }
 
 export async function fetchAssistantToolCallsForRun(

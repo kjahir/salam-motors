@@ -161,6 +161,9 @@ function stubs(options: {
       state.finishRunInputs.push(input);
       return Promise.resolve();
     },
+    logTrace() {
+      return Promise.resolve();
+    },
   } as unknown as AssistantPersistence;
   return { state, client, persistence };
 }

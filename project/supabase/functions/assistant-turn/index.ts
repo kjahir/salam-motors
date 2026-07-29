@@ -7,10 +7,13 @@
 // RPCs that re-verify ownership, role, argument hash, and idempotency.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { authenticatePrincipal, bearerToken } from "../_shared/assistant/auth.ts";
 import {
-  loadAssistantConfig,
+  authenticatePrincipal,
+  bearerToken,
+} from "../_shared/assistant/auth.ts";
+import {
   type AssistantConfig,
+  loadAssistantConfig,
 } from "../_shared/assistant/config.ts";
 import { runConfirmedAction } from "../_shared/assistant/confirmation.ts";
 import {
@@ -18,8 +21,8 @@ import {
   AssistantHttpError,
   jsonResponse,
   sseTurnResponse,
-  toPublicError,
   type SseTurnResult,
+  toPublicError,
 } from "../_shared/assistant/http.ts";
 import { runOpenAITurn } from "../_shared/assistant/openai.ts";
 import { AssistantPersistence } from "../_shared/assistant/persistence.ts";
@@ -64,6 +67,21 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
   );
 
   const started = Date.now();
+  await persistence.logTrace(runId, conversationId, {
+    category: "request",
+    eventKey: "turn.request.accepted",
+    status: "completed",
+    summary: "Authenticated user request accepted and run context created.",
+    details: {
+      locale: request.locale,
+      surface: request.context.surface,
+      page: request.context.page ?? null,
+      history_message_count: history.length,
+      user_message_persisted: inputMessageId !== null,
+      model: config.model,
+      stream: request.stream,
+    },
+  });
   try {
     const result = await runOpenAITurn({
       client,
@@ -77,11 +95,46 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
       onStatus,
     });
     const turn = { ...result.turn, conversationId };
+    await persistence.logTrace(runId, conversationId, {
+      category: "response",
+      eventKey: "turn.response.generated",
+      status: "completed",
+      summary: "Final structured assistant response generated.",
+      details: {
+        locale: turn.locale,
+        block_count: turn.blocks.length,
+        block_types: turn.blocks.map((block) => block.type),
+        source_count: turn.provenance.sources.length,
+        provenance_truncated: turn.provenance.truncated === true,
+        answer_character_count: turn.answer.text.length,
+      },
+      durationMs: Date.now() - started,
+    });
     const outputMessageId = await persistence.saveAssistantMessage(
       conversationId,
       turn,
       config.model,
     );
+    await persistence.logTrace(runId, conversationId, {
+      category: "persistence",
+      eventKey: "turn.response.persisted",
+      status: outputMessageId ? "completed" : "skipped",
+      summary: outputMessageId
+        ? "Final assistant message persisted and linked to the run."
+        : "Final assistant message persistence was unavailable.",
+      details: { output_message_persisted: outputMessageId !== null },
+    });
+    await persistence.logTrace(runId, conversationId, {
+      category: "response",
+      eventKey: "turn.completed",
+      status: "completed",
+      summary: "Ask Salam turn completed successfully.",
+      details: {
+        input_tokens: result.usage.inputTokens,
+        output_tokens: result.usage.outputTokens,
+      },
+      durationMs: Date.now() - started,
+    });
     await persistence.finishRun(runId, {
       status: "completed",
       inputTokens: result.usage.inputTokens,
@@ -93,6 +146,19 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
     });
     return { conversationId, turn };
   } catch (error) {
+    await persistence.logTrace(runId, conversationId, {
+      category: "error",
+      eventKey: "turn.failed",
+      status: "failed",
+      summary: "Ask Salam turn failed before a final response was completed.",
+      details: {
+        error_code: error instanceof AssistantHttpError
+          ? error.code
+          : "ASSISTANT_FAILED",
+        retryable: error instanceof AssistantHttpError ? error.retryable : true,
+      },
+      durationMs: Date.now() - started,
+    });
     await persistence.finishRun(runId, {
       status: "failed",
       inputTokens: 0,
@@ -134,9 +200,15 @@ Deno.serve(async (req) => {
       req.headers.get("accept") ?? "",
     );
 
-    const callerClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      global: { headers: { Authorization: req.headers.get("Authorization")! } },
-    });
+    const callerClient = createClient(
+      config.supabaseUrl,
+      config.supabaseAnonKey,
+      {
+        global: {
+          headers: { Authorization: req.headers.get("Authorization")! },
+        },
+      },
+    );
     const serverClient = config.supabaseServiceRoleKey
       ? createClient(config.supabaseUrl, config.supabaseServiceRoleKey)
       : null;

@@ -1,5 +1,8 @@
 import { verifyActionToken } from "./action-token.ts";
-import { actionSpecByType, parseCanonicalProposalArguments } from "./actions.ts";
+import {
+  actionSpecByType,
+  parseCanonicalProposalArguments,
+} from "./actions.ts";
 import type { AssistantConfig } from "./config.ts";
 import { AssistantHttpError, type SseTurnResult } from "./http.ts";
 import { assistantStrings, formatMoney, interpolate } from "./locales.ts";
@@ -60,14 +63,18 @@ function assertBinding(
   principal: AssistantPrincipal,
   request: AssistantTurnRequest,
 ): void {
-  if (payload.orgId !== principal.orgId || payload.userId !== principal.userId) {
+  if (
+    payload.orgId !== principal.orgId || payload.userId !== principal.userId
+  ) {
     throw new AssistantHttpError(
       403,
       "ACTION_PRINCIPAL_MISMATCH",
       "This confirmation belongs to a different user or organization.",
     );
   }
-  if (request.conversationId && request.conversationId !== payload.conversationId) {
+  if (
+    request.conversationId && request.conversationId !== payload.conversationId
+  ) {
     throw new AssistantHttpError(
       409,
       "ACTION_CONVERSATION_MISMATCH",
@@ -229,8 +236,12 @@ function createVehicleReceipt(
   const listingId = resultString(result, "listing_id");
   const paymentId = resultString(result, "purchase_payment_id");
   const complete = Boolean(stockNumber && vehicleId && status);
-  const paymentStatus = paymentId ? strings.recordedValue : strings.notRecordedValue;
-  const listingStatus = listingId ? strings.draftCreatedValue : strings.notCreatedValue;
+  const paymentStatus = paymentId
+    ? strings.recordedValue
+    : strings.notRecordedValue;
+  const listingStatus = listingId
+    ? strings.draftCreatedValue
+    : strings.notCreatedValue;
   return {
     title: strings.vehicleOnboardedTitle,
     answerText: interpolate(strings.vehicleOnboardedMessageTemplate, {
@@ -285,7 +296,9 @@ function completeSaleReceipt(
   if (distributionCount !== null && distributionCount > 0) {
     details.push({
       label: strings.unallocatedProfitLabel,
-      value: unallocatedProfit === null ? "—" : money(unallocatedProfit, locale),
+      value: unallocatedProfit === null
+        ? "—"
+        : money(unallocatedProfit, locale),
     });
   }
   return {
@@ -398,10 +411,34 @@ export async function runConfirmedAction(
   );
 
   const started = Date.now();
+  await persistence.logTrace(runId, conversationId, {
+    category: "request",
+    eventKey: "confirmation.request.accepted",
+    status: "completed",
+    summary:
+      "Signed confirmation request accepted and principal binding verified.",
+    details: {
+      action_type: payload.actionType,
+      proposal_id: payload.proposalId,
+      locale: request.locale,
+    },
+  });
   try {
     onStatus?.("assistant.status.revalidating");
     const proposal = await persistence.loadActionProposal(payload.proposalId);
     const proposalState = assertProposal(proposal, payload);
+    await persistence.logTrace(runId, conversationId, {
+      category: "validation",
+      eventKey: "confirmation.proposal.revalidated",
+      status: "completed",
+      summary:
+        "Stored proposal, actor binding, argument hash, expiry, and replay state revalidated.",
+      details: {
+        action_type: payload.actionType,
+        proposal_state: proposalState,
+        risk_level: proposal.riskLevel,
+      },
+    });
 
     const spec = actionSpecByType(payload.actionType);
     if (!spec) {
@@ -439,6 +476,19 @@ export async function runConfirmedAction(
       }
 
       onStatus?.("assistant.status.executing");
+      await persistence.logTrace(runId, conversationId, {
+        category: "tool",
+        eventKey: "confirmation.transaction.started",
+        status: "started",
+        summary: "Atomic confirmed-action transaction started.",
+        details: {
+          action_type: payload.actionType,
+          rpc: payload.actionType === "vehicle.create_with_purchase"
+            ? config.rpc.confirmAndCreateVehicle
+            : config.rpc.confirmAndCompleteSale,
+        },
+      });
+      const executionStarted = Date.now();
       const response = payload.actionType === "vehicle.create_with_purchase"
         ? await client.rpc(config.rpc.confirmAndCreateVehicle, {
           p_proposal_id: payload.proposalId,
@@ -462,6 +512,14 @@ export async function runConfirmedAction(
         });
       if (response.error) throw rpcError(response.error);
       data = response.data;
+      await persistence.logTrace(runId, conversationId, {
+        category: "tool",
+        eventKey: "confirmation.transaction.completed",
+        status: "completed",
+        summary: "Atomic confirmed-action transaction completed.",
+        details: { action_type: payload.actionType },
+        durationMs: Date.now() - executionStarted,
+      });
     }
 
     const turn = receiptTurn(
@@ -476,6 +534,25 @@ export async function runConfirmedAction(
       turn,
       "confirmation-executor",
     );
+    await persistence.logTrace(runId, conversationId, {
+      category: "response",
+      eventKey: "confirmation.receipt.generated",
+      status: "completed",
+      summary: "Deterministic confirmation receipt generated and persisted.",
+      details: {
+        action_type: payload.actionType,
+        output_message_persisted: outputMessageId !== null,
+        block_count: turn.blocks.length,
+      },
+      durationMs: Date.now() - started,
+    });
+    await persistence.logTrace(runId, conversationId, {
+      category: "response",
+      eventKey: "confirmation.completed",
+      status: "completed",
+      summary: "Confirmed action turn completed successfully.",
+      durationMs: Date.now() - started,
+    });
     await persistence.finishRun(runId, {
       status: "completed",
       inputTokens: 0,
@@ -487,13 +564,27 @@ export async function runConfirmedAction(
     });
     return { conversationId, turn };
   } catch (error) {
+    await persistence.logTrace(runId, conversationId, {
+      category: "error",
+      eventKey: "confirmation.failed",
+      status: "failed",
+      summary: "Confirmed action failed closed.",
+      details: {
+        error_code: error instanceof AssistantHttpError
+          ? error.code
+          : "ACTION_FAILED",
+      },
+      durationMs: Date.now() - started,
+    });
     await persistence.finishRun(runId, {
       status: "failed",
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: Date.now() - started,
       outputMessageId: null,
-      errorCode: error instanceof AssistantHttpError ? error.code : "ACTION_FAILED",
+      errorCode: error instanceof AssistantHttpError
+        ? error.code
+        : "ACTION_FAILED",
       errorMessage: error instanceof Error ? error.message : "Unknown failure",
     });
     throw error;

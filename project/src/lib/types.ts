@@ -453,6 +453,18 @@ export interface ToolEntitySummary {
   label: string;
 }
 
+export interface AssistantTraceEvent {
+  id: number;
+  run_id: string;
+  category: "request" | "context" | "model" | "tool" | "validation" | "persistence" | "response" | "error";
+  event_key: string;
+  status: "started" | "completed" | "failed" | "skipped" | "info" | "flagged";
+  summary: string;
+  details_redacted: Record<string, unknown>;
+  duration_ms: number | null;
+  occurred_at: string;
+}
+
 export interface AssistantAuditToolCall {
   id: string;
   tool_name: string;

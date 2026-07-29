@@ -473,6 +473,17 @@ export async function runOpenAITurn(
     let argumentsValue: Record<string, unknown> = {};
     let result: ToolResult;
     const started = Date.now();
+    await input.persistence.logTrace(input.runId, input.conversationId, {
+      category: "tool",
+      eventKey: "tool.execution.started",
+      status: "started",
+      summary: `Tool ${call.name} started.`,
+      details: {
+        tool_name: call.name,
+        risk_level: toolRisk(call.name),
+        read_only: READ_ONLY_TOOLS.has(call.name),
+      },
+    });
     try {
       argumentsValue = parseArguments(call.arguments);
       result = await executeTool(context, call.name, argumentsValue);
@@ -488,6 +499,21 @@ export async function runOpenAITurn(
       };
     }
     anyTruncated ||= result.truncated === true;
+    await input.persistence.logTrace(input.runId, input.conversationId, {
+      category: "tool",
+      eventKey: "tool.execution.completed",
+      status: result.ok ? "completed" : "failed",
+      summary: result.ok
+        ? `Tool ${call.name} completed.`
+        : `Tool ${call.name} failed.`,
+      details: {
+        tool_name: call.name,
+        error_code: result.error?.code ?? null,
+        entity_count: result.entities?.length ?? 0,
+        truncated: result.truncated === true,
+      },
+      durationMs: Date.now() - started,
+    });
     await input.persistence.logToolCall(
       input.runId,
       input.conversationId,
@@ -519,10 +545,30 @@ export async function runOpenAITurn(
       maxRounds: input.config.maxToolRounds,
     });
 
+    const roundEffort = reasoningEffortForRound(
+      input.config,
+      sensitiveToolsSeen,
+    );
+    await input.persistence.logTrace(input.runId, input.conversationId, {
+      category: "model",
+      eventKey: "model.round.started",
+      status: "started",
+      summary: `Model orchestration round ${round + 1} started.`,
+      details: {
+        round: round + 1,
+        max_rounds: input.config.maxToolRounds,
+        model: input.config.model,
+        reasoning_effort: roundEffort,
+        force_final_response: roundPlan.forceFinal,
+        timeout_ms: roundPlan.timeoutMs,
+        replay_item_count: replay.length,
+      },
+    });
+    const modelStarted = Date.now();
     const response = await requestResponses(input.config, {
       model: input.config.model,
       reasoning: {
-        effort: reasoningEffortForRound(input.config, sensitiveToolsSeen),
+        effort: roundEffort,
       },
       instructions: assistantInstructions({
         principal: input.principal,
@@ -551,6 +597,27 @@ export async function runOpenAITurn(
     // forced empty defensively so a forced-final round always resolves to a
     // real (if partial) answer instead of ever re-entering tool execution.
     const calls = roundPlan.forceFinal ? [] : functionCalls(output);
+    await input.persistence.logTrace(input.runId, input.conversationId, {
+      category: "model",
+      eventKey: "model.round.completed",
+      status: "completed",
+      summary: calls.length > 0
+        ? `Model round ${
+          round + 1
+        } requested ${calls.length} tool operation(s).`
+        : `Model round ${round + 1} produced a final response candidate.`,
+      details: {
+        round: round + 1,
+        response_id: response.id ?? null,
+        response_status: response.status ?? null,
+        output_item_count: output.length,
+        tool_call_count: calls.length,
+        tool_names: calls.map((call) => call.name),
+        input_tokens: response.usage?.input_tokens ?? 0,
+        output_tokens: response.usage?.output_tokens ?? 0,
+      },
+      durationMs: Date.now() - modelStarted,
+    });
 
     if (!calls.length) {
       const rawText = outputText(response);
@@ -573,6 +640,13 @@ export async function runOpenAITurn(
           true,
         );
       }
+      await input.persistence.logTrace(input.runId, input.conversationId, {
+        category: "validation",
+        eventKey: "response.structured_json.parsed",
+        status: "completed",
+        summary: "Model output parsed as structured AssistantTurn JSON.",
+        details: { round: round + 1 },
+      });
       const vehicleIds = new Set(
         [...evidence.values()]
           .filter((item) => item.type === "vehicle")
@@ -585,10 +659,35 @@ export async function runOpenAITurn(
         input.principal,
         input.request.context,
       );
+      await input.persistence.logTrace(input.runId, input.conversationId, {
+        category: "validation",
+        eventKey: "response.schema.normalized",
+        status: "completed",
+        summary:
+          "Response schema, permissions, navigation, and entity references validated.",
+        details: {
+          block_count: turn.blocks.length,
+          requested_locale: input.request.locale,
+          evidence_entity_count: evidence.size,
+        },
+      });
       let conformance = checkScriptConformance(
         input.request.locale,
         turn.answer.text,
       );
+      await input.persistence.logTrace(input.runId, input.conversationId, {
+        category: "validation",
+        eventKey: "response.language.checked",
+        status: conformance.mismatch ? "flagged" : "completed",
+        summary: conformance.mismatch
+          ? "Response language script did not match the requested locale."
+          : "Response language check passed or was not required.",
+        details: {
+          locale: input.request.locale,
+          checked: conformance.checked,
+          script_match_ratio: conformance.ratio,
+        },
+      });
       if (conformance.checked && conformance.mismatch) {
         console.warn("assistant language mismatch detected", {
           locale: input.request.locale,
@@ -606,6 +705,18 @@ export async function runOpenAITurn(
           deadlineAt - Date.now() - DEADLINE_CLOCK_SKEW_MS,
         );
         if (remainingForCorrection > 1_000) {
+          await input.persistence.logTrace(input.runId, input.conversationId, {
+            category: "model",
+            eventKey: "response.language_correction.started",
+            status: "started",
+            summary:
+              "A corrective model pass started for the requested language.",
+            details: {
+              locale: input.request.locale,
+              timeout_ms: remainingForCorrection,
+            },
+          });
+          const correctionStarted = Date.now();
           const corrected = await correctTurnLanguage({
             turn,
             locale: input.request.locale,
@@ -623,6 +734,21 @@ export async function runOpenAITurn(
             input.request.locale,
             turn.answer.text,
           );
+          await input.persistence.logTrace(input.runId, input.conversationId, {
+            category: "validation",
+            eventKey: "response.language_correction.completed",
+            status: conformance.mismatch ? "failed" : "completed",
+            summary: conformance.mismatch
+              ? "Corrective language pass still failed script validation."
+              : "Corrective language pass completed successfully.",
+            details: {
+              locale: input.request.locale,
+              input_tokens: corrected.usage.inputTokens,
+              output_tokens: corrected.usage.outputTokens,
+              script_match_ratio: conformance.ratio,
+            },
+            durationMs: Date.now() - correctionStarted,
+          });
           if (conformance.checked && conformance.mismatch) {
             throw new AssistantHttpError(
               502,
@@ -636,6 +762,19 @@ export async function runOpenAITurn(
 
       turn = canonicalizeConfirmationBlocks(turn, issuedProposals);
       turn = groundProvenance(turn, evidence, anyTruncated);
+      await input.persistence.logTrace(input.runId, input.conversationId, {
+        category: "validation",
+        eventKey: "response.grounding.completed",
+        status: "completed",
+        summary:
+          "Confirmation blocks were canonicalized and provenance was grounded in tool evidence.",
+        details: {
+          issued_proposal_count: issuedProposals.length,
+          evidence_entity_count: evidence.size,
+          provenance_source_count: turn.provenance.sources.length,
+          truncated: anyTruncated,
+        },
+      });
 
       return { turn, usage };
     }
@@ -656,6 +795,20 @@ export async function runOpenAITurn(
     // write and confirmation proposal is deliberately serialized.
     const reads = calls.filter((call) => READ_ONLY_TOOLS.has(call.name));
     const writes = calls.filter((call) => !READ_ONLY_TOOLS.has(call.name));
+    await input.persistence.logTrace(input.runId, input.conversationId, {
+      category: "tool",
+      eventKey: "tool.batch.planned",
+      status: "completed",
+      summary:
+        `Planned ${reads.length} parallel read(s) and ${writes.length} serialized write/proposal(s).`,
+      details: {
+        round: round + 1,
+        read_tool_names: reads.map((call) => call.name),
+        write_tool_names: writes.map((call) => call.name),
+        total_tool_calls_so_far: totalCalls,
+        sensitive_data_path: sensitiveToolsSeen,
+      },
+    });
     const completed = new Map<
       string,
       { call: FunctionCall; result: ToolResult }
