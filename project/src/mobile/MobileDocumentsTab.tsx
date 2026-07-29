@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileText, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Card, Spinner, Tag, EmptyState, Sheet, Button, Field, Select } from "./ui/primitives";
+import { Card, Spinner, Tag, EmptyState, Sheet, Button } from "./ui/primitives";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { type UploadedFile } from "@/lib/uploadedFile";
 import { syncVehicleAlerts } from "@/lib/compliance";
-import { DOCUMENT_TYPES } from "@/lib/constants";
 import type { VehicleWithRelations, VehicleDocument } from "@/lib/types";
+import type { MobileNavigate } from "./MobileApp";
 
 // The mobile design's 5-document checklist, mapped onto our real DOCUMENT_TYPES values
 // so the same documents show up in desktop's fuller 16-type Documents tab.
@@ -20,18 +20,13 @@ const CORE_DOCUMENTS: { type: string; label: string }[] = [
   { type: "Sale agreement", label: "Sale Agreement" },
 ];
 
-export function MobileDocumentsTab({ vehicle, onChanged, highlightIds, autoAdd, onAutoAddConsumed }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[]; autoAdd?: boolean; onAutoAddConsumed?: () => void }) {
+export function MobileDocumentsTab({ vehicle, onChanged, highlightIds, onNavigate }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[]; onNavigate: MobileNavigate }) {
   const seeded = useRef(false);
   const [seeding, setSeeding] = useState(false);
   const [activeDoc, setActiveDoc] = useState<VehicleDocument | null>(null);
   const [docFiles, setDocFiles] = useState<UploadedFile[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeHighlights, setActiveHighlights] = useState<Set<string>>(new Set());
-  const [showAddNew, setShowAddNew] = useState(false);
-  const [newDocType, setNewDocType] = useState(DOCUMENT_TYPES[0]);
-  const [newDocFiles, setNewDocFiles] = useState<UploadedFile[]>([]);
-  const [addingNew, setAddingNew] = useState(false);
-  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -71,53 +66,6 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds, autoAdd, 
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle.id]);
-
-  const openAddNew = () => {
-    setNewDocType(DOCUMENT_TYPES[0]);
-    setNewDocFiles([]);
-    setUploadSessionId(crypto.randomUUID());
-    setShowAddNew(true);
-  };
-
-  const closeAddNew = () => {
-    setShowAddNew(false);
-    setNewDocType(DOCUMENT_TYPES[0]);
-    setNewDocFiles([]);
-  };
-
-  const handleAddNew = async () => {
-    setAddingNew(true);
-    try {
-      const fileUrls = newDocFiles.map((f) => f.path);
-      const { error } = await supabase.from("vehicle_documents").insert({
-        vehicle_id: vehicle.id,
-        document_type: newDocType,
-        verification_status: fileUrls.length > 0 ? "Uploaded" : "Not uploaded",
-        file_url: fileUrls[0] ?? null,
-        file_urls: fileUrls,
-      });
-      if (error) throw error;
-      toast(t("mobileDocuments.added"), "success");
-      closeAddNew();
-      syncVehicleAlerts(vehicle.id).catch(() => {});
-      onChanged();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : t("mobileDocuments.saveFailed"), "error");
-    } finally {
-      setAddingNew(false);
-    }
-  };
-
-  // Reached via the mobile "+" -> Document autoAdd target: opens the add-new-document
-  // sheet once on mount, guarded so it doesn't reopen on re-renders.
-  const autoAddFired = useRef(false);
-  useEffect(() => {
-    if (!autoAdd || autoAddFired.current || seeding) return;
-    autoAddFired.current = true;
-    openAddNew();
-    onAutoAddConsumed?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoAdd, seeding]);
 
   const openDoc = (d: VehicleDocument) => {
     const existing = d.file_urls?.length ? d.file_urls : d.file_url ? [d.file_url] : [];
@@ -197,7 +145,7 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds, autoAdd, 
       )}
 
       <button
-        onClick={openAddNew}
+        onClick={() => onNavigate("add-document", { vehicleId: vehicle.id })}
         className="flex items-center justify-center gap-1.5 w-full rounded-2xl border border-dashed border-mobile-border py-3 text-sm font-medium text-mobile-primary active:bg-mobile-bg"
       >
         <Plus size={16} /> {t("mobileDocuments.addAnother")}
@@ -218,31 +166,6 @@ export function MobileDocumentsTab({ vehicle, onChanged, highlightIds, autoAdd, 
             hint={saving ? t("mobileDocuments.saving") : t("mobileDocuments.hint")}
           />
         )}
-      </Sheet>
-
-      <Sheet
-        open={showAddNew}
-        onClose={closeAddNew}
-        title={t("mobileDocuments.addDocument")}
-        footer={
-          <div className="flex gap-3 w-full">
-            <Button variant="secondary" className="flex-1" onClick={closeAddNew}>{t("mobileVehicle.cancel")}</Button>
-            <Button className="flex-1" onClick={handleAddNew} loading={addingNew}>{addingNew ? <Spinner size={14} /> : null} {t("mobileDocuments.addDocument")}</Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <Field label={t("mobileDocuments.documentType")} required>
-            <Select value={newDocType} onChange={setNewDocType} options={DOCUMENT_TYPES} />
-          </Field>
-          <FileUploadGrid
-            bucket="vehicle-documents"
-            pathPrefix={`${vehicle.id}/${uploadSessionId}`}
-            value={newDocFiles}
-            onChange={setNewDocFiles}
-            hint={t("mobileDocuments.hint")}
-          />
-        </div>
       </Sheet>
     </div>
   );

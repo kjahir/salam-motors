@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { CheckCircle2, XCircle, HelpCircle, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, Spinner } from "./ui/primitives";
 import { useToast } from "@/components/ui/useToast";
@@ -7,33 +7,37 @@ import { supabase } from "@/lib/supabase";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { SCORE_WEIGHTS } from "@/lib/constants";
 import type { VehicleWithRelations, InspectionItem } from "@/lib/types";
+import type { MobileNavigate } from "./MobileApp";
 
 // The mobile design's simple 6-item Pass/Fail/Pending checklist, mapped onto 6 of our
 // real, weighted INSPECTION_CATEGORIES so the health-score ring stays accurate
 // everywhere — several real categories have no SCORE_WEIGHTS entry and were excluded.
-const QUICK_CHECK_CATEGORIES = ["Engine", "Brakes", "Tyres", "Suspension", "Frame and chassis", "Transmission and clutch"];
+// Exported so MobileAddInspection.tsx (the full-screen "add a new inspection" page) can
+// reuse the exact same category set and Pass/Fail/Pending scoring semantics rather than
+// reimplementing them.
+export const QUICK_CHECK_CATEGORIES = ["Engine", "Brakes", "Tyres", "Suspension", "Frame and chassis", "Transmission and clutch"];
 
-type CheckStatus = "pass" | "fail" | "pending";
+export type CheckStatus = "pass" | "fail" | "pending";
 
-function statusOf(item: InspectionItem): CheckStatus {
+export function statusOf(item: InspectionItem): CheckStatus {
   if (item.condition_level === "Good") return "pass";
   if (item.condition_level === "Poor") return "fail";
   return "pending";
 }
 
-function nextStatus(s: CheckStatus): CheckStatus {
+export function nextStatus(s: CheckStatus): CheckStatus {
   if (s === "pending") return "pass";
   if (s === "pass") return "fail";
   return "pending";
 }
 
-const STATUS_META: Record<CheckStatus, { label: string; score: number | null; condition: string; icon: typeof CheckCircle2; className: string }> = {
+export const STATUS_META: Record<CheckStatus, { label: string; score: number | null; condition: string; icon: typeof CheckCircle2; className: string }> = {
   pass: { label: "Pass", score: 90, condition: "Good", icon: CheckCircle2, className: "bg-mobile-success-bg text-mobile-success" },
   fail: { label: "Fail", score: 30, condition: "Poor", icon: XCircle, className: "bg-mobile-error-bg text-mobile-error" },
   pending: { label: "Pending", score: null, condition: "Not inspected", icon: HelpCircle, className: "bg-mobile-warning-bg text-mobile-warning" },
 };
 
-export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleWithRelations; overallScore: number | null; onChanged: () => void }) {
+export function MobileInspectionTab({ vehicle, overallScore, onChanged, onNavigate }: { vehicle: VehicleWithRelations; overallScore: number | null; onChanged: () => void; onNavigate: MobileNavigate }) {
   const seeded = useRef(false);
   const [seeding, setSeeding] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -127,6 +131,12 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged }: { vehi
           );
         })}
       </div>
+      <button
+        onClick={() => onNavigate("add-inspection", { vehicleId: vehicle.id })}
+        className="flex items-center justify-center gap-1.5 w-full rounded-2xl border border-dashed border-mobile-border py-3 text-sm font-medium text-mobile-primary active:bg-mobile-bg"
+      >
+        <Plus size={16} /> {t("mobileInspection.addTitle")}
+      </button>
     </div>
   );
 }

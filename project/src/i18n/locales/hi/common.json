@@ -672,9 +672,10 @@
     "estProfit": "अनुमानित लाभ"
   },
   "mobileAdd": {
-    "title": "आप क्या जोड़ना चाहेंगे?",
     "chooseVehicle": "एक वाहन चुनें",
-    "noVehicles": "कोई वाहन नहीं मिला"
+    "noVehicles": "कोई वाहन नहीं मिला",
+    "openMenu": "जोड़ें",
+    "closeMenu": "बंद करें"
   },
   "mobileVehicle": {
     "vehicle": "वाहन",
@@ -755,7 +756,15 @@
     "saveFailed": "खर्च सेव करने में विफल",
     "deleteConfirm": "इस खर्च को हटाएं?",
     "removed": "खर्च हटाया गया",
-    "deleteFailed": "हटाने में विफल"
+    "deleteFailed": "हटाने में विफल",
+    "addExpenses": "खर्च जोड़ें",
+    "description": "विवरण",
+    "paidBy": "भुगतानकर्ता",
+    "addRow": "पंक्ति जोड़ें",
+    "saveCount_one": "{{count}} खर्च सहेजें",
+    "saveCount_other": "{{count}} खर्च सहेजें",
+    "addedCount_one": "{{count}} खर्च जोड़ा गया",
+    "addedCount_other": "{{count}} खर्च जोड़े गए"
   },
   "mobileInspection": {
     "overall": "कुल",
@@ -764,7 +773,13 @@
     "weightTap": "वज़न {{weight}}% · बदलने के लिए टैप करें",
     "pass": "पास",
     "fail": "फेल",
-    "pending": "लंबित"
+    "pending": "लंबित",
+    "addTitle": "निरीक्षण जोड़ें",
+    "save": "निरीक्षण सहेजें",
+    "saved": "निरीक्षण दर्ज किया गया",
+    "saveFailed": "निरीक्षण सेव करने में विफल",
+    "summary": "सारांश (वैकल्पिक)",
+    "summaryPlaceholder": "समग्र स्थिति नोट्स…"
   },
   "mobileDocuments": {
     "prepFailed": "दस्तावेज़ चेकलिस्ट तैयार करने में विफल",

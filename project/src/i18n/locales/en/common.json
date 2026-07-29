@@ -672,9 +672,10 @@
     "estProfit": "Est. Profit"
   },
   "mobileAdd": {
-    "title": "What would you like to add?",
     "chooseVehicle": "Choose a vehicle",
-    "noVehicles": "No vehicles found"
+    "noVehicles": "No vehicles found",
+    "openMenu": "Add",
+    "closeMenu": "Close"
   },
   "mobileVehicle": {
     "vehicle": "Vehicle",
@@ -755,7 +756,15 @@
     "saveFailed": "Failed to save expense",
     "deleteConfirm": "Delete this expense?",
     "removed": "Expense removed",
-    "deleteFailed": "Failed to delete"
+    "deleteFailed": "Failed to delete",
+    "addExpenses": "Add Expenses",
+    "description": "Description",
+    "paidBy": "Paid By",
+    "addRow": "Add Row",
+    "saveCount_one": "Save {{count}} Expense",
+    "saveCount_other": "Save {{count}} Expenses",
+    "addedCount_one": "{{count}} expense added",
+    "addedCount_other": "{{count}} expenses added"
   },
   "mobileInspection": {
     "overall": "Overall",
@@ -764,7 +773,13 @@
     "weightTap": "Weight {{weight}}% · tap to change",
     "pass": "Pass",
     "fail": "Fail",
-    "pending": "Pending"
+    "pending": "Pending",
+    "addTitle": "Add Inspection",
+    "save": "Save Inspection",
+    "saved": "Inspection recorded",
+    "saveFailed": "Failed to save inspection",
+    "summary": "Summary (optional)",
+    "summaryPlaceholder": "Overall condition notes…"
   },
   "mobileDocuments": {
     "prepFailed": "Failed to prepare document checklist",

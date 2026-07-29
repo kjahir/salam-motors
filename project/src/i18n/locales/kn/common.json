@@ -672,9 +672,10 @@
     "estProfit": "ಅಂದಾಜು ಲಾಭ"
   },
   "mobileAdd": {
-    "title": "ನೀವು ಏನನ್ನು ಸೇರಿಸಲು ಬಯಸುತ್ತೀರಿ?",
     "chooseVehicle": "ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
-    "noVehicles": "ಯಾವುದೇ ವಾಹನಗಳು ಕಂಡುಬಂದಿಲ್ಲ"
+    "noVehicles": "ಯಾವುದೇ ವಾಹನಗಳು ಕಂಡುಬಂದಿಲ್ಲ",
+    "openMenu": "ಸೇರಿಸಿ",
+    "closeMenu": "ಮುಚ್ಚಿ"
   },
   "mobileVehicle": {
     "vehicle": "ವಾಹನ",
@@ -755,7 +756,15 @@
     "saveFailed": "ಖರ್ಚು ಉಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
     "deleteConfirm": "ಈ ಖರ್ಚನ್ನು ಅಳಿಸುವುದೇ?",
     "removed": "ಖರ್ಚು ತೆಗೆದುಹಾಕಲಾಗಿದೆ",
-    "deleteFailed": "ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ"
+    "deleteFailed": "ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
+    "addExpenses": "ಖರ್ಚುಗಳನ್ನು ಸೇರಿಸಿ",
+    "description": "ವಿವರಣೆ",
+    "paidBy": "ಪಾವತಿಸಿದವರು",
+    "addRow": "ಸಾಲು ಸೇರಿಸಿ",
+    "saveCount_one": "{{count}} ಖರ್ಚು ಉಳಿಸಿ",
+    "saveCount_other": "{{count}} ಖರ್ಚುಗಳನ್ನು ಉಳಿಸಿ",
+    "addedCount_one": "{{count}} ಖರ್ಚು ಸೇರಿಸಲಾಗಿದೆ",
+    "addedCount_other": "{{count}} ಖರ್ಚುಗಳನ್ನು ಸೇರಿಸಲಾಗಿದೆ"
   },
   "mobileInspection": {
     "overall": "ಒಟ್ಟಾರೆ",
@@ -764,7 +773,13 @@
     "weightTap": "ತೂಕ {{weight}}% · ಬದಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
     "pass": "ಉತ್ತೀರ್ಣ",
     "fail": "ಅನುತ್ತೀರ್ಣ",
-    "pending": "ಬಾಕಿ"
+    "pending": "ಬಾಕಿ",
+    "addTitle": "ತಪಾಸಣೆ ಸೇರಿಸಿ",
+    "save": "ತಪಾಸಣೆ ಉಳಿಸಿ",
+    "saved": "ತಪಾಸಣೆ ದಾಖಲಿಸಲಾಗಿದೆ",
+    "saveFailed": "ತಪಾಸಣೆ ಉಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
+    "summary": "ಸಾರಾಂಶ (ಐಚ್ಛಿಕ)",
+    "summaryPlaceholder": "ಒಟ್ಟಾರೆ ಸ್ಥಿತಿ ಟಿಪ್ಪಣಿಗಳು…"
   },
   "mobileDocuments": {
     "prepFailed": "ದಾಖಲೆ ಪಟ್ಟಿ ಸಿದ್ಧಪಡಿಸಲು ವಿಫಲವಾಗಿದೆ",

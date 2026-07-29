@@ -672,9 +672,10 @@
     "estProfit": "అంచనా లాభం"
   },
   "mobileAdd": {
-    "title": "మీరు ఏమి జోడించాలనుకుంటున్నారు?",
     "chooseVehicle": "వాహనాన్ని ఎంచుకోండి",
-    "noVehicles": "వాహనాలు కనుగొనబడలేదు"
+    "noVehicles": "వాహనాలు కనుగొనబడలేదు",
+    "openMenu": "జోడించండి",
+    "closeMenu": "మూసివేయండి"
   },
   "mobileVehicle": {
     "vehicle": "వాహనం",
@@ -755,7 +756,15 @@
     "saveFailed": "ఖర్చు సేవ్ చేయడంలో విఫలమైంది",
     "deleteConfirm": "ఈ ఖర్చును తొలగించాలా?",
     "removed": "ఖర్చు తొలగించబడింది",
-    "deleteFailed": "తొలగించడంలో విఫలమైంది"
+    "deleteFailed": "తొలగించడంలో విఫలమైంది",
+    "addExpenses": "ఖర్చులను జోడించండి",
+    "description": "వివరణ",
+    "paidBy": "చెల్లించినవారు",
+    "addRow": "వరుస జోడించండి",
+    "saveCount_one": "{{count}} ఖర్చును సేవ్ చేయండి",
+    "saveCount_other": "{{count}} ఖర్చులను సేవ్ చేయండి",
+    "addedCount_one": "{{count}} ఖర్చు జోడించబడింది",
+    "addedCount_other": "{{count}} ఖర్చులు జోడించబడ్డాయి"
   },
   "mobileInspection": {
     "overall": "మొత్తం",
@@ -764,7 +773,13 @@
     "weightTap": "బరువు {{weight}}% · మార్చడానికి నొక్కండి",
     "pass": "పాస్",
     "fail": "ఫెయిల్",
-    "pending": "పెండింగ్‌లో"
+    "pending": "పెండింగ్‌లో",
+    "addTitle": "తనిఖీ జోడించండి",
+    "save": "తనిఖీని సేవ్ చేయండి",
+    "saved": "తనిఖీ నమోదు చేయబడింది",
+    "saveFailed": "తనిఖీ సేవ్ చేయడంలో విఫలమైంది",
+    "summary": "సారాంశం (ఐచ్ఛికం)",
+    "summaryPlaceholder": "మొత్తం స్థితి గమనికలు…"
   },
   "mobileDocuments": {
     "prepFailed": "డాక్యుమెంట్ చెక్‌లిస్ట్ సిద్ధం చేయడంలో విఫలమైంది",
