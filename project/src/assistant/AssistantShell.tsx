@@ -33,9 +33,11 @@ import { useAssistant } from "./AssistantProvider";
 
 const MAX_RECORDING_MS = 60_000;
 const NO_SPEECH_TIMEOUT_MS = 10_000;
-const SILENCE_TO_SUBMIT_MS = 1_200;
+const SILENCE_TO_SUBMIT_MS = 800;
 const MIN_SPEECH_MS = 500;
 const SPEECH_LEVEL_THRESHOLD = 0.025;
+const LIVE_TRANSCRIPT_INTERVAL_MS = 1_800;
+const MIN_LIVE_AUDIO_BYTES = 2_000;
 
 function preferredAudioType(): string | undefined {
   if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported)
@@ -50,6 +52,7 @@ function preferredAudioType(): string | undefined {
 
 function useVoiceDraft(
   onTranscript: (transcription: AssistantTranscription) => void | Promise<void>,
+  onLiveTranscript: (transcription: AssistantTranscription) => void,
   onError: () => void,
 ) {
   const [isListening, setIsListening] = useState(false);
@@ -60,6 +63,9 @@ function useVoiceDraft(
   const chunksRef = useRef<Blob[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<number | null>(null);
+  const liveTranscriptTimerRef = useRef<number | null>(null);
+  const liveTranscriptAbortRef = useRef<AbortController | null>(null);
+  const liveTranscriptInFlightRef = useRef(false);
   const animationRef = useRef<number | null>(null);
   const analysisContextRef = useRef<AudioContext | null>(null);
   const isSupported =
@@ -71,7 +77,11 @@ function useVoiceDraft(
   const clearTimers = () => {
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
     if (animationRef.current !== null) window.cancelAnimationFrame(animationRef.current);
+    if (liveTranscriptTimerRef.current !== null) {
+      window.clearInterval(liveTranscriptTimerRef.current);
+    }
     timeoutRef.current = null;
+    liveTranscriptTimerRef.current = null;
     animationRef.current = null;
   };
 
@@ -84,6 +94,34 @@ function useVoiceDraft(
 
   const stopRecording = () => {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  };
+
+  const requestLiveTranscript = (recorder: MediaRecorder) => {
+    if (
+      recorder.state !== "recording" ||
+      liveTranscriptInFlightRef.current ||
+      chunksRef.current.length === 0
+    ) return;
+    const audio = new Blob([...chunksRef.current], {
+      type: recorder.mimeType || "audio/webm",
+    });
+    if (audio.size < MIN_LIVE_AUDIO_BYTES) return;
+    const controller = new AbortController();
+    liveTranscriptAbortRef.current = controller;
+    liveTranscriptInFlightRef.current = true;
+    void transcribeAssistantAudio(audio, controller.signal)
+      .then((transcription) => {
+        if (recorder.state === "recording") onLiveTranscript(transcription);
+      })
+      .catch(() => {
+        // Preview transcription is best-effort; final transcription remains authoritative.
+      })
+      .finally(() => {
+        if (liveTranscriptAbortRef.current === controller) {
+          liveTranscriptAbortRef.current = null;
+        }
+        liveTranscriptInFlightRef.current = false;
+      });
   };
 
   const startVoiceDetection = (stream: MediaStream, recorder: MediaRecorder) => {
@@ -163,6 +201,9 @@ function useVoiceDraft(
       };
       recorder.onstop = () => {
         clearTimers();
+        liveTranscriptAbortRef.current?.abort();
+        liveTranscriptAbortRef.current = null;
+        liveTranscriptInFlightRef.current = false;
         stopStream();
         setIsListening(false);
         setHasDetectedSpeech(false);
@@ -191,6 +232,10 @@ function useVoiceDraft(
       };
       recorder.start(250);
       setIsListening(true);
+      liveTranscriptTimerRef.current = window.setInterval(
+        () => requestLiveTranscript(recorder),
+        LIVE_TRANSCRIPT_INTERVAL_MS,
+      );
       startVoiceDetection(stream, recorder);
       timeoutRef.current = window.setTimeout(stopRecording, MAX_RECORDING_MS);
     } catch {
@@ -204,6 +249,7 @@ function useVoiceDraft(
     () => () => {
       clearTimers();
       abortRef.current?.abort();
+      liveTranscriptAbortRef.current?.abort();
       stopRecording();
       stopStream();
     },
@@ -323,9 +369,14 @@ export function AssistantShell() {
     async ({ text, locale }) => {
       setDraft("");
       setVoiceError("");
-      const answer = await sendMessage(text, { locale });
-      if (answer) await speak(answer, locale);
+      await sendMessage(text, {
+        locale,
+        onAnswerStart: (answer) => {
+          void speak(answer, locale);
+        },
+      });
     },
+    ({ text }) => setDraft(text),
     () => setVoiceError(t("assistant.errors.voiceFailed")),
   );
 

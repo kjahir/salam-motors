@@ -24,6 +24,7 @@ type NavigationHandler = (page: string, params?: Extract<AssistantAction, { kind
 
 export interface AssistantSendOptions {
   locale?: SpokenAssistantLocale;
+  onAnswerStart?: (text: string) => void;
 }
 
 interface AssistantContextValue {
@@ -166,7 +167,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
       const requestLocale = options?.locale ?? activeLocale;
       lastUserMessageRef.current = message;
-      lastSendOptionsRef.current = options;
+      lastSendOptionsRef.current = options?.locale
+        ? { locale: options.locale }
+        : undefined;
       const userMessage: AssistantChatMessage = {
         id: nowId("user"),
         role: "user",
@@ -191,6 +194,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const controller = new AbortController();
       abortRef.current = controller;
       let streamed = "";
+      let answerStarted = false;
+      const notifyAnswerStart = (text: string) => {
+        if (answerStarted || !text.trim()) return;
+        answerStarted = true;
+        options?.onAnswerStart?.(text);
+      };
 
       try {
         const response = await requestAssistantTurn(
@@ -209,6 +218,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               if (abortRef.current !== controller) return;
               streamed += text;
               setStreamingText(streamed);
+              notifyAnswerStart(streamed);
               setMessages((current) =>
                 current.map((item) =>
                   item.id === assistantMessageId ? { ...item, text: streamed, status: "streaming" } : item,
@@ -220,6 +230,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         );
 
         if (abortRef.current !== controller) return;
+        notifyAnswerStart(response.turn.answer.text);
         setConversationId(response.conversationId ?? response.turn.conversationId);
         setMessages((current) =>
           current.map((item) =>
