@@ -24,11 +24,15 @@ import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { useAuth } from "@/lib/useAuth";
 import { AssistantTurnView, FailedMessageActions } from "./AssistantBlocks";
 import {
-  synthesizeAssistantSpeech,
+  streamAssistantSpeech,
   transcribeAssistantAudio,
   type AssistantTranscription,
   type SpokenAssistantLocale,
 } from "./api";
+import {
+  startBrowserSpeechPreview,
+  type BrowserSpeechPreview,
+} from "./browserSpeech";
 import { useAssistant } from "./AssistantProvider";
 
 const MAX_RECORDING_MS = 60_000;
@@ -38,6 +42,7 @@ const MIN_SPEECH_MS = 500;
 const SPEECH_LEVEL_THRESHOLD = 0.025;
 const LIVE_TRANSCRIPT_INTERVAL_MS = 1_800;
 const MIN_LIVE_AUDIO_BYTES = 2_000;
+const TTS_PCM_SAMPLE_RATE = 24_000;
 
 function preferredAudioType(): string | undefined {
   if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported)
@@ -53,6 +58,7 @@ function preferredAudioType(): string | undefined {
 function useVoiceDraft(
   onTranscript: (transcription: AssistantTranscription) => void | Promise<void>,
   onLiveTranscript: (transcription: AssistantTranscription) => void,
+  previewLocale: SpokenAssistantLocale,
   onError: () => void,
 ) {
   const [isListening, setIsListening] = useState(false);
@@ -66,6 +72,7 @@ function useVoiceDraft(
   const liveTranscriptTimerRef = useRef<number | null>(null);
   const liveTranscriptAbortRef = useRef<AbortController | null>(null);
   const liveTranscriptInFlightRef = useRef(false);
+  const browserPreviewRef = useRef<BrowserSpeechPreview | null>(null);
   const animationRef = useRef<number | null>(null);
   const analysisContextRef = useRef<AudioContext | null>(null);
   const isSupported =
@@ -193,6 +200,8 @@ function useVoiceDraft(
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
+        browserPreviewRef.current?.abort();
+        browserPreviewRef.current = null;
         clearTimers();
         stopStream();
         setIsListening(false);
@@ -200,6 +209,8 @@ function useVoiceDraft(
         onError();
       };
       recorder.onstop = () => {
+        browserPreviewRef.current?.stop();
+        browserPreviewRef.current = null;
         clearTimers();
         liveTranscriptAbortRef.current?.abort();
         liveTranscriptAbortRef.current = null;
@@ -230,12 +241,20 @@ function useVoiceDraft(
             setIsTranscribing(false);
           });
       };
+
       recorder.start(250);
       setIsListening(true);
-      liveTranscriptTimerRef.current = window.setInterval(
-        () => requestLiveTranscript(recorder),
-        LIVE_TRANSCRIPT_INTERVAL_MS,
+      browserPreviewRef.current = startBrowserSpeechPreview(
+        previewLocale,
+        (text) => onLiveTranscript({ text, locale: previewLocale }),
       );
+      if (!browserPreviewRef.current) {
+        liveTranscriptTimerRef.current = window.setInterval(
+          () => requestLiveTranscript(recorder),
+          LIVE_TRANSCRIPT_INTERVAL_MS,
+        );
+      }
+
       startVoiceDetection(stream, recorder);
       timeoutRef.current = window.setTimeout(stopRecording, MAX_RECORDING_MS);
     } catch {
@@ -249,6 +268,8 @@ function useVoiceDraft(
     () => () => {
       clearTimers();
       abortRef.current?.abort();
+      browserPreviewRef.current?.abort();
+      browserPreviewRef.current = null;
       liveTranscriptAbortRef.current?.abort();
       stopRecording();
       stopStream();
@@ -263,8 +284,10 @@ function useSpokenReply(onError: () => void) {
   const [isPreparingSpeech, setIsPreparingSpeech] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const contextRef = useRef<AudioContext | null>(null);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const abortRef = useRef<AbortController | null>(null);
+  const nextStartTimeRef = useRef(0);
+  const streamFinishedRef = useRef(false);
 
   const unlockSpeech = async () => {
     if (!contextRef.current) contextRef.current = new AudioContext();
@@ -274,15 +297,17 @@ function useSpokenReply(onError: () => void) {
   const stopSpeaking = () => {
     abortRef.current?.abort();
     abortRef.current = null;
-    if (sourceRef.current) {
-      sourceRef.current.onended = null;
+    for (const source of sourcesRef.current) {
+      source.onended = null;
       try {
-        sourceRef.current.stop();
+        source.stop();
       } catch {
         // The source may already have ended.
       }
     }
-    sourceRef.current = null;
+    sourcesRef.current.clear();
+    nextStartTimeRef.current = 0;
+    streamFinishedRef.current = false;
     setIsPreparingSpeech(false);
     setIsSpeaking(false);
   };
@@ -294,21 +319,77 @@ function useSpokenReply(onError: () => void) {
     setIsPreparingSpeech(true);
     try {
       await unlockSpeech();
-      const speech = await synthesizeAssistantSpeech(text, locale, controller.signal);
+      const stream = await streamAssistantSpeech(text, locale, controller.signal);
       if (abortRef.current !== controller || !contextRef.current) return;
-      const buffer = await contextRef.current.decodeAudioData(await speech.arrayBuffer());
-      if (abortRef.current !== controller) return;
-      const source = contextRef.current.createBufferSource();
-      sourceRef.current = source;
-      source.buffer = buffer;
-      source.connect(contextRef.current.destination);
-      source.onended = () => {
-        sourceRef.current = null;
+
+      const reader = stream.getReader();
+      let remainder = new Uint8Array(0);
+      let scheduledAudio = false;
+      streamFinishedRef.current = false;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (abortRef.current !== controller || !contextRef.current) return;
+        if (done) break;
+        if (!value?.length) continue;
+
+        const bytes = new Uint8Array(remainder.length + value.length);
+        bytes.set(remainder);
+        bytes.set(value, remainder.length);
+        const sampleBytes = bytes.length - (bytes.length % 2);
+        remainder = bytes.slice(sampleBytes);
+        if (sampleBytes === 0) continue;
+
+        const sampleCount = sampleBytes / 2;
+        const samples = new Float32Array(sampleCount);
+        const view = new DataView(bytes.buffer, bytes.byteOffset, sampleBytes);
+        for (let index = 0; index < sampleCount; index += 1) {
+          samples[index] = view.getInt16(index * 2, true) / 32_768;
+        }
+
+        const context = contextRef.current;
+        const audioBuffer = context.createBuffer(
+          1,
+          sampleCount,
+          TTS_PCM_SAMPLE_RATE,
+        );
+        audioBuffer.copyToChannel(samples, 0);
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+        const startAt = Math.max(
+          context.currentTime + 0.04,
+          nextStartTimeRef.current,
+        );
+        nextStartTimeRef.current = startAt + audioBuffer.duration;
+        sourcesRef.current.add(source);
+        source.onended = () => {
+          sourcesRef.current.delete(source);
+          if (
+            streamFinishedRef.current &&
+            sourcesRef.current.size === 0 &&
+            abortRef.current === controller
+          ) {
+            abortRef.current = null;
+            setIsSpeaking(false);
+          }
+        };
+        if (!scheduledAudio) {
+          scheduledAudio = true;
+          setIsPreparingSpeech(false);
+          setIsSpeaking(true);
+        }
+        source.start(startAt);
+      }
+
+      streamFinishedRef.current = true;
+      if (!scheduledAudio) {
+        throw new Error("The assistant returned empty speech audio.");
+      }
+      if (sourcesRef.current.size === 0) {
+        abortRef.current = null;
         setIsSpeaking(false);
-      };
-      setIsPreparingSpeech(false);
-      setIsSpeaking(true);
-      source.start();
+      }
     } catch (error) {
       const aborted = error instanceof DOMException && error.name === "AbortError";
       stopSpeaking();
@@ -329,7 +410,7 @@ function useSpokenReply(onError: () => void) {
 }
 
 export function AssistantShell() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     isOpen,
     isBusy,
@@ -348,6 +429,12 @@ export function AssistantShell() {
   const isMobile = useIsMobileViewport();
   const [draft, setDraft] = useState("");
   const [voiceError, setVoiceError] = useState("");
+  const voicePreviewLocale: SpokenAssistantLocale =
+    i18n.resolvedLanguage?.startsWith("ta")
+      ? "ta-IN"
+      : i18n.resolvedLanguage?.startsWith("hi")
+        ? "hi-IN"
+        : "en-IN";
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -377,6 +464,7 @@ export function AssistantShell() {
       });
     },
     ({ text }) => setDraft(text),
+    voicePreviewLocale,
     () => setVoiceError(t("assistant.errors.voiceFailed")),
   );
 

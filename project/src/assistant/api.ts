@@ -343,3 +343,30 @@ export async function synthesizeAssistantSpeech(
   }
   return audio;
 }
+
+export async function streamAssistantSpeech(
+  text: string,
+  locale: SpokenAssistantLocale,
+  signal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const authHeaders = await assistantAuthHeaders();
+  const response = await fetch(functionUrl("assistant-speech"), {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+      Accept: "audio/pcm",
+    },
+    body: JSON.stringify({ text, locale }),
+    signal,
+  });
+  if (!response.ok) throw await responseError(response);
+  if (!response.body) {
+    throw new AssistantApiError("The assistant returned empty speech audio.", {
+      code: "SPEECH_EMPTY",
+      status: 502,
+      retryable: true,
+    });
+  }
+  return response.body;
+}

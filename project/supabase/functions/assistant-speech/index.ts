@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
         voice: Deno.env.get("OPENAI_TTS_VOICE") ?? "marin",
         input: text,
         instructions: languageInstructions(locale),
-        response_format: "mp3",
+        response_format: "pcm",
       }),
     });
     if (!response.ok) {
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
       status: 200,
       headers: {
         ...ASSISTANT_CORS_HEADERS,
-        "Content-Type": "audio/mpeg",
+        "Content-Type": "audio/pcm",
         "Cache-Control": "no-store",
       },
     });
