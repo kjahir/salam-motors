@@ -12,7 +12,6 @@ import {
   Loader2,
   MessageCircle,
   Mic,
-  MicOff,
   Paperclip,
   RotateCcw,
   Sparkles,
@@ -33,6 +32,10 @@ import {
 import { useAssistant } from "./AssistantProvider";
 
 const MAX_RECORDING_MS = 60_000;
+const NO_SPEECH_TIMEOUT_MS = 10_000;
+const SILENCE_TO_SUBMIT_MS = 1_200;
+const MIN_SPEECH_MS = 500;
+const SPEECH_LEVEL_THRESHOLD = 0.025;
 
 function preferredAudioType(): string | undefined {
   if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported)
@@ -50,40 +53,99 @@ function useVoiceDraft(
   onError: () => void,
 ) {
   const [isListening, setIsListening] = useState(false);
+  const [hasDetectedSpeech, setHasDetectedSpeech] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<number | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const analysisContextRef = useRef<AudioContext | null>(null);
   const isSupported =
     typeof navigator !== "undefined" &&
     Boolean(navigator.mediaDevices?.getUserMedia) &&
-    typeof MediaRecorder !== "undefined";
+    typeof MediaRecorder !== "undefined" &&
+    typeof AudioContext !== "undefined";
 
-  const clearRecordingTimeout = () => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+  const clearTimers = () => {
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    if (animationRef.current !== null) window.cancelAnimationFrame(animationRef.current);
+    timeoutRef.current = null;
+    animationRef.current = null;
   };
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    void analysisContextRef.current?.close();
+    analysisContextRef.current = null;
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  };
+
+  const startVoiceDetection = (stream: MediaStream, recorder: MediaRecorder) => {
+    const context = new AudioContext();
+    analysisContextRef.current = context;
+    void context.resume();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    context.createMediaStreamSource(stream).connect(analyser);
+    const levels = new Uint8Array(analyser.fftSize);
+    const startedAt = performance.now();
+    let speechStartedAt: number | null = null;
+    let silenceStartedAt: number | null = null;
+
+    const analyse = () => {
+      if (recorder.state !== "recording") return;
+      analyser.getByteTimeDomainData(levels);
+      let energy = 0;
+      for (const level of levels) {
+        const sample = (level - 128) / 128;
+        energy += sample * sample;
+      }
+      const rms = Math.sqrt(energy / levels.length);
+      const now = performance.now();
+      if (rms >= SPEECH_LEVEL_THRESHOLD) {
+        if (speechStartedAt === null) speechStartedAt = now;
+        if (now - speechStartedAt >= MIN_SPEECH_MS) setHasDetectedSpeech(true);
+        silenceStartedAt = null;
+      } else if (speechStartedAt !== null) {
+        if (now - speechStartedAt < MIN_SPEECH_MS) {
+          speechStartedAt = null;
+        } else {
+          if (silenceStartedAt === null) silenceStartedAt = now;
+          if (now - silenceStartedAt >= SILENCE_TO_SUBMIT_MS) {
+            stopRecording();
+            return;
+          }
+        }
+      }
+      if (speechStartedAt === null && now - startedAt >= NO_SPEECH_TIMEOUT_MS) {
+        stopRecording();
+        return;
+      }
+      animationRef.current = window.requestAnimationFrame(analyse);
+    };
+    animationRef.current = window.requestAnimationFrame(analyse);
   };
 
   const toggle = async () => {
     if (isListening) {
-      recorderRef.current?.stop();
+      stopRecording();
       return;
     }
     if (!isSupported || isTranscribing) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
       streamRef.current = stream;
       chunksRef.current = [];
+      setHasDetectedSpeech(false);
       const audioType = preferredAudioType();
       const recorder = audioType
         ? new MediaRecorder(stream, { mimeType: audioType })
@@ -93,15 +155,17 @@ function useVoiceDraft(
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
-        clearRecordingTimeout();
+        clearTimers();
         stopStream();
         setIsListening(false);
+        setHasDetectedSpeech(false);
         onError();
       };
       recorder.onstop = () => {
-        clearRecordingTimeout();
+        clearTimers();
         stopStream();
         setIsListening(false);
+        setHasDetectedSpeech(false);
         const audio = new Blob(chunksRef.current, {
           type: recorder.mimeType || audioType || "audio/webm",
         });
@@ -125,11 +189,10 @@ function useVoiceDraft(
             setIsTranscribing(false);
           });
       };
-      recorder.start();
+      recorder.start(250);
       setIsListening(true);
-      timeoutRef.current = window.setTimeout(() => {
-        if (recorder.state === "recording") recorder.stop();
-      }, MAX_RECORDING_MS);
+      startVoiceDetection(stream, recorder);
+      timeoutRef.current = window.setTimeout(stopRecording, MAX_RECORDING_MS);
     } catch {
       stopStream();
       setIsListening(false);
@@ -139,32 +202,41 @@ function useVoiceDraft(
 
   useEffect(
     () => () => {
-      clearRecordingTimeout();
+      clearTimers();
       abortRef.current?.abort();
-      if (recorderRef.current?.state === "recording")
-        recorderRef.current.stop();
+      stopRecording();
       stopStream();
     },
     [],
   );
 
-  return { isSupported, isListening, isTranscribing, toggle };
+  return { isSupported, isListening, hasDetectedSpeech, isTranscribing, toggle };
 }
 
 function useSpokenReply(onError: () => void) {
   const [isPreparingSpeech, setIsPreparingSpeech] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
+  const contextRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const unlockSpeech = async () => {
+    if (!contextRef.current) contextRef.current = new AudioContext();
+    if (contextRef.current.state === "suspended") await contextRef.current.resume();
+  };
 
   const stopSpeaking = () => {
     abortRef.current?.abort();
     abortRef.current = null;
-    audioRef.current?.pause();
-    audioRef.current = null;
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = null;
+    if (sourceRef.current) {
+      sourceRef.current.onended = null;
+      try {
+        sourceRef.current.stop();
+      } catch {
+        // The source may already have ended.
+      }
+    }
+    sourceRef.current = null;
     setIsPreparingSpeech(false);
     setIsSpeaking(false);
   };
@@ -175,20 +247,22 @@ function useSpokenReply(onError: () => void) {
     abortRef.current = controller;
     setIsPreparingSpeech(true);
     try {
+      await unlockSpeech();
       const speech = await synthesizeAssistantSpeech(text, locale, controller.signal);
+      if (abortRef.current !== controller || !contextRef.current) return;
+      const buffer = await contextRef.current.decodeAudioData(await speech.arrayBuffer());
       if (abortRef.current !== controller) return;
-      const objectUrl = URL.createObjectURL(speech);
-      objectUrlRef.current = objectUrl;
-      const audio = new Audio(objectUrl);
-      audioRef.current = audio;
-      audio.onplay = () => setIsSpeaking(true);
-      audio.onended = stopSpeaking;
-      audio.onerror = () => {
-        stopSpeaking();
-        onError();
+      const source = contextRef.current.createBufferSource();
+      sourceRef.current = source;
+      source.buffer = buffer;
+      source.connect(contextRef.current.destination);
+      source.onended = () => {
+        sourceRef.current = null;
+        setIsSpeaking(false);
       };
       setIsPreparingSpeech(false);
-      await audio.play();
+      setIsSpeaking(true);
+      source.start();
     } catch (error) {
       const aborted = error instanceof DOMException && error.name === "AbortError";
       stopSpeaking();
@@ -196,9 +270,16 @@ function useSpokenReply(onError: () => void) {
     }
   };
 
-  useEffect(() => stopSpeaking, []);
+  useEffect(
+    () => () => {
+      stopSpeaking();
+      void contextRef.current?.close();
+      contextRef.current = null;
+    },
+    [],
+  );
 
-  return { isPreparingSpeech, isSpeaking, speak, stopSpeaking };
+  return { isPreparingSpeech, isSpeaking, unlockSpeech, speak, stopSpeaking };
 }
 
 export function AssistantShell() {
@@ -228,12 +309,14 @@ export function AssistantShell() {
   const {
     isPreparingSpeech,
     isSpeaking,
+    unlockSpeech,
     speak,
     stopSpeaking,
   } = useSpokenReply(() => setVoiceError(t("assistant.errors.voiceFailed")));
   const {
     isSupported: voiceSupported,
     isListening,
+    hasDetectedSpeech,
     isTranscribing,
     toggle: toggleVoice,
   } = useVoiceDraft(
@@ -521,6 +604,47 @@ export function AssistantShell() {
           </div>
 
           <div className="shrink-0 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+            {(isListening || isTranscribing || isPreparingSpeech || isSpeaking) && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mb-2 flex min-h-12 items-center gap-3 border-l-2 border-brand-500 bg-brand-50 px-3 py-2 text-brand-950"
+              >
+                <span className="relative flex h-3 w-3 shrink-0">
+                  {isListening && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />}
+                  <span className={`relative inline-flex h-3 w-3 rounded-full ${isListening ? "bg-red-500" : "bg-brand-600"}`} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold">
+                    {t(
+                      isListening
+                        ? "assistant.voice.listening"
+                        : isSpeaking
+                          ? "assistant.voice.speaking"
+                          : isPreparingSpeech
+                            ? "assistant.status.finalizing"
+                            : "assistant.status.understanding",
+                    )}
+                  </p>
+                  {isListening && (
+                    <p className="mt-0.5 text-[10px] text-brand-700">
+                      {t(hasDetectedSpeech ? "assistant.voice.listening" : "assistant.composer.placeholder")}
+                    </p>
+                  )}
+                </div>
+                {(isListening || isSpeaking) && (
+                  <div className="flex h-6 items-center gap-0.5" aria-hidden="true">
+                    {[10, 18, 13, 21, 15].map((height, index) => (
+                      <span
+                        key={height}
+                        className="w-0.5 animate-pulse rounded-full bg-brand-600"
+                        style={{ height, animationDelay: `${index * 90}ms` }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="rounded-xl border border-slate-300 bg-white shadow-sm focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/15">
               <textarea
                 ref={inputRef}
@@ -549,7 +673,10 @@ export function AssistantShell() {
                       type="button"
                       onClick={() => {
                         setVoiceError("");
-                        if (!isListening) stopSpeaking();
+                        if (!isListening) {
+                          stopSpeaking();
+                          void unlockSpeech();
+                        }
                         void toggleVoice();
                       }}
                       disabled={isBusy || isTranscribing}
@@ -576,7 +703,7 @@ export function AssistantShell() {
                       {isTranscribing ? (
                         <Loader2 size={17} className="animate-spin" />
                       ) : isListening ? (
-                        <MicOff size={17} />
+                        <Square size={14} fill="currentColor" />
                       ) : (
                         <Mic size={17} />
                       )}
@@ -627,7 +754,7 @@ export function AssistantShell() {
               </p>
             )}
             <p className="mt-1.5 text-center text-[9px] text-slate-400">
-              {t("assistant.composer.keyboardHint")}
+              {t(voiceSupported ? "assistant.composer.placeholder" : "assistant.composer.keyboardHint")}
             </p>
           </div>
         </div>

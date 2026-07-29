@@ -1059,6 +1059,7 @@
       "start": "Start voice input",
       "stop": "Stop voice input",
       "listening": "Listening…",
+      "speaking": "Speaking…",
       "unavailable": "Voice input is not supported in this browser.",
       "permissionDenied": "Microphone access was not allowed.",
       "failed": "Voice input could not be started."
