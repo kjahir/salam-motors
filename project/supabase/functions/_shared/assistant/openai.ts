@@ -8,6 +8,7 @@ import {
   type ReasoningEffort,
 } from "./config.ts";
 import { AssistantHttpError } from "./http.ts";
+import { modelToolNames, summarizeModelItems } from "./model-trace.ts";
 import { assistantStrings, checkScriptConformance } from "./locales.ts";
 import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
@@ -549,6 +550,7 @@ export async function runOpenAITurn(
       input.config,
       sensitiveToolsSeen,
     );
+    const roundTools = toolsForPrincipal(input.principal);
     await input.persistence.logTrace(input.runId, input.conversationId, {
       category: "model",
       eventKey: "model.round.started",
@@ -562,6 +564,16 @@ export async function runOpenAITurn(
         force_final_response: roundPlan.forceFinal,
         timeout_ms: roundPlan.timeoutMs,
         replay_item_count: replay.length,
+        request: {
+          endpoint: "responses",
+          input_items: summarizeModelItems(replay),
+          tool_names: modelToolNames(roundTools),
+          tool_choice: roundPlan.forceFinal ? "none" : "auto",
+          parallel_tool_calls: true,
+          structured_output: true,
+          max_output_tokens: input.config.maxOutputTokens,
+          store: false,
+        },
       },
     });
     const modelStarted = Date.now();
@@ -577,7 +589,7 @@ export async function runOpenAITurn(
         conversationId: input.conversationId,
       }),
       input: replay,
-      tools: toolsForPrincipal(input.principal),
+      tools: roundTools,
       tool_choice: roundPlan.forceFinal ? "none" : "auto",
       parallel_tool_calls: true,
       text: { format: MODEL_TURN_FORMAT },
@@ -615,6 +627,14 @@ export async function runOpenAITurn(
         tool_names: calls.map((call) => call.name),
         input_tokens: response.usage?.input_tokens ?? 0,
         output_tokens: response.usage?.output_tokens ?? 0,
+        response: {
+          id: response.id ?? null,
+          status: response.status ?? null,
+          output_items: summarizeModelItems(output),
+          incomplete: response.incomplete_details != null,
+          input_tokens: response.usage?.input_tokens ?? 0,
+          output_tokens: response.usage?.output_tokens ?? 0,
+        },
       },
       durationMs: Date.now() - modelStarted,
     });

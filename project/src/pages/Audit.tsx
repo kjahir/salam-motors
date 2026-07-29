@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ScrollText, AlertTriangle, ChevronDown, ChevronRight, ChevronLeft, X, Bot, Activity } from "lucide-react";
+import { ScrollText, AlertTriangle, ChevronDown, ChevronRight, ChevronLeft, X, Bot, Activity, FileJson2 } from "lucide-react";
 import { PageHeader, Tabs, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { formatDate } from "@/lib/format";
+import { elapsedMilliseconds, formatDate, formatDurationSeconds } from "@/lib/format";
 import { useAuth } from "@/lib/useAuth";
 import {
   fetchAuditLogs,
@@ -401,7 +401,12 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
 
                 {isExpanded && (
                   <div className="mt-3 ml-6 space-y-3">
-                    <TurnStage label={t("auditPage.assistantTurn.query")} text={turn.user_message_text} />
+                    <TurnStage
+                      label={t("auditPage.assistantTurn.query")}
+                      text={turn.user_message_text}
+                      timestamp={turn.started_at ?? turn.created_at}
+                      elapsedMs={0}
+                    />
 
                     <div>
                       <div className="mb-2 flex items-center gap-2">
@@ -420,6 +425,7 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
                               key={event.id}
                               event={event}
                               isLast={index === trace.length - 1}
+                              runStartedAt={turn.started_at ?? turn.created_at}
                             />
                           ))}
                         </div>
@@ -471,7 +477,15 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
                       </div>
                     )}
 
-                    <TurnStage label={t("auditPage.assistantTurn.reply")} text={turn.assistant_message_text} />
+                    <TurnStage
+                      label={t("auditPage.assistantTurn.reply")}
+                      text={turn.assistant_message_text}
+                      timestamp={turn.completed_at}
+                      elapsedMs={elapsedMilliseconds(
+                        turn.started_at ?? turn.created_at,
+                        turn.completed_at,
+                      )}
+                    />
 
                     {turn.error_message && <p className="text-xs text-red-600">{turn.error_message}</p>}
                   </div>
@@ -494,8 +508,17 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
   );
 }
 
-function TraceEventRow({ event, isLast }: { event: AssistantTraceEvent; isLast: boolean }) {
+function TraceEventRow({
+  event,
+  isLast,
+  runStartedAt,
+}: {
+  event: AssistantTraceEvent;
+  isLast: boolean;
+  runStartedAt: string;
+}) {
   const { t } = useTranslation();
+  const [showDetails, setShowDetails] = useState(false);
   const statusColor = event.status === "failed"
     ? "red"
     : event.status === "flagged"
@@ -506,6 +529,7 @@ function TraceEventRow({ event, isLast }: { event: AssistantTraceEvent; isLast: 
   const details = Object.keys(event.details_redacted ?? {}).length > 0
     ? event.details_redacted
     : null;
+  const elapsedMs = elapsedMilliseconds(runStartedAt, event.occurred_at);
 
   return (
     <div className={`relative pb-3 ${isLast ? "" : ""}`}>
@@ -517,17 +541,32 @@ function TraceEventRow({ event, isLast }: { event: AssistantTraceEvent; isLast: 
           </span>
           <Badge color={statusColor}>{event.status}</Badge>
           <Badge color="slate">{event.category}</Badge>
+          {details && event.category === "model" && (
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-brand-700 hover:bg-brand-50"
+              onClick={() => setShowDetails((visible) => !visible)}
+              title={t("auditPage.assistantTurn.traceDetails")}
+              aria-label={t("auditPage.assistantTurn.traceDetails")}
+              aria-expanded={showDetails}
+            >
+              <FileJson2 size={14} />
+            </button>
+          )}
           {event.duration_ms !== null && (
             <span className="ml-auto font-mono text-[10px] text-slate-400">
-              {event.duration_ms} ms
+              {formatDurationSeconds(event.duration_ms)}
             </span>
           )}
+          <span className="font-mono text-[10px] text-slate-500">
+            +{formatDurationSeconds(elapsedMs)}
+          </span>
           <span className="text-[10px] text-slate-400">
-            {formatDate(event.occurred_at, { withTime: true })}
+            {formatDate(event.occurred_at, { withTime: true, withSeconds: true })}
           </span>
         </div>
         <p className="mt-1 text-xs text-slate-700">{event.summary}</p>
-        {details && (
+        {details && event.category !== "model" && (
           <details className="mt-1.5">
             <summary className="cursor-pointer text-[10px] font-medium text-brand-700">
               {t("auditPage.assistantTurn.traceDetails")}
@@ -537,16 +576,43 @@ function TraceEventRow({ event, isLast }: { event: AssistantTraceEvent; isLast: 
             </pre>
           </details>
         )}
+        {details && event.category === "model" && showDetails && (
+          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all border-t border-slate-100 bg-slate-50 p-2 font-mono text-[10px] leading-relaxed text-slate-600">
+            {JSON.stringify(details, null, 2)}
+          </pre>
+        )}
       </div>
     </div>
   );
 }
 
-function TurnStage({ label, text }: { label: string; text: string | null }) {
+function TurnStage({
+  label,
+  text,
+  timestamp,
+  elapsedMs,
+}: {
+  label: string;
+  text: string | null;
+  timestamp?: string | null;
+  elapsedMs?: number | null;
+}) {
   const { t } = useTranslation();
   return (
     <div>
-      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <p className="text-xs font-medium text-slate-500">{label}</p>
+        {elapsedMs !== undefined && elapsedMs !== null && (
+          <span className="font-mono text-[10px] text-slate-500">
+            +{formatDurationSeconds(elapsedMs)}
+          </span>
+        )}
+        {timestamp && (
+          <span className="font-mono text-[10px] text-slate-400">
+            {formatDate(timestamp, { withTime: true, withSeconds: true })}
+          </span>
+        )}
+      </div>
       <p className="text-sm text-slate-800 whitespace-pre-wrap">{text || t("auditPage.assistantTurn.noText")}</p>
     </div>
   );

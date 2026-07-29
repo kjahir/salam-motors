@@ -30,7 +30,10 @@ export function formatNumber(value: number | null | undefined): string {
   return value.toLocaleString(currentLocale());
 }
 
-export function formatDate(value: string | null | undefined, opts?: { withTime?: boolean }): string {
+export function formatDate(
+  value: string | null | undefined,
+  opts?: { withTime?: boolean; withSeconds?: boolean },
+): string {
   if (!value) return EMPTY_VALUE;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return EMPTY_VALUE;
@@ -41,9 +44,33 @@ export function formatDate(value: string | null | undefined, opts?: { withTime?:
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      ...(opts.withSeconds ? { second: "2-digit" } : {}),
     });
   }
   return d.toLocaleDateString(currentLocale(), { day: "2-digit", month: "short", year: "numeric" });
+}
+
+export function formatDurationSeconds(
+  milliseconds: number | null | undefined,
+): string {
+  if (
+    milliseconds === null || milliseconds === undefined ||
+    !Number.isFinite(milliseconds)
+  ) {
+    return EMPTY_VALUE;
+  }
+  return `${(Math.max(0, milliseconds) / 1000).toFixed(3)} s`;
+}
+
+export function elapsedMilliseconds(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): number | null {
+  if (!start || !end) return null;
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+  return Math.max(0, endMs - startMs);
 }
 
 export function daysSince(value: string | null | undefined): number {
