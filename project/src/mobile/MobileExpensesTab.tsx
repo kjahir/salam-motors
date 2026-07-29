@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, Spinner, EmptyState, Sheet, Button, Field, Select, Input } from "./ui/primitives";
@@ -15,7 +15,7 @@ import type { Expense, VehicleWithRelations } from "@/lib/types";
 
 const emptyForm = { category: EXPENSE_CATEGORIES[0], amount: "", vendor: "" };
 
-export function MobileExpensesTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[] }) {
+export function MobileExpensesTab({ vehicle, onChanged, highlightIds, autoAdd, onAutoAddConsumed }: { vehicle: VehicleWithRelations; onChanged: () => void; highlightIds?: string[]; autoAdd?: boolean; onAutoAddConsumed?: () => void }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -65,6 +65,17 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds }: { vehicl
     setOriginalBillUrls(existing);
     setSheetOpen(true);
   };
+
+  // Reached via the mobile "+" -> Expense autoAdd target: opens the add sheet once on
+  // mount, guarded so it doesn't reopen on re-renders (e.g. after onChanged() refetches).
+  const autoAddFired = useRef(false);
+  useEffect(() => {
+    if (!autoAdd || autoAddFired.current) return;
+    autoAddFired.current = true;
+    openAdd();
+    onAutoAddConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdd]);
 
   const expenses = vehicle.expenses ?? [];
   const total = expenses.filter((e) => e.approval_status === "Approved" || e.approval_status === "Paid").reduce((s, e) => s + e.amount, 0);

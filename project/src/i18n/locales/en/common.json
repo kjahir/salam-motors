@@ -325,11 +325,11 @@
     "realisedProfit": "Realised Profit",
     "estimatedProfit": "Est. Profit",
     "marginOfCost": "{{low}}%-{{high}}% of cost",
-    "overview": "Overview",
+    "overview": "Vehicle",
     "expenses": "Expenses",
     "inspection": "Inspection",
     "documents": "Documents",
-    "saleProfit": "Sale & Profit",
+    "saleProfit": "Sales",
     "photos": "Photos",
     "saving": "Saving...",
     "photosHint": "Add photos of the vehicle - exterior, interior, damage, etc.",
@@ -671,6 +671,11 @@
     "profit": "Profit",
     "estProfit": "Est. Profit"
   },
+  "mobileAdd": {
+    "title": "What would you like to add?",
+    "chooseVehicle": "Choose a vehicle",
+    "noVehicles": "No vehicles found"
+  },
   "mobileVehicle": {
     "vehicle": "Vehicle",
     "edit": "Edit",
@@ -681,10 +686,11 @@
     "totalCost": "Total Cost",
     "profit": "Profit",
     "estProfit": "Est. Profit",
-    "overview": "Overview",
+    "overview": "Vehicle",
     "documents": "Documents",
     "expenses": "Expenses",
     "inspection": "Inspection",
+    "sales": "Sales",
     "photos": "Photos",
     "saving": "Saving...",
     "photoHint": "Add photos - exterior, interior, damage, etc.",
@@ -768,7 +774,11 @@
     "uploadedCount": "{{uploaded}}/{{total}} uploaded",
     "done": "Done",
     "saving": "Saving…",
-    "hint": "Add a photo or scan — you can attach multiple pages"
+    "hint": "Add a photo or scan — you can attach multiple pages",
+    "addAnother": "Add another document",
+    "addDocument": "Add Document",
+    "documentType": "Document Type",
+    "added": "Document added"
   },
   "deleteVehicle": {
     "title": "Delete {{stock}}",
