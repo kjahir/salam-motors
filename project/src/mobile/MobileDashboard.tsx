@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert, ShoppingCart } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Spinner, Card, EmptyState } from "./ui/primitives";
 import { formatINR, daysSince } from "@/lib/format";
@@ -7,6 +7,7 @@ import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceSta
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
 import { useAuth } from "@/lib/useAuth";
 import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
+import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { MobileNavigate } from "./MobileApp";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -137,6 +138,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.quickActions")}</p>
         <div className="grid grid-cols-2 gap-3">
           <QuickAction icon={<PlusCircle size={18} />} label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
+          <QuickAction icon={<ShoppingCart size={18} />} label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
           <QuickAction icon={<ClipboardList size={18} />} label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
         </div>
       </div>
@@ -158,7 +160,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-mobile-text truncate">{a.title}</p>
                     <p className="text-xs text-mobile-text-muted truncate">
-                      {a.vehicle?.stock_number} · {a.vehicle?.manufacturer} {a.vehicle?.model}
+                      {vehicleLabel(a.vehicle)}
                       {a.vehicle && ` · ${t("mobileDashboard.daysInStock", { days: daysSince(a.vehicle.onboarded_at) })}`}
                     </p>
                   </div>

@@ -9,6 +9,7 @@ import { PAYMENT_METHODS, INVESTMENT_STATUSES } from "@/lib/constants";
 import { FileUploadGrid } from "@/components/FileUploadGrid";
 import type { UploadedFile } from "@/lib/uploadedFile";
 import { syncVehicleAlerts } from "@/lib/compliance";
+import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { Partner, Vehicle } from "@/lib/types";
 
 interface AddInvestmentModalProps {
@@ -122,7 +123,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
               value={vehicleId}
               onChange={setVehicleId}
               placeholder={t("financeModals.vehiclePlaceholder")}
-              options={vehicles.map((v) => ({ value: v.id, label: `${v.stock_number} · ${v.manufacturer} ${v.model}` }))}
+              options={vehicles.map((v) => ({ value: v.id, label: vehicleLabel(v) }))}
             />
           </Field>
           <Field label={t("financeModals.status")}>

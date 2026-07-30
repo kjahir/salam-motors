@@ -33,7 +33,8 @@
     "policies": "கொள்கைகள்",
     "team": "குழு",
     "audit": "ஆடிட்",
-    "manageVehicles": "வாகன நிர்வாகம்"
+    "manageVehicles": "வாகன நிர்வாகம்",
+    "vehicles": "வாகனங்கள்"
   },
   "dashboard": {
     "title": "டாஷ்போர்டு",
@@ -85,7 +86,14 @@
     "estimatedProfitPreview": "மதிப்பிடப்பட்ட லாப முன்னோட்டம்",
     "acrossCurrentStockCost": "தற்போதைய ஸ்டாக் செலவு {{value}} இல்",
     "low": "குறைந்தபட்சம் {{value}}%",
-    "high": "அதிகபட்சம் {{value}}%"
+    "high": "அதிகபட்சம் {{value}}%",
+    "sellVehicle": "வாகனம் விற்க",
+    "stockTile": "இருப்பு",
+    "alertsTile": "திறந்த எச்சரிக்கைகள்",
+    "soldBoughtHint": "விற்பனை · {{bought}} வாங்கியது",
+    "totalProfitHint": "மொத்த லாபம், இதுவரை",
+    "alertsVehiclesHint": "{{count}} வாகனங்களில்",
+    "registration": "பதிவு எண்"
   },
   "inventory": {
     "title": "இன்வென்டரி",

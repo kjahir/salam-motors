@@ -16,6 +16,7 @@ import {
   SELLER_SUBTYPES, BUYER_SUBTYPES, MECHANIC_SUBTYPES, PARTY_SUBTYPE_LABELS, IDENTITY_TYPES, INDIAN_STATES,
 } from "@/lib/constants";
 import type { Party, PartySubtype, Vehicle } from "@/lib/types";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface PartiesProps {
@@ -443,7 +444,7 @@ export function Parties({ onNavigate }: PartiesProps) {
                         <Bike size={18} className="text-slate-400 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-slate-900 truncate">{v.manufacturer} {v.model}</p>
-                          <p className="text-xs text-slate-500">{v.stock_number} · {v.current_status.replace(/_/g, " ")}</p>
+                          <p className="text-xs text-slate-500">{vehicleRef(v)} · {v.current_status.replace(/_/g, " ")}</p>
                         </div>
                       </button>
                     ))}

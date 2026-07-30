@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, ShoppingCart, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Spinner, Card, Tag, SegmentedTabs } from "./ui/primitives";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
@@ -110,6 +110,15 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
         onBack={onBack}
         actions={
           <>
+            {!isSold && (
+              <button
+                onClick={() => onNavigate("add-sale", { vehicleId })}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-primary active:bg-mobile-bg"
+                aria-label={t("dashboard.sellVehicle")}
+              >
+                <ShoppingCart size={17} />
+              </button>
+            )}
             <button onClick={() => onNavigate("edit-vehicle", { vehicleId })} className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-text-secondary active:bg-mobile-bg" aria-label={t("mobileVehicle.edit")}>
               <Pencil size={17} />
             </button>

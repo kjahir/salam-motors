@@ -19,8 +19,6 @@ import {
   Receipt,
   FileText,
   ClipboardCheck,
-  ShoppingCart,
-  Eye,
 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/lib/useAuth";
@@ -48,16 +46,19 @@ export type PageKey =
   | "team"
   | "audit";
 
-// Quick-action pages reachable from a collapsible sub-menu under "Add Vehicle" in the
-// sidebar — each is its own full page with a vehicle-select dropdown at the top
-// (src/components/VehicleSelectField.tsx), the desktop counterpart to the mobile "+"
-// icon row's targets (src/mobile/MobileApp.tsx's ADD_TARGETS).
-const QUICK_VEHICLE_ACTIONS: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
+// The "Vehicles" group in the sidebar: a pure expand/collapse header (it is not itself a
+// page) over the per-vehicle work screens. Each child is a full page with a vehicle-select
+// dropdown at the top (src/components/VehicleSelectField.tsx), the desktop counterpart to
+// the mobile "+" icon row's targets (src/mobile/MobileApp.tsx's ADD_TARGETS).
+//
+// "View Vehicle" and "Make Sales" are deliberately absent: viewing a vehicle is what
+// clicking an Inventory row does, and selling starts from the Sell Vehicle button on the
+// Dashboard and on the vehicle itself.
+const VEHICLE_GROUP: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
+  { key: "manage-vehicles", labelKey: "nav.manageVehicles", icon: <PlusCircle size={15} /> },
   { key: "quick-add-expense", labelKey: "vehicleDetail.expenses", icon: <Receipt size={15} /> },
   { key: "quick-add-document", labelKey: "vehicleDetail.documents", icon: <FileText size={15} /> },
   { key: "quick-add-inspection", labelKey: "vehicleDetail.inspection", icon: <ClipboardCheck size={15} /> },
-  { key: "quick-add-sale", labelKey: "mobileAdd.makeSales", icon: <ShoppingCart size={15} /> },
-  { key: "view-vehicle", labelKey: "mobileAdd.viewVehicle", icon: <Eye size={15} /> },
 ];
 
 export interface NavigateParams {
@@ -77,7 +78,6 @@ interface LayoutProps {
 
 const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
   { key: "dashboard", labelKey: "nav.dashboard", icon: <LayoutDashboard size={18} /> },
-  { key: "manage-vehicles", labelKey: "nav.manageVehicles", icon: <PlusCircle size={18} /> },
   { key: "inventory", labelKey: "nav.inventory", icon: <Bike size={18} /> },
   { key: "finance", labelKey: "nav.reports", icon: <FileBarChart size={18} /> },
   { key: "parties", labelKey: "nav.parties", icon: <UserCircle size={18} /> },
@@ -89,17 +89,22 @@ const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
   { key: "audit", labelKey: "nav.audit", icon: <ScrollText size={18} /> },
 ];
 
-const navSections: { key: PageKey }[][] = [
-  [{ key: "dashboard" }, { key: "manage-vehicles" }, { key: "inventory" }, { key: "finance" }],
+/** "vehicles" is the collapsible group above, not a page. */
+type NavEntry = { key: PageKey } | { group: "vehicles" };
+
+const navSections: NavEntry[][] = [
+  [{ key: "dashboard" }, { group: "vehicles" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
   [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }, { key: "audit" }],
 ];
 
+const isGroup = (e: NavEntry): e is { group: "vehicles" } => "group" in e;
+
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
   const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isOnQuickAction = QUICK_VEHICLE_ACTIONS.some((a) => a.key === current);
-  const [quickAddOpen, setQuickAddOpen] = useState(isOnQuickAction);
+  const isOnVehicleGroup = VEHICLE_GROUP.some((a) => a.key === current);
+  const [vehiclesOpen, setVehiclesOpen] = useState(isOnVehicleGroup);
   const { canAccessPage } = usePermissions();
   const { orgName } = useAuth();
 
@@ -113,10 +118,12 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
     setMobileOpen(false);
   };
 
-  const visibleQuickActions = QUICK_VEHICLE_ACTIONS.filter(({ key }) => canAccessPage(key));
+  const visibleVehicleGroup = VEHICLE_GROUP.filter(({ key }) => canAccessPage(key));
 
   const visibleNavSections = navSections
-    .map((section) => section.filter(({ key }) => canAccessPage(key)))
+    .map((section) =>
+      section.filter((entry) => (isGroup(entry) ? visibleVehicleGroup.length > 0 : canAccessPage(entry.key))),
+    )
     .filter((section) => section.length > 0);
 
   const sidebar = (
@@ -137,8 +144,46 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
             key={sectionIndex}
             className={`space-y-0.5 ${sectionIndex > 0 ? "mt-4 pt-4 border-t border-slate-800" : ""}`}
           >
-            {section.map(({ key }) => {
-              const item = navItems.find((n) => n.key === key)!;
+            {section.map((entry) => {
+              // The Vehicles group is a header only: clicking it expands or collapses its
+              // children, it never navigates anywhere itself.
+              if (isGroup(entry)) {
+                return (
+                  <div key="vehicles-group">
+                    <button
+                      onClick={() => setVehiclesOpen((o) => !o)}
+                      aria-expanded={vehiclesOpen}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                        isOnVehicleGroup && !vehiclesOpen
+                          ? "bg-slate-800 text-white"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      <Bike size={18} />
+                      <span className="flex-1 text-left">{t("nav.vehicles")}</span>
+                      <ChevronDown size={14} className={`transition-transform ${vehiclesOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {vehiclesOpen && (
+                      <div className="mt-0.5 ml-4 space-y-0.5 border-l border-slate-800 pl-3">
+                        {visibleVehicleGroup.map((action) => (
+                          <button
+                            key={action.key}
+                            onClick={() => handleNav(action.key)}
+                            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors ${
+                              current === action.key ? "bg-brand-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                            }`}
+                          >
+                            {action.icon}
+                            <span className="flex-1 text-left">{t(action.labelKey)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const item = navItems.find((n) => n.key === entry.key)!;
               const active = isActive(item.key);
               return (
                 <div key={item.key}>
@@ -155,38 +200,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
                         {alertCount}
                       </span>
                     )}
-                    {item.key === "manage-vehicles" && visibleQuickActions.length > 0 && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setQuickAddOpen((o) => !o);
-                        }}
-                        className="p-0.5 -mr-1 rounded hover:bg-white/10"
-                        aria-label={quickAddOpen ? t("mobileAdd.closeMenu") : t("mobileAdd.openMenu")}
-                        aria-expanded={quickAddOpen}
-                      >
-                        <ChevronDown size={14} className={`transition-transform ${quickAddOpen ? "rotate-180" : ""}`} />
-                      </span>
-                    )}
                   </button>
-                  {item.key === "manage-vehicles" && quickAddOpen && visibleQuickActions.length > 0 && (
-                    <div className="mt-0.5 ml-4 space-y-0.5 border-l border-slate-800 pl-3">
-                      {visibleQuickActions.map((action) => (
-                        <button
-                          key={action.key}
-                          onClick={() => handleNav(action.key)}
-                          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors ${
-                            current === action.key ? "bg-brand-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                          }`}
-                        >
-                          {action.icon}
-                          <span className="flex-1 text-left">{t(action.labelKey)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}

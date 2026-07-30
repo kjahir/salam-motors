@@ -18,8 +18,6 @@ interface VehicleDetailsFormProps {
   paymentProofs: UploadedFile[];
   onPaymentProofsChange: (files: UploadedFile[]) => void;
   uploadPathPrefix: string;
-  /** Payment method/reference/proof live on purchase_payments, which only the onboarding flow writes. */
-  showPaymentFields?: boolean;
   /** Submit button(s), rendered in the purchase card's footer. */
   footer: ReactNode;
 }
@@ -35,7 +33,6 @@ export function VehicleDetailsForm({
   paymentProofs,
   onPaymentProofsChange,
   uploadPathPrefix,
-  showPaymentFields = true,
   footer,
 }: VehicleDetailsFormProps) {
   const { t } = useTranslation();
@@ -81,26 +78,22 @@ export function VehicleDetailsForm({
               <Field label={t("vehicleForm.otherFees")}>
                 <input className="input" type="number" value={form.other_fee} onChange={(e) => update("other_fee", e.target.value)} />
               </Field>
-              {showPaymentFields && (
-                <>
-                  <Field label={t("vehicleForm.paymentMethod")}>
-                    <Select value={form.payment_method} onChange={(v) => update("payment_method", v)} options={PAYMENT_METHODS} />
-                  </Field>
-                  <Field label={t("vehicleForm.paymentReference")}>
-                    <input className="input" value={form.payment_reference} onChange={(e) => update("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
-                  </Field>
-                  <div className="sm:col-span-2">
-                    <FileUploadGrid
-                      bucket="finance-proofs"
-                      pathPrefix={uploadPathPrefix}
-                      value={paymentProofs}
-                      onChange={onPaymentProofsChange}
-                      label={t("vehicleForm.paymentProof")}
-                      hint={t("vehicleForm.paymentProofHint")}
-                    />
-                  </div>
-                </>
-              )}
+              <Field label={t("vehicleForm.paymentMethod")}>
+                <Select value={form.payment_method} onChange={(v) => update("payment_method", v)} options={PAYMENT_METHODS} />
+              </Field>
+              <Field label={t("vehicleForm.paymentReference")}>
+                <input className="input" value={form.payment_reference} onChange={(e) => update("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
+              </Field>
+              <div className="sm:col-span-2">
+                <FileUploadGrid
+                  bucket="finance-proofs"
+                  pathPrefix={uploadPathPrefix}
+                  value={paymentProofs}
+                  onChange={onPaymentProofsChange}
+                  label={t("vehicleForm.paymentProof")}
+                  hint={t("vehicleForm.paymentProofHint")}
+                />
+              </div>
               <Field label={t("vehicleForm.handoverLocation")}>
                 <input className="input" value={form.handover_location} onChange={(e) => update("handover_location", e.target.value)} placeholder="Chennai" />
               </Field>

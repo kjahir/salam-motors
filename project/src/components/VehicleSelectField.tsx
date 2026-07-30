@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { fetchVehicles } from "@/lib/queries";
+import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { Vehicle } from "@/lib/types";
 
 // Desktop counterpart to src/mobile/ui/VehicleSelectField.tsx — same shared vehicle-picker
@@ -32,7 +33,7 @@ export function VehicleSelectField({ value, onChange }: { value: string; onChang
           value={value}
           onChange={onChange}
           placeholder={t("mobileAdd.chooseVehicle")}
-          options={vehicles.map((v) => ({ value: v.id, label: `${v.stock_number} · ${v.manufacturer} ${v.model}` }))}
+          options={vehicles.map((v) => ({ value: v.id, label: vehicleLabel(v) }))}
         />
       )}
       {vehicles !== null && vehicles.length === 0 && (

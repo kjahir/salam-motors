@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, Plus, Receipt, FileText, ClipboardCheck, ShoppingCart, Pencil, Eye } from "lucide-react";
+import { LayoutDashboard, Bike, FileBarChart, Plus, Receipt, FileText, ClipboardCheck } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
@@ -37,17 +37,18 @@ export interface MobileNavigateParams {
   highlightPolicyId?: string;
 }
 
-// The 6 non-"Add Vehicle" targets reachable from the mobile "+" icon row, each landing on
-// its own full-screen page with a vehicle-select dropdown at the top (rather than a
-// pre-navigation picker Sheet) — so every one of these pages is directly reachable
-// whether or not a vehicle was already in context.
+// Targets reachable from the mobile "+" icon row, each landing on its own full-screen page
+// with a vehicle-select dropdown at the top (rather than a pre-navigation picker Sheet) —
+// so every one is directly reachable whether or not a vehicle was already in context.
+//
+// Mirrors the desktop sidebar's "Vehicles" group (src/components/Layout.tsx): viewing a
+// vehicle is what tapping an Inventory row does, and selling starts from the Sell Vehicle
+// button on the Dashboard and on the vehicle itself, so neither needs an icon here.
 const ADD_TARGETS: { key: string; screen: MobileScreen; labelKey: string; icon: typeof Receipt }[] = [
-  { key: "update", screen: "update-vehicle", labelKey: "mobileAdd.updateVehicle", icon: Pencil },
+  { key: "vehicle", screen: "update-vehicle", labelKey: "nav.manageVehicles", icon: Bike },
   { key: "expenses", screen: "add-expense", labelKey: "vehicleDetail.expenses", icon: Receipt },
   { key: "documents", screen: "add-document", labelKey: "vehicleDetail.documents", icon: FileText },
   { key: "inspection", screen: "add-inspection", labelKey: "vehicleDetail.inspection", icon: ClipboardCheck },
-  { key: "sale", screen: "add-sale", labelKey: "mobileAdd.makeSales", icon: ShoppingCart },
-  { key: "view", screen: "view-vehicle", labelKey: "mobileAdd.viewVehicle", icon: Eye },
 ];
 
 export interface MobileNavigate {
@@ -141,11 +142,6 @@ export function MobileApp() {
   // vehicle-select dropdown, so if we're already inside a specific vehicle's page we
   // just pass that vehicleId along as a convenience preselect; otherwise the page opens
   // with nothing selected and the dealer picks a vehicle right there.
-  const handlePickAddVehicle = () => {
-    setAddRowOpen(false);
-    navigate("add-vehicle");
-  };
-
   const handlePickAddTarget = (targetScreen: MobileScreen) => {
     setAddRowOpen(false);
     navigate(targetScreen, screen === "vehicle" && vehicleId ? { vehicleId } : undefined);
@@ -222,13 +218,6 @@ export function MobileApp() {
           {addRowOpen && canAddVehicle && (
             <div className="mx-auto max-w-md w-full bg-mobile-card border-t border-x border-mobile-border rounded-t-2xl shadow-mobile-lg px-2 pt-3 pb-2 animate-slide-up">
               <div className="grid grid-cols-4 gap-1">
-                <button
-                  onClick={handlePickAddVehicle}
-                  className="flex flex-col items-center gap-1 py-1 active:opacity-70"
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary"><Bike size={20} /></span>
-                  <span className="text-[10px] font-medium text-mobile-text-secondary text-center leading-tight">{t("nav.addVehicle")}</span>
-                </button>
                 {ADD_TARGETS.map(({ key, screen: targetScreen, labelKey, icon: Icon }) => (
                   <button
                     key={key}

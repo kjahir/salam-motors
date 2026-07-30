@@ -11,12 +11,14 @@ import { syncVehicleAlerts } from "@/lib/compliance";
 import { AddVehicle } from "@/pages/AddVehicle";
 import { VehicleDetailsForm } from "@/components/VehicleDetailsForm";
 import { emptyVehicleForm, type VehicleFullFormData } from "@/lib/vehicleForm";
-import type { Purchase, Vehicle } from "@/lib/types";
+import { diffRemovedPaths, fileFromPath, type UploadedFile } from "@/lib/uploadedFile";
+import { vehicleLabel } from "@/lib/vehicleLabel";
+import type { Purchase, PurchasePayment, Vehicle } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 const str = (v: string | number | null | undefined) => (v === null || v === undefined ? "" : String(v));
 
-const formFromVehicle = (v: Vehicle, purchase: Purchase | null): VehicleFullFormData => ({
+const formFromVehicle = (v: Vehicle, purchase: Purchase | null, payment?: PurchasePayment): VehicleFullFormData => ({
   ...emptyVehicleForm(),
   registration_number: str(v.registration_number),
   category: v.category,
@@ -46,6 +48,8 @@ const formFromVehicle = (v: Vehicle, purchase: Purchase | null): VehicleFullForm
   odometer_at_purchase: str(purchase?.odometer_at_purchase),
   keys_received: purchase?.keys_received ?? true,
   documents_received: purchase?.documents_received ?? false,
+  payment_method: payment?.payment_method ?? "UPI",
+  payment_reference: str(payment?.reference),
 });
 
 // Add Vehicle and Update Vehicle, clubbed: a vehicle picker with a "+" beside it. Pick a
@@ -60,6 +64,12 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<VehicleFullFormData>(emptyVehicleForm);
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [listingId, setListingId] = useState<string | null>(null);
+  const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
+  /** Proof paths present when the vehicle was loaded, so a save can delete what was removed. */
+  const [originalProofPaths, setOriginalProofPaths] = useState<string[]>([]);
+  const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const [loadingVehicle, setLoadingVehicle] = useState(false);
   const [regChecking, setRegChecking] = useState(false);
   const [regAvailable, setRegAvailable] = useState<boolean | null>(null);
@@ -77,16 +87,33 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
     if (!vehicleId) return;
     let cancelled = false;
     setLoadingVehicle(true);
+    setUploadSessionId(crypto.randomUUID());
     (async () => {
       try {
-        const [{ data: vehicle, error: vErr }, { data: purchase }] = await Promise.all([
+        const [{ data: vehicle, error: vErr }, { data: purchaseRow }, { data: listing }] = await Promise.all([
           supabase.from("vehicles").select("*").eq("id", vehicleId).single(),
           supabase.from("purchases").select("*").eq("vehicle_id", vehicleId).maybeSingle(),
+          supabase.from("listings").select("id").eq("vehicle_id", vehicleId).maybeSingle(),
         ]);
         if (vErr) throw vErr;
+        const purchase = (purchaseRow as Purchase | null) ?? null;
+
+        // A purchase can have several payments; the onboarding flow writes exactly one, so
+        // that first (earliest) payment is the one this form edits. Extra payments are left
+        // alone — record those from the vehicle's own Sale & Profit tab.
+        const { data: payments } = purchase
+          ? await supabase.from("purchase_payments").select("*").eq("purchase_id", purchase.id).order("paid_at")
+          : { data: null };
+        const payment = ((payments as PurchasePayment[] | null) ?? [])[0];
         if (cancelled) return;
-        setForm(formFromVehicle(vehicle as Vehicle, (purchase as Purchase | null) ?? null));
-        setPurchaseId((purchase as Purchase | null)?.id ?? null);
+
+        setForm(formFromVehicle(vehicle as Vehicle, purchase, payment));
+        setPurchaseId(purchase?.id ?? null);
+        setPaymentId(payment?.id ?? null);
+        setListingId((listing as { id: string } | null)?.id ?? null);
+        const existingProofs = payment?.proof_urls ?? [];
+        setProofFiles(existingProofs.map(fileFromPath));
+        setOriginalProofPaths(existingProofs);
         setRegAvailable(null);
       } catch (e) {
         if (!cancelled) toast(e instanceof Error ? e.message : t("vehicleDetail.failedToLoad"), "error");
@@ -184,6 +211,62 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
           })
           .eq("id", purchaseId);
         if (pErr) throw pErr;
+
+        // Payment amount is derived, not typed: the "Purchase payments must match price"
+        // compliance rule reconciles total payments against price + commission + fees, so
+        // it has to move whenever any of those three do.
+        const paidTotal =
+          (Number(form.purchase_price) || 0) + (Number(form.broker_commission) || 0) + (Number(form.other_fee) || 0);
+        const finalProofs = proofFiles.map((f) => f.path);
+        const removedProofs = diffRemovedPaths(originalProofPaths, proofFiles);
+
+        if (paymentId) {
+          const { error: payErr } = await supabase
+            .from("purchase_payments")
+            .update({
+              amount: paidTotal,
+              payment_method: form.payment_method,
+              reference: form.payment_reference.trim() || null,
+              proof_urls: finalProofs.length ? finalProofs : null,
+            })
+            .eq("id", paymentId);
+          if (payErr) throw payErr;
+        } else if (finalProofs.length || form.payment_reference.trim()) {
+          // No payment on file yet — only create one once there is something to record,
+          // so simply opening and saving the form can't invent a payment.
+          const { data: created, error: payErr } = await supabase
+            .from("purchase_payments")
+            .insert({
+              purchase_id: purchaseId,
+              amount: paidTotal,
+              payment_method: form.payment_method,
+              reference: form.payment_reference.trim() || null,
+              proof_urls: finalProofs.length ? finalProofs : null,
+              paid_at: new Date().toISOString(),
+            })
+            .select("id")
+            .single();
+          if (payErr) throw payErr;
+          setPaymentId(created.id as string);
+        }
+
+        if (removedProofs.length) {
+          const { error: rmErr } = await supabase.storage.from("finance-proofs").remove(removedProofs);
+          if (rmErr) console.error("Failed to remove detached payment proofs", rmErr);
+        }
+        setOriginalProofPaths(finalProofs);
+      }
+
+      // Keep the public listing's price in step, the same way EditVehicleModal does —
+      // otherwise editing the asking price here leaves the passport showing the old one.
+      const askingPrice = Number(form.asking_price) || null;
+      const minimumPrice = Number(form.minimum_price) || null;
+      if (askingPrice && askingPrice > 0 && listingId) {
+        const { error: listErr } = await supabase
+          .from("listings")
+          .update({ asking_price: askingPrice, minimum_price: minimumPrice })
+          .eq("id", listingId);
+        if (listErr) toast(t("vehicleForm.savedListingSyncFailed", { message: listErr.message }), "error");
       }
 
       supabase
@@ -239,7 +322,7 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
                     setVehicleId(id);
                   }}
                   placeholder={t("mobileAdd.chooseVehicle")}
-                  options={vehicles.map((v) => ({ value: v.id, label: `${v.stock_number} · ${v.manufacturer} ${v.model}` }))}
+                  options={vehicles.map((v) => ({ value: v.id, label: vehicleLabel(v) }))}
                 />
               )}
             </Field>
@@ -283,10 +366,9 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
           update={update}
           regChecking={regChecking}
           regAvailable={regAvailable}
-          paymentProofs={[]}
-          onPaymentProofsChange={() => {}}
-          uploadPathPrefix={`purchase-payments/${vehicleId}`}
-          showPaymentFields={false}
+          paymentProofs={proofFiles}
+          onPaymentProofsChange={setProofFiles}
+          uploadPathPrefix={`purchase-payments/${uploadSessionId}`}
           footer={
             <button onClick={handleSave} disabled={saving || !isValid} className="btn-primary">
               {saving ? <Spinner size={16} /> : <Check size={16} />} {t("manageVehicles.saveChanges")}

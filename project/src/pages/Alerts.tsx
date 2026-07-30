@@ -22,6 +22,7 @@ import { translateAlertCopy } from "@/lib/i18nText";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/useToast";
 import type { Alert, Vehicle, VehicleFinancialSummary, CompliancePolicy } from "@/lib/types";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface AlertsProps {
@@ -208,7 +209,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
                     <p className="text-sm font-medium text-slate-900">{copy.title}</p>
                     {copy.message && <p className="text-sm text-slate-600 mt-1">{copy.message}</p>}
                     <div className="flex items-center gap-3 mt-2 text-xs text-slate-400 flex-wrap">
-                      <span className="font-mono text-brand-600">{a.vehicle?.stock_number}</span>
+                      <span className="font-mono text-brand-600">{vehicleRef(a.vehicle)}</span>
                       <span>{a.vehicle?.manufacturer} {a.vehicle?.model}</span>
                       {s && <span>{t("alertsPage.cost", { value: formatINR(s.total_vehicle_cost) })}</span>}
                       {a.vehicle?.asking_price && <span>{t("alertsPage.asking", { value: formatINR(a.vehicle.asking_price) })}</span>}

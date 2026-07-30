@@ -16,6 +16,7 @@ import { SettlementModal } from "@/components/SettlementModal";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { useProofLightbox } from "@/hooks/useProofLightbox";
 import type { Partner, Investment, ProfitDistribution, ProfitSettlementPayment, Vehicle } from "@/lib/types";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 type DistributionRow = ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] };
@@ -283,7 +284,7 @@ export function Partners({ onNavigate }: PartnersProps) {
                       disabled={!inv.vehicle_id}
                     >
                       <span className="text-slate-700">{inv.vehicle ? `${inv.vehicle.manufacturer} ${inv.vehicle.model}` : t("partnersPage.generalCapital")}</span>
-                      {inv.vehicle && <span className="text-xs text-slate-400 ml-1.5">{inv.vehicle.stock_number}</span>}
+                      {inv.vehicle && <span className="text-xs text-slate-400 ml-1.5">{vehicleRef(inv.vehicle)}</span>}
                     </button>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-medium text-slate-900">{formatINR(inv.amount)}</span>
@@ -321,7 +322,7 @@ export function Partners({ onNavigate }: PartnersProps) {
                               onClick={() => d.vehicle_id && onNavigate("vehicle", { vehicleId: d.vehicle_id })}
                               className="text-left flex-1 min-w-0"
                             >
-                              <span className="text-slate-700">{d.vehicle?.stock_number ?? "â€”"}</span>
+                              <span className="text-slate-700">{d.vehicle ? vehicleRef(d.vehicle) : "—"}</span>
                               <span className="text-xs text-slate-400 ml-1.5">{t("partnersPage.dueOf", { due: formatINR(d.balance_payable), total: formatINR(d.total_entitlement) })}</span>
                             </button>
                             <button onClick={() => setSettlingDistribution(d)} className="btn-primary btn-sm shrink-0">

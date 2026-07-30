@@ -33,7 +33,8 @@
     "policies": "పాలసీలు",
     "team": "టీమ్",
     "audit": "ఆడిట్",
-    "manageVehicles": "వాహన నిర్వహణ"
+    "manageVehicles": "వాహన నిర్వహణ",
+    "vehicles": "వాహనాలు"
   },
   "dashboard": {
     "title": "డ్యాష్‌బోర్డ్",
@@ -85,7 +86,14 @@
     "estimatedProfitPreview": "అంచనా లాభం ప్రివ్యూ",
     "acrossCurrentStockCost": "ప్రస్తుత స్టాక్ వ్యయం {{value}} అంతటా",
     "low": "తక్కువ {{value}}%",
-    "high": "ఎక్కువ {{value}}%"
+    "high": "ఎక్కువ {{value}}%",
+    "sellVehicle": "వాహనం అమ్మండి",
+    "stockTile": "స్టాక్",
+    "alertsTile": "తెరిచిన అలర్ట్‌లు",
+    "soldBoughtHint": "అమ్మినవి · {{bought}} కొన్నవి",
+    "totalProfitHint": "మొత్తం లాభం, ఇప్పటివరకు",
+    "alertsVehiclesHint": "{{count}} వాహనాల్లో",
+    "registration": "రిజిస్ట్రేషన్"
   },
   "inventory": {
     "title": "ఇన్వెంటరీ",

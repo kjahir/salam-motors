@@ -33,7 +33,8 @@
     "policies": "ನೀತಿಗಳು",
     "team": "ತಂಡ",
     "audit": "ಲೆಕ್ಕಪರಿಶೋಧನೆ",
-    "manageVehicles": "ವಾಹನ ನಿರ್ವಹಣೆ"
+    "manageVehicles": "ವಾಹನ ನಿರ್ವಹಣೆ",
+    "vehicles": "ವಾಹನಗಳು"
   },
   "dashboard": {
     "title": "ಡ್ಯಾಶ್ಬೋರ್ಡ್",
@@ -85,7 +86,14 @@
     "estimatedProfitPreview": "ಅಂದಾಜು ಲಾಭ ಪೂರ್ವವೀಕ್ಷಣೆ",
     "acrossCurrentStockCost": "ಪ್ರಸ್ತುತ ಸ್ಟಾಕ್ ವೆಚ್ಚ {{value}} ಮೇಲೆ",
     "low": "ಕಡಿಮೆ {{value}}%",
-    "high": "ಹೆಚ್ಚು {{value}}%"
+    "high": "ಹೆಚ್ಚು {{value}}%",
+    "sellVehicle": "ವಾಹನ ಮಾರಿ",
+    "stockTile": "ಸ್ಟಾಕ್",
+    "alertsTile": "ತೆರೆದ ಎಚ್ಚರಿಕೆಗಳು",
+    "soldBoughtHint": "ಮಾರಾಟ · {{bought}} ಖರೀದಿ",
+    "totalProfitHint": "ಒಟ್ಟು ಲಾಭ, ಇಲ್ಲಿಯವರೆಗೆ",
+    "alertsVehiclesHint": "{{count}} ವಾಹನಗಳಲ್ಲಿ",
+    "registration": "ನೋಂದಣಿ"
   },
   "inventory": {
     "title": "ಇನ್ವೆಂಟರಿ",

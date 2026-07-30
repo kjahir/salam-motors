@@ -1,48 +1,41 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bike,
-  Wallet,
-  TrendingUp,
   IndianRupee,
   AlertTriangle,
   CheckCircle2,
-  Wrench,
-  Clock,
   ArrowRight,
-  FileWarning,
-  ShieldAlert,
   Activity,
   Pencil,
+  ShoppingCart,
 } from "lucide-react";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
-import { Card, StatCard, EmptyState } from "@/components/ui/Card";
+import { Card, EmptyState } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
-import { Badge, StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
+import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import { computeEstimatedProfitRange } from "@/lib/calc";
 import {
   fetchVehicles,
   fetchFinancialSummaries,
   fetchAlerts,
   fetchComplianceStatuses,
-  fetchCompliancePolicies,
   fetchInvestments,
   fetchAppSettings,
   updateAppSettings,
   fetchPartners,
   fetchProfitDistributions,
 } from "@/lib/queries";
-import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
-import { translateAlertCopy } from "@/lib/i18nText";
+import { syncAllVehiclesCompliance } from "@/lib/compliance";
 import type {
   Vehicle,
   VehicleFinancialSummary,
   Alert,
   VehicleComplianceStatus,
-  CompliancePolicy,
   Investment,
   AppSettings,
   Partner,
@@ -60,10 +53,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
-  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [editingMargin, setEditingMargin] = useState(false);
+  /** Which headline tile's detail popup is open. */
+  const [panel, setPanel] = useState<"stock" | "month" | "finance" | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,12 +68,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p, inv, st, pt, dist] = await Promise.all([
+        const [v, s, a, c, inv, st, pt, dist] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
           fetchComplianceStatuses(),
-          fetchCompliancePolicies(),
           fetchInvestments(),
           fetchAppSettings(),
           fetchPartners(),
@@ -90,7 +83,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setSummaries(s);
         setAlerts(a);
         setComplianceStatuses(c);
-        setPolicies(p);
         setInvestments(inv);
         setSettings(st);
         setPartners(pt);
@@ -106,7 +98,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     };
   }, [t]);
 
-  const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
 
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
@@ -231,101 +222,57 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         title={t("dashboard.title")}
         description={t("dashboard.description")}
         actions={
-          <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
-            <Bike size={16} /> {t("dashboard.onboardVehicle")}
-          </button>
+          <>
+            <button onClick={() => onNavigate("quick-add-sale")} className="btn-secondary">
+              <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
+            </button>
+            <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
+              <Bike size={16} /> {t("dashboard.onboardVehicle")}
+            </button>
+          </>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Left: As of Today + This Month, stacked */}
-        <div className="lg:col-span-2 space-y-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("dashboard.asOfToday")}</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StatCard
-                label={t("dashboard.vehiclesInStock")}
-                value={stats.inStockCount}
-                icon={<Bike size={20} />}
-                color="brand"
-                hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
-                onClick={() => onNavigate("inventory")}
-              />
-              <StatCard
-                label={t("dashboard.totalInventoryCost")}
-                value={formatINR(stats.totalCost, { compact: true })}
-                icon={<Wallet size={20} />}
-                color="slate"
-                hint={t("dashboard.askingValue", { value: formatINR(stats.totalAsking, { compact: true }) })}
-              />
-              <StatCard
-                label={t("dashboard.estimatedProfit")}
-                value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
-                icon={<TrendingUp size={20} />}
-                color="emerald"
-                hint={
-                  <span className="inline-flex items-center gap-1">
-                    {t("dashboard.marginHint", { low: stats.marginLow, high: stats.marginHigh })} <Pencil size={11} className="opacity-60" />
-                  </span>
-                }
-                onClick={() => setEditingMargin(true)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("dashboard.thisMonth")}</h3>
-              <button onClick={() => onNavigate("finance")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-                {t("dashboard.viewAll")} <ArrowRight size={14} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StatCard label={t("dashboard.boughtThisMonth")} value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
-              <StatCard label={t("dashboard.soldThisMonth")} value={stats.soldThisMonth} icon={<CheckCircle2 size={18} />} color="emerald" />
-              <StatCard
-                label={t("dashboard.realisedProfitMonth")}
-                value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
-                icon={<IndianRupee size={18} />}
-                color="emerald"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Financial Overview, spanning the height of both rows on the left */}
-        <Card className="p-5 h-full">
-          <h3 className="font-semibold text-slate-900 mb-4">{t("dashboard.financialOverview")}</h3>
-          <div className="space-y-3">
-            <FinancialStatRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow label={t("dashboard.totalCost")} value={formatINR(stats.totalCostAllTime, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow label={t("dashboard.totalSales")} value={formatINR(stats.totalSalesAllTime, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow
-              label={t("dashboard.totalProfit")}
-              value={formatINR(stats.totalProfitAllTime, { compact: true })}
-              color={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
-            />
-          </div>
-          <div className="pt-4 mt-4 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{t("dashboard.profitShareByPartner")}</p>
-            {partnerShares.length === 0 ? (
-              <p className="text-sm text-slate-400">{t("dashboard.noPartners")}</p>
-            ) : (
-              <div className="space-y-3">
-                {partnerShares.map((p) => (
-                  <FinancialStatRow key={p.id} label={p.name} value={formatINR(p.amount, { compact: true })} color="text-emerald-600" />
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
+      {/* Four headline tiles. Each one carries a single number worth reacting to; the
+          supporting figures live behind a click so the page reads in one glance. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <HeadlineTile
+          label={t("dashboard.stockTile")}
+          value={String(stats.inStockCount)}
+          hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
+          icon={<Bike size={22} />}
+          color="brand"
+          onClick={() => setPanel("stock")}
+        />
+        <HeadlineTile
+          label={t("dashboard.thisMonth")}
+          value={String(stats.soldThisMonth)}
+          hint={t("dashboard.soldBoughtHint", { bought: stats.boughtThisMonth })}
+          icon={<CheckCircle2 size={22} />}
+          color="emerald"
+          onClick={() => setPanel("month")}
+        />
+        <HeadlineTile
+          label={t("dashboard.financialOverview")}
+          value={formatINR(stats.totalProfitAllTime, { compact: true })}
+          hint={t("dashboard.totalProfitHint")}
+          icon={<IndianRupee size={22} />}
+          color={stats.totalProfitAllTime >= 0 ? "emerald" : "red"}
+          onClick={() => setPanel("finance")}
+        />
+        <HeadlineTile
+          label={t("dashboard.alertsTile")}
+          value={String(stats.openAlerts)}
+          hint={t("dashboard.alertsVehiclesHint", { count: stats.openAlertVehicleCount })}
+          icon={<AlertTriangle size={22} />}
+          color={stats.openAlerts > 0 ? "red" : "slate"}
+          onClick={() => onNavigate("alerts")}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Inventory ageing */}
-        <Card className="p-5 lg:col-span-2">
+      {/* Inventory ageing — kept as a table, per its own request */}
+      <div>
+        <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-slate-900">{t("dashboard.inventoryAgeing")}</h3>
             <button onClick={() => onNavigate("inventory")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
@@ -354,7 +301,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       {v.manufacturer} {v.model}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {v.stock_number} · {formatINR(stats.summaryMap.get(v.id)?.total_vehicle_cost ?? 0)}
+                      {vehicleRef(v)} · {formatINR(stats.summaryMap.get(v.id)?.total_vehicle_cost ?? 0)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 ml-3">
@@ -368,67 +315,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 </button>
               ))}
           </div>
-        </Card>
-
-        {/* Open alerts */}
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900">
-              {t("dashboard.recentAlerts", { alerts: stats.openAlerts, vehicles: stats.openAlertVehicleCount, alertPlural: stats.openAlerts !== 1 ? "s" : "", vehiclePlural: stats.openAlertVehicleCount !== 1 ? "s" : "" })}
-            </h3>
-            <button onClick={() => onNavigate("alerts")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-              {t("dashboard.all")} <ArrowRight size={14} />
-            </button>
-          </div>
-          {stats.openAlertList.length === 0 ? (
-            <EmptyState icon={<CheckCircle2 size={20} />} title={t("dashboard.noOpenAlerts")} />
-          ) : (
-            <div className="space-y-3">
-              {stats.openAlertList.map((a) => {
-                const sevColor =
-                  a.severity === "Critical" ? "red" : a.severity === "High" ? "orange" : a.severity === "Warning" ? "amber" : "slate";
-                const copy = translateAlertCopy(t, a.title, a.message);
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => onNavigate("vehicle", { vehicleId: a.vehicle_id, ...resolveAlertDestination(a.policy_id ? policyMap.get(a.policy_id) : undefined), highlightPolicyId: a.policy_id ?? undefined })}
-                    className="flex items-start gap-3 w-full text-left p-3 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    <div
-                      className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                        sevColor === "red"
-                          ? "bg-red-50 text-red-600"
-                          : sevColor === "orange"
-                            ? "bg-orange-50 text-orange-600"
-                            : sevColor === "amber"
-                              ? "bg-amber-50 text-amber-600"
-                              : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {a.alert_type === "Ageing" ? (
-                        <Clock size={14} />
-                      ) : a.alert_type === "Document" ? (
-                        <FileWarning size={14} />
-                      ) : a.alert_type === "Repair" ? (
-                        <Wrench size={14} />
-                      ) : a.alert_type === "Compliance" ? (
-                        <ShieldAlert size={14} />
-                      ) : (
-                        <AlertTriangle size={14} />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 truncate">{copy.title}</p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {a.vehicle?.stock_number} · {a.vehicle?.manufacturer} {a.vehicle?.model}
-                      </p>
-                    </div>
-                    <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{t(`status.${a.severity}`, { defaultValue: a.severity })}</Badge>
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </Card>
       </div>
 
@@ -446,7 +332,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                <th className="pb-2 font-medium">{t("dashboard.stockNumber")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.registration")}</th>
                 <th className="pb-2 font-medium">{t("dashboard.vehicle")}</th>
                 <th className="pb-2 font-medium">{t("dashboard.status")}</th>
                 <th className="pb-2 font-medium text-right">{t("dashboard.cost")}</th>
@@ -463,7 +349,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     onClick={() => onNavigate("vehicle", { vehicleId: v.id })}
                     className="cursor-pointer hover:bg-slate-50"
                   >
-                    <td className="py-2.5 font-mono text-xs text-slate-600">{v.stock_number}</td>
+                    <td className="py-2.5 font-mono text-xs text-slate-600">{vehicleRef(v)}</td>
                     <td className="py-2.5">
                       <span className="font-medium text-slate-900">{v.manufacturer} {v.model}</span>
                       <span className="text-slate-400 ml-1">· {v.manufacture_year}</span>
@@ -479,6 +365,78 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </table>
         </div>
       </Card>
+
+      <Modal open={panel === "stock"} onClose={() => setPanel(null)} title={t("dashboard.asOfToday")}>
+        <div className="space-y-1">
+          <DetailRow
+            label={t("dashboard.vehiclesInStock")}
+            value={String(stats.inStockCount)}
+            hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
+            onClick={() => {
+              setPanel(null);
+              onNavigate("inventory");
+            }}
+          />
+          <DetailRow
+            label={t("dashboard.totalInventoryCost")}
+            value={formatINR(stats.totalCost, { compact: true })}
+            hint={t("dashboard.askingValue", { value: formatINR(stats.totalAsking, { compact: true }) })}
+          />
+          <DetailRow
+            label={t("dashboard.estimatedProfit")}
+            value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
+            hint={
+              <span className="inline-flex items-center gap-1">
+                {t("dashboard.marginHint", { low: stats.marginLow, high: stats.marginHigh })} <Pencil size={11} className="opacity-60" />
+              </span>
+            }
+            valueClass="text-emerald-600"
+            onClick={() => {
+              setPanel(null);
+              setEditingMargin(true);
+            }}
+          />
+        </div>
+      </Modal>
+
+      <Modal open={panel === "month"} onClose={() => setPanel(null)} title={t("dashboard.thisMonth")}>
+        <div className="space-y-1">
+          <DetailRow label={t("dashboard.boughtThisMonth")} value={String(stats.boughtThisMonth)} />
+          <DetailRow label={t("dashboard.soldThisMonth")} value={String(stats.soldThisMonth)} valueClass="text-emerald-600" />
+          <DetailRow
+            label={t("dashboard.realisedProfitMonth")}
+            value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
+            valueClass={stats.realisedProfitThisMonth >= 0 ? "text-emerald-600" : "text-red-600"}
+            onClick={() => {
+              setPanel(null);
+              onNavigate("finance");
+            }}
+          />
+        </div>
+      </Modal>
+
+      <Modal open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
+        <div className="space-y-1">
+          <DetailRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: true })} />
+          <DetailRow label={t("dashboard.totalCost")} value={formatINR(stats.totalCostAllTime, { compact: true })} />
+          <DetailRow label={t("dashboard.totalSales")} value={formatINR(stats.totalSalesAllTime, { compact: true })} />
+          <DetailRow
+            label={t("dashboard.totalProfit")}
+            value={formatINR(stats.totalProfitAllTime, { compact: true })}
+            valueClass={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
+          />
+          <div className="pt-4 mt-3 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("dashboard.profitShareByPartner")}</p>
+            {partnerShares.length === 0 ? (
+              <p className="text-sm text-slate-400">{t("dashboard.noPartners")}</p>
+            ) : (
+              partnerShares.map((ps) => (
+                <DetailRow key={ps.id} label={ps.name} value={formatINR(ps.amount, { compact: true })} valueClass="text-emerald-600" />
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {editingMargin && settings && (
         <EstimatedProfitMarginModal
@@ -614,12 +572,58 @@ function DualRangeSlider({ low, high, onLowChange, onHighChange, min = 0, max = 
   );
 }
 
-function FinancialStatRow({ label, value, color }: { label: string; value: string; color: string }) {
+// A dashboard headline: one number big enough to read across the room, with the
+// supporting figures a click away rather than crowding the page.
+function HeadlineTile({ label, value, hint, icon, color, onClick }: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: ReactNode;
+  color: "brand" | "emerald" | "red" | "slate";
+  onClick: () => void;
+}) {
+  const iconColors = {
+    brand: "bg-brand-50 text-brand-600",
+    emerald: "bg-emerald-50 text-emerald-600",
+    red: "bg-red-50 text-red-600",
+    slate: "bg-slate-100 text-slate-500",
+  };
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-sm text-slate-500 truncate">{label}</p>
-      <p className={`text-sm font-bold shrink-0 ${color}`}>{value}</p>
-    </div>
+    <Card hover onClick={onClick} className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="stat-label">{label}</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900 truncate">{value}</p>
+          {hint && <p className="mt-1.5 text-xs text-slate-500 truncate">{hint}</p>}
+        </div>
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconColors[color]}`}>{icon}</div>
+      </div>
+    </Card>
+  );
+}
+
+/** One supporting figure inside a tile's popup; clickable when it leads somewhere. */
+function DetailRow({ label, value, hint, valueClass = "text-slate-900", onClick }: {
+  label: string;
+  value: string;
+  hint?: ReactNode;
+  valueClass?: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
+      <div className="min-w-0">
+        <p className="text-sm text-slate-600">{label}</p>
+        {hint && <p className="text-xs text-slate-400 mt-0.5">{hint}</p>}
+      </div>
+      <p className={`text-base font-bold shrink-0 ${valueClass}`}>{value}</p>
+    </>
+  );
+  if (!onClick) return <div className="flex items-center justify-between gap-3 py-2.5">{content}</div>;
+  return (
+    <button onClick={onClick} className="flex w-full items-center justify-between gap-3 rounded-lg py-2.5 px-2 -mx-2 text-left transition-colors hover:bg-slate-50">
+      {content}
+    </button>
   );
 }
 

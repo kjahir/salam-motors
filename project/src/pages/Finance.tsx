@@ -18,6 +18,7 @@ import {
   fetchAllSales,
   fetchFinancialSummaries,
 } from "@/lib/queries";
+import { vehicleLabel, vehicleRef } from "@/lib/vehicleLabel";
 import type { Investment, Expense, ProfitDistribution, ProfitSettlementPayment, Purchase, Sale, Vehicle, Partner, Party, VehicleFinancialSummary } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
@@ -316,7 +317,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                   {investmentRows.map((inv) => (
                     <tr key={inv.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium text-slate-900 cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.partner?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.vehicle ? `${inv.vehicle.stock_number} · ${inv.vehicle.manufacturer} ${inv.vehicle.model}` : t("financePage.generalCapital")}</td>
+                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.vehicle ? vehicleLabel(inv.vehicle) : t("financePage.generalCapital")}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(inv.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(inv.investment_date, { withTime: true })}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{inv.purpose ?? "—"}</td>
@@ -383,7 +384,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                 <tbody className="divide-y divide-slate-100">
                   {purchaseRows.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: p.vehicle_id })}>
-                      <td className="px-4 py-3 text-sm">{p.vehicle?.stock_number} · {p.vehicle?.manufacturer} {p.vehicle?.model}</td>
+                      <td className="px-4 py-3 text-sm">{vehicleLabel(p.vehicle)}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">{p.seller?.full_name ?? "—"}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(p.agreed_price)}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{formatINR(p.broker_commission + p.other_fee)}</td>
@@ -444,7 +445,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                 <tbody className="divide-y divide-slate-100">
                   {expenseRows.map((e) => (
                     <tr key={e.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: e.vehicle_id })}>
-                      <td className="px-4 py-3 text-sm">{e.vehicle?.stock_number} · {e.vehicle?.manufacturer} {e.vehicle?.model}</td>
+                      <td className="px-4 py-3 text-sm">{vehicleLabel(e.vehicle)}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">{trStatus(e.category)}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(e.amount)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{e.partner?.name ?? t("financePage.business")}</td>
@@ -515,7 +516,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                     const marginPct = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0;
                     return (
                       <tr key={s.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: s.vehicle_id })}>
-                        <td className="px-4 py-3 text-sm">{s.vehicle?.stock_number} · {s.vehicle?.manufacturer} {s.vehicle?.model}</td>
+                        <td className="px-4 py-3 text-sm">{vehicleLabel(s.vehicle)}</td>
                         <td className="px-4 py-3 font-medium text-slate-900">{s.buyer?.full_name ?? "—"}</td>
                         <td className="px-4 py-3 text-right font-medium">{formatINR(s.sale_price)}</td>
                         <td className="px-4 py-3 text-right">{formatINR(summary?.total_vehicle_cost ?? 0)}</td>
@@ -583,7 +584,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                   {settlementRows.map((d) => (
                     <tr key={d.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium text-slate-900">{d.partner?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: d.vehicle_id })}>{d.vehicle?.stock_number}</td>
+                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: d.vehicle_id })}>{vehicleRef(d.vehicle)}</td>
                       <td className="px-4 py-3 text-right">{formatINR(d.principal_return)}</td>
                       <td className="px-4 py-3 text-right text-emerald-600 font-medium">{formatINR(d.profit_share)}</td>
                       <td className="px-4 py-3 text-right font-bold">{formatINR(d.total_entitlement)}</td>

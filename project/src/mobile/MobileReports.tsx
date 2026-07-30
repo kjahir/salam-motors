@@ -13,6 +13,7 @@ import {
   fetchProfitDistributions,
 } from "@/lib/queries";
 import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import type {
   Purchase,
   Sale,
@@ -214,7 +215,7 @@ export function MobileReports() {
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-mobile-text truncate">{v.manufacturer} {v.model}</p>
-                        <p className="text-xs text-mobile-text-muted font-mono">{v.stock_number}</p>
+                        <p className="text-xs text-mobile-text-muted font-mono">{vehicleRef(v)}</p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-sm font-semibold text-mobile-text">{formatINR(s?.total_vehicle_cost ?? 0)}</p>

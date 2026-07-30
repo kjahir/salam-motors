@@ -33,7 +33,8 @@
     "policies": "Policies",
     "team": "Team",
     "audit": "Audit",
-    "manageVehicles": "Manage Vehicles"
+    "manageVehicles": "Manage Vehicles",
+    "vehicles": "Vehicles"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -85,7 +86,14 @@
     "estimatedProfitPreview": "Estimated Profit Preview",
     "acrossCurrentStockCost": "Across current in-stock cost of {{value}}",
     "low": "Low {{value}}%",
-    "high": "High {{value}}%"
+    "high": "High {{value}}%",
+    "sellVehicle": "Sell Vehicle",
+    "stockTile": "Stock",
+    "alertsTile": "Open Alerts",
+    "soldBoughtHint": "sold · {{bought}} bought",
+    "totalProfitHint": "Total profit, all time",
+    "alertsVehiclesHint": "across {{count}} vehicle(s)",
+    "registration": "Registration"
   },
   "inventory": {
     "title": "Inventory",

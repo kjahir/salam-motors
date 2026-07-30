@@ -33,7 +33,8 @@
     "policies": "നയങ്ങൾ",
     "team": "ടീം",
     "audit": "ഓഡിറ്റ്",
-    "manageVehicles": "വാഹന നിർവഹണം"
+    "manageVehicles": "വാഹന നിർവഹണം",
+    "vehicles": "വാഹനങ്ങൾ"
   },
   "dashboard": {
     "title": "ഡാഷ്ബോർഡ്",
@@ -85,7 +86,14 @@
     "estimatedProfitPreview": "കണക്കാക്കിയ ലാഭ പ്രിവ്യൂ",
     "acrossCurrentStockCost": "നിലവിലെ സ്റ്റോക്ക് ചെലവ് {{value}}-ൽ ഉടനീളം",
     "low": "കുറഞ്ഞത് {{value}}%",
-    "high": "കൂടിയത് {{value}}%"
+    "high": "കൂടിയത് {{value}}%",
+    "sellVehicle": "വാഹനം വിൽക്കുക",
+    "stockTile": "സ്റ്റോക്ക്",
+    "alertsTile": "തുറന്ന അലേർട്ടുകൾ",
+    "soldBoughtHint": "വിറ്റു · {{bought}} വാങ്ങി",
+    "totalProfitHint": "ആകെ ലാഭം, ഇതുവരെ",
+    "alertsVehiclesHint": "{{count}} വാഹനങ്ങളിൽ",
+    "registration": "രജിസ്ട്രേഷൻ"
   },
   "inventory": {
     "title": "ഇൻവെന്ററി",

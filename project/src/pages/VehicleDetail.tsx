@@ -199,6 +199,11 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         icon={<Bike size={20} />}
         actions={
           <>
+            {!isSold && (
+              <button onClick={() => setTab("sale")} className="btn-primary">
+                <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
+              </button>
+            )}
             <button onClick={() => onNavigate("passport", { vehicleId: vehicle.id })} className="btn-secondary">
               <Share2 size={16} /> {t("vehicleDetail.viewPassport")}
             </button>

@@ -16,10 +16,12 @@ interface UpdateRow {
 
 const emptyUpdateRow = (): UpdateRow => ({ key: crypto.randomUUID(), field: FIELD_DEFS[0].key, value: "" });
 
-// Full-screen "Update Vehicle" page: pick a vehicle, then repeatable rows of
-// field + new value (add as many as needed), one batched update — the same
-// dropdown-plus-line-item shape as Add Expense/Document/Inspection, but for editing
-// existing vehicle columns instead of inserting new child records.
+// Full-screen "Vehicle" page: pick a vehicle, then repeatable rows of field + new value
+// (add as many as needed), one batched update — the same dropdown-plus-line-item shape as
+// Add Expense/Document/Inspection, but for editing existing vehicle columns instead of
+// inserting new child records. The "New" button beside the picker leads to the onboarding
+// form, so this one screen covers both adding and updating, matching the single Vehicle
+// icon in the "+" row and desktop's Manage Vehicles page.
 export function MobileUpdateVehicle({ vehicleId: initialVehicleId, onNavigate, onBack }: {
   vehicleId?: string;
   onNavigate: MobileNavigate;
@@ -72,7 +74,14 @@ export function MobileUpdateVehicle({ vehicleId: initialVehicleId, onNavigate, o
     <div>
       <TopBar title={t("mobileUpdateVehicle.title")} onBack={onBack} />
       <div className="p-4 space-y-4 pb-28">
-        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+        <div className="flex items-end gap-2">
+          <div className="flex-1 min-w-0">
+            <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+          </div>
+          <Button variant="secondary" onClick={() => onNavigate("add-vehicle")} className="shrink-0">
+            <Plus size={16} /> {t("manageVehicles.addNew")}
+          </Button>
+        </div>
 
         {vehicleId && (
           <>

@@ -33,7 +33,8 @@
     "policies": "नीतियां",
     "team": "टीम",
     "audit": "ऑडिट",
-    "manageVehicles": "वाहन प्रबंधन"
+    "manageVehicles": "वाहन प्रबंधन",
+    "vehicles": "वाहन"
   },
   "dashboard": {
     "title": "डैशबोर्ड",
@@ -85,7 +86,14 @@
     "estimatedProfitPreview": "अनुमानित लाभ पूर्वावलोकन",
     "acrossCurrentStockCost": "वर्तमान स्टॉक लागत {{value}} पर",
     "low": "न्यूनतम {{value}}%",
-    "high": "अधिकतम {{value}}%"
+    "high": "अधिकतम {{value}}%",
+    "sellVehicle": "वाहन बेचें",
+    "stockTile": "स्टॉक",
+    "alertsTile": "खुले अलर्ट",
+    "soldBoughtHint": "बिके · {{bought}} खरीदे",
+    "totalProfitHint": "कुल लाभ, अब तक",
+    "alertsVehiclesHint": "{{count}} वाहनों में",
+    "registration": "पंजीकरण"
   },
   "inventory": {
     "title": "इन्वेंटरी",

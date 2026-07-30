@@ -6,6 +6,7 @@ import { Card, EmptyState } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
 import { formatDate } from "@/lib/format";
 import { fetchAllStatusHistory } from "@/lib/queries";
+import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { Vehicle, VehicleStatusHistory } from "@/lib/types";
 
 interface HistoryProps {
@@ -44,7 +45,7 @@ export function History({ vehicleFilter }: HistoryProps) {
     const seen = new Map<string, string>();
     for (const h of history) {
       if (h.vehicle && !seen.has(h.vehicle.id)) {
-        seen.set(h.vehicle.id, `${h.vehicle.stock_number} · ${h.vehicle.manufacturer} ${h.vehicle.model}`);
+        seen.set(h.vehicle.id, vehicleLabel(h.vehicle));
       }
     }
     return Array.from(seen, ([value, label]) => ({ value, label }));
@@ -116,7 +117,7 @@ export function History({ vehicleFilter }: HistoryProps) {
                     <StatusBadge status={h.new_status} />
                     {h.previous_status && <span className="text-xs text-slate-400">{t("historyPage.from", { status: t("status." + h.previous_status, { defaultValue: h.previous_status.replace(/_/g, " ") }) })}</span>}
                     {!vehicleId && h.vehicle && (
-                      <span className="text-xs font-medium text-slate-600">{h.vehicle.stock_number} · {h.vehicle.manufacturer} {h.vehicle.model}</span>
+                      <span className="text-xs font-medium text-slate-600">{vehicleLabel(h.vehicle)}</span>
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">{formatDate(h.changed_at, { withTime: true })}</p>
