@@ -33,8 +33,8 @@
     "policies": "नीतियां",
     "team": "टीम",
     "audit": "ऑडिट",
-    "manageVehicles": "वाहन प्रबंधन",
-    "vehicles": "वाहन",
+    "manageVehicles": "वाहन",
+    "vehicles": "प्रबंधन",
     "vehicle": "वाहन"
   },
   "dashboard": {
@@ -1406,7 +1406,7 @@
     "rowSaved": "सहेजा गया"
   },
   "manageVehicles": {
-    "title": "वाहन प्रबंधन",
+    "title": "प्रबंधन",
     "description": "रिकॉर्ड संपादित करने के लिए वाहन चुनें, या नया जोड़ें।",
     "selectToEdit": "संपादित करने का वाहन",
     "addNew": "नया वाहन",

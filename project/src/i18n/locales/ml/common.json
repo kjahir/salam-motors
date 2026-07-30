@@ -33,8 +33,8 @@
     "policies": "നയങ്ങൾ",
     "team": "ടീം",
     "audit": "ഓഡിറ്റ്",
-    "manageVehicles": "വാഹന നിർവഹണം",
-    "vehicles": "വാഹനങ്ങൾ",
+    "manageVehicles": "വാഹനങ്ങൾ",
+    "vehicles": "നിർവഹണം",
     "vehicle": "വാഹനം"
   },
   "dashboard": {
@@ -1406,7 +1406,7 @@
     "rowSaved": "സേവ് ചെയ്തു"
   },
   "manageVehicles": {
-    "title": "വാഹന നിർവഹണം",
+    "title": "നിർവഹണം",
     "description": "രേഖ എഡിറ്റ് ചെയ്യാൻ വാഹനം തിരഞ്ഞെടുക്കുക, അല്ലെങ്കിൽ പുതിയത് ചേർക്കുക.",
     "selectToEdit": "എഡിറ്റ് ചെയ്യേണ്ട വാഹനം",
     "addNew": "പുതിയ വാഹനം",

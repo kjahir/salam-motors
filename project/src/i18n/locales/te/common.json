@@ -33,8 +33,8 @@
     "policies": "పాలసీలు",
     "team": "టీమ్",
     "audit": "ఆడిట్",
-    "manageVehicles": "వాహన నిర్వహణ",
-    "vehicles": "వాహనాలు",
+    "manageVehicles": "వాహనాలు",
+    "vehicles": "నిర్వహణ",
     "vehicle": "వాహనం"
   },
   "dashboard": {
@@ -1406,7 +1406,7 @@
     "rowSaved": "సేవ్ చేయబడింది"
   },
   "manageVehicles": {
-    "title": "వాహన నిర్వహణ",
+    "title": "నిర్వహణ",
     "description": "రికార్డును సవరించడానికి వాహనాన్ని ఎంచుకోండి, లేదా కొత్తది జోడించండి.",
     "selectToEdit": "సవరించాల్సిన వాహనం",
     "addNew": "కొత్త వాహనం",

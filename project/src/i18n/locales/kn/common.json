@@ -33,8 +33,8 @@
     "policies": "ನೀತಿಗಳು",
     "team": "ತಂಡ",
     "audit": "ಲೆಕ್ಕಪರಿಶೋಧನೆ",
-    "manageVehicles": "ವಾಹನ ನಿರ್ವಹಣೆ",
-    "vehicles": "ವಾಹನಗಳು",
+    "manageVehicles": "ವಾಹನಗಳು",
+    "vehicles": "ನಿರ್ವಹಣೆ",
     "vehicle": "ವಾಹನ"
   },
   "dashboard": {
@@ -1406,7 +1406,7 @@
     "rowSaved": "ಉಳಿಸಲಾಗಿದೆ"
   },
   "manageVehicles": {
-    "title": "ವಾಹನ ನಿರ್ವಹಣೆ",
+    "title": "ನಿರ್ವಹಣೆ",
     "description": "ದಾಖಲೆಯನ್ನು ಸಂಪಾದಿಸಲು ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ, ಅಥವಾ ಹೊಸದನ್ನು ಸೇರಿಸಿ.",
     "selectToEdit": "ಸಂಪಾದಿಸಬೇಕಾದ ವಾಹನ",
     "addNew": "ಹೊಸ ವಾಹನ",
