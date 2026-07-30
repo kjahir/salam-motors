@@ -675,7 +675,11 @@
     "chooseVehicle": "ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
     "noVehicles": "ಯಾವುದೇ ವಾಹನಗಳು ಕಂಡುಬಂದಿಲ್ಲ",
     "openMenu": "ಸೇರಿಸಿ",
-    "closeMenu": "ಮುಚ್ಚಿ"
+    "closeMenu": "ಮುಚ್ಚಿ",
+    "updateVehicle": "ವಾಹನವನ್ನು ನವೀಕರಿಸಿ",
+    "makeSales": "ಮಾರಾಟ ಮಾಡಿ",
+    "viewVehicle": "ವಾಹನವನ್ನು ವೀಕ್ಷಿಸಿ",
+    "selectVehicle": "ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ"
   },
   "mobileVehicle": {
     "vehicle": "ವಾಹನ",
@@ -781,6 +785,21 @@
     "summary": "ಸಾರಾಂಶ (ಐಚ್ಛಿಕ)",
     "summaryPlaceholder": "ಒಟ್ಟಾರೆ ಸ್ಥಿತಿ ಟಿಪ್ಪಣಿಗಳು…"
   },
+  "mobileUpdateVehicle": {
+    "title": "ವಾಹನವನ್ನು ನವೀಕರಿಸಿ",
+    "field": "ಕ್ಷೇತ್ರ",
+    "newValue": "ಹೊಸ ಮೌಲ್ಯ",
+    "selectValue": "ಮೌಲ್ಯವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "addField": "ಇನ್ನೊಂದು ಕ್ಷೇತ್ರವನ್ನು ಸೇರಿಸಿ",
+    "save": "ನವೀಕರಣಗಳನ್ನು ಉಳಿಸಿ",
+    "needsValue": "ಕನಿಷ್ಠ ಒಂದು ಕ್ಷೇತ್ರಕ್ಕೆ ಮೌಲ್ಯವನ್ನು ನಮೂದಿಸಿ",
+    "updated": "ವಾಹನ ನವೀಕರಿಸಲಾಗಿದೆ",
+    "saveFailed": "ವಾಹನವನ್ನು ನವೀಕರಿಸಲು ವಿಫಲವಾಗಿದೆ",
+    "currentLocation": "ಪ್ರಸ್ತುತ ಸ್ಥಳ"
+  },
+  "mobileViewVehicle": {
+    "title": "ವಾಹನವನ್ನು ವೀಕ್ಷಿಸಿ"
+  },
   "mobileDocuments": {
     "prepFailed": "ದಾಖಲೆ ಪಟ್ಟಿ ಸಿದ್ಧಪಡಿಸಲು ವಿಫಲವಾಗಿದೆ",
     "saveFailed": "ದಾಖಲೆ ಉಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
@@ -793,7 +812,13 @@
     "addAnother": "ಮತ್ತೊಂದು ದಾಖಲೆ ಸೇರಿಸಿ",
     "addDocument": "ದಾಖಲೆ ಸೇರಿಸಿ",
     "documentType": "ದಾಖಲೆ ಪ್ರಕಾರ",
-    "added": "ದಾಖಲೆ ಸೇರಿಸಲಾಗಿದೆ"
+    "added": "ದಾಖಲೆ ಸೇರಿಸಲಾಗಿದೆ",
+    "addDocuments": "ದಾಖಲೆ ಸೇರಿಸಿ",
+    "addRow": "ಮತ್ತೊಂದು ದಾಖಲೆ ಸೇರಿಸಿ",
+    "saveCount_one": "{{count}} ದಾಖಲೆ ಉಳಿಸಿ",
+    "saveCount_other": "{{count}} ದಾಖಲೆಗಳನ್ನು ಉಳಿಸಿ",
+    "addedCount_one": "{{count}} ದಾಖಲೆ ಸೇರಿಸಲಾಗಿದೆ",
+    "addedCount_other": "{{count}} ದಾಖಲೆಗಳನ್ನು ಸೇರಿಸಲಾಗಿದೆ"
   },
   "deleteVehicle": {
     "title": "{{stock}} ಅಳಿಸಿ",

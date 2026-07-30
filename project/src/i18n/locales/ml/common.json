@@ -675,7 +675,11 @@
     "chooseVehicle": "ഒരു വാഹനം തിരഞ്ഞെടുക്കുക",
     "noVehicles": "വാഹനങ്ങളൊന്നും കണ്ടെത്തിയില്ല",
     "openMenu": "ചേർക്കുക",
-    "closeMenu": "അടയ്ക്കുക"
+    "closeMenu": "അടയ്ക്കുക",
+    "updateVehicle": "വാഹനം അപ്ഡേറ്റ് ചെയ്യുക",
+    "makeSales": "വിൽപ്പന നടത്തുക",
+    "viewVehicle": "വാഹനം കാണുക",
+    "selectVehicle": "വാഹനം തിരഞ്ഞെടുക്കുക"
   },
   "mobileVehicle": {
     "vehicle": "വാഹനം",
@@ -781,6 +785,21 @@
     "summary": "സംഗ്രഹം (ഓപ്ഷണൽ)",
     "summaryPlaceholder": "മൊത്തത്തിലുള്ള അവസ്ഥാ കുറിപ്പുകൾ…"
   },
+  "mobileUpdateVehicle": {
+    "title": "വാഹനം അപ്ഡേറ്റ് ചെയ്യുക",
+    "field": "ഫീൽഡ്",
+    "newValue": "പുതിയ മൂല്യം",
+    "selectValue": "മൂല്യം തിരഞ്ഞെടുക്കുക",
+    "addField": "മറ്റൊരു ഫീൽഡ് ചേർക്കുക",
+    "save": "അപ്ഡേറ്റുകൾ സേവ് ചെയ്യുക",
+    "needsValue": "കുറഞ്ഞത് ഒരു ഫീൽഡിനെങ്കിലും മൂല്യം നൽകുക",
+    "updated": "വാഹനം അപ്ഡേറ്റ് ചെയ്തു",
+    "saveFailed": "വാഹനം അപ്ഡേറ്റ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു",
+    "currentLocation": "നിലവിലെ സ്ഥലം"
+  },
+  "mobileViewVehicle": {
+    "title": "വാഹനം കാണുക"
+  },
   "mobileDocuments": {
     "prepFailed": "രേഖ ചെക്ക്‌ലിസ്റ്റ് തയ്യാറാക്കുന്നതിൽ പരാജയപ്പെട്ടു",
     "saveFailed": "രേഖ സേവ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു",
@@ -793,7 +812,13 @@
     "addAnother": "മറ്റൊരു രേഖ ചേർക്കുക",
     "addDocument": "രേഖ ചേർക്കുക",
     "documentType": "രേഖയുടെ തരം",
-    "added": "രേഖ ചേർത്തു"
+    "added": "രേഖ ചേർത്തു",
+    "addDocuments": "രേഖ ചേർക്കുക",
+    "addRow": "മറ്റൊരു രേഖ ചേർക്കുക",
+    "saveCount_one": "{{count}} രേഖ സേവ് ചെയ്യുക",
+    "saveCount_other": "{{count}} രേഖകൾ സേവ് ചെയ്യുക",
+    "addedCount_one": "{{count}} രേഖ ചേർത്തു",
+    "addedCount_other": "{{count}} രേഖകൾ ചേർത്തു"
   },
   "deleteVehicle": {
     "title": "{{stock}} ഇല്ലാതാക്കുക",

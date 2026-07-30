@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { Check, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { TopBar, Card, Field, Select, Button } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
-import { FileUploadGrid } from "./ui/FileUploadGrid";
+import { Check, Plus, Trash2 } from "lucide-react";
+import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
+import { Card } from "@/components/ui/Card";
+import { VehicleSelectField } from "@/components/VehicleSelectField";
+import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import type { UploadedFile } from "@/lib/uploadedFile";
-import type { MobileNavigate } from "./MobileApp";
+import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface DocumentDraftRow {
   key: string;
@@ -19,16 +20,13 @@ interface DocumentDraftRow {
 
 const emptyDocRow = (): DocumentDraftRow => ({ key: crypto.randomUUID(), docType: DOCUMENT_TYPES[0], files: [] });
 
-// Full-screen batch document entry — vehicle picked via the dropdown at the top (no
-// pre-navigation picker Sheet), then repeatable rows (type + upload) with one bulk
-// insert, matching the same shape as MobileAddExpense.tsx.
-export function MobileAddDocument({ vehicleId: initialVehicleId, onNavigate, onBack }: {
-  vehicleId?: string;
-  onNavigate: MobileNavigate;
-  onBack: () => void;
-}) {
+// Desktop counterpart to src/mobile/MobileAddDocument.tsx: pick a vehicle, then
+// repeatable rows (type + upload), one bulk insert — deliberately kept to just
+// type + file, unlike VehicleDetail.tsx's DocumentsTab panel which also captures
+// document number/dates/issuer/notes for a single document at a time.
+export function QuickAddDocument({ onNavigate }: { onNavigate: (page: PageKey, params?: NavigateParams) => void }) {
   const { t } = useTranslation();
-  const [vehicleId, setVehicleId] = useState(initialVehicleId ?? "");
+  const [vehicleId, setVehicleId] = useState("");
   const [rows, setRows] = useState<DocumentDraftRow[]>([emptyDocRow()]);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
@@ -72,26 +70,30 @@ export function MobileAddDocument({ vehicleId: initialVehicleId, onNavigate, onB
   };
 
   return (
-    <div>
-      <TopBar title={t("mobileDocuments.addDocuments")} onBack={onBack} />
-      <div className="p-4 space-y-4 pb-28">
-        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+    <div className="p-6 max-w-3xl mx-auto space-y-5">
+      <PageHeader title={t("mobileDocuments.addDocuments")} />
 
-        {vehicleId && (
+      <Card className="p-6">
+        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+      </Card>
+
+      {vehicleId && (
+        <>
           <div className="space-y-3">
-            {rows.map((row, idx) => (
-              <Card key={row.key} className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-mobile-text-muted uppercase">#{idx + 1}</p>
+            {rows.map((row) => (
+              <Card key={row.key} className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-full max-w-xs">
+                    <Field label={t("mobileDocuments.documentType")} required>
+                      <Select value={row.docType} onChange={(v) => updateRow(row.key, { docType: v })} options={DOCUMENT_TYPES} />
+                    </Field>
+                  </div>
                   {rows.length > 1 && (
-                    <button onClick={() => removeRow(row.key)} className="text-mobile-text-muted active:text-mobile-error p-1">
-                      <Trash2 size={14} />
+                    <button onClick={() => removeRow(row.key)} className="btn-ghost btn-sm text-red-500 hover:text-red-700" title="Remove">
+                      <Trash2 size={16} />
                     </button>
                   )}
                 </div>
-                <Field label={t("mobileDocuments.documentType")} required>
-                  <Select value={row.docType} onChange={(v) => updateRow(row.key, { docType: v })} options={DOCUMENT_TYPES} />
-                </Field>
                 <FileUploadGrid
                   bucket="vehicle-documents"
                   pathPrefix={`${vehicleId}/${row.key}`}
@@ -102,23 +104,15 @@ export function MobileAddDocument({ vehicleId: initialVehicleId, onNavigate, onB
               </Card>
             ))}
           </div>
-        )}
 
-        {vehicleId && (
-          <button
-            onClick={addRow}
-            className="flex items-center justify-center gap-1.5 w-full rounded-2xl border border-dashed border-mobile-border py-3 text-sm font-medium text-mobile-primary active:bg-mobile-bg"
-          >
-            <Plus size={16} /> {t("mobileDocuments.addRow")}
-          </button>
-        )}
-
-        {vehicleId && (
-          <Button className="w-full" onClick={handleSubmit} loading={submitting} disabled={!isValid}>
-            <Check size={16} /> {t("mobileDocuments.saveCount", { count: rows.length })}
-          </Button>
-        )}
-      </div>
+          <div className="flex items-center justify-between">
+            <button onClick={addRow} className="btn-secondary btn-sm"><Plus size={14} /> {t("mobileDocuments.addRow")}</button>
+            <button onClick={handleSubmit} disabled={submitting || !isValid} className="btn-primary">
+              {submitting ? <Spinner size={14} /> : <Check size={16} />} {t("mobileDocuments.saveCount", { count: rows.length })}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

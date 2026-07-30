@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, Plus, Receipt, FileText, ClipboardCheck, ShoppingCart } from "lucide-react";
+import { LayoutDashboard, Bike, FileBarChart, Plus, Receipt, FileText, ClipboardCheck, ShoppingCart, Pencil, Eye } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
@@ -11,11 +11,10 @@ import { MobileAddExpense } from "./MobileAddExpense";
 import { MobileAddDocument } from "./MobileAddDocument";
 import { MobileAddInspection } from "./MobileAddInspection";
 import { MobileAddSale } from "./MobileAddSale";
-import { Sheet, Spinner } from "./ui/primitives";
+import { MobileUpdateVehicle } from "./MobileUpdateVehicle";
+import { MobileViewVehicle } from "./MobileViewVehicle";
 import { usePermissions } from "@/lib/usePermissions";
 import { useAssistant } from "@/assistant/AssistantProvider";
-import { fetchVehicles } from "@/lib/queries";
-import type { Vehicle } from "@/lib/types";
 
 export type MobileScreen =
   | "dashboard"
@@ -24,10 +23,12 @@ export type MobileScreen =
   | "add-vehicle"
   | "edit-vehicle"
   | "reports"
+  | "update-vehicle"
   | "add-expense"
   | "add-document"
   | "add-inspection"
-  | "add-sale";
+  | "add-sale"
+  | "view-vehicle";
 
 export interface MobileNavigateParams {
   vehicleId?: string;
@@ -36,14 +37,17 @@ export interface MobileNavigateParams {
   highlightPolicyId?: string;
 }
 
-// The 4 non-Vehicle add targets reachable from the mobile "+" icon row, each landing on
-// its own full-screen page (matching AddVehicle.tsx's one-page pattern) rather than a
-// nested sheet inside the vehicle detail tabs.
+// The 6 non-"Add Vehicle" targets reachable from the mobile "+" icon row, each landing on
+// its own full-screen page with a vehicle-select dropdown at the top (rather than a
+// pre-navigation picker Sheet) — so every one of these pages is directly reachable
+// whether or not a vehicle was already in context.
 const ADD_TARGETS: { key: string; screen: MobileScreen; labelKey: string; icon: typeof Receipt }[] = [
+  { key: "update", screen: "update-vehicle", labelKey: "mobileAdd.updateVehicle", icon: Pencil },
   { key: "expenses", screen: "add-expense", labelKey: "vehicleDetail.expenses", icon: Receipt },
   { key: "documents", screen: "add-document", labelKey: "vehicleDetail.documents", icon: FileText },
   { key: "inspection", screen: "add-inspection", labelKey: "vehicleDetail.inspection", icon: ClipboardCheck },
-  { key: "sale", screen: "add-sale", labelKey: "vehicleDetail.saleProfit", icon: ShoppingCart },
+  { key: "sale", screen: "add-sale", labelKey: "mobileAdd.makeSales", icon: ShoppingCart },
+  { key: "view", screen: "view-vehicle", labelKey: "mobileAdd.viewVehicle", icon: Eye },
 ];
 
 export interface MobileNavigate {
@@ -79,9 +83,6 @@ export function MobileApp() {
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
   const [highlightPolicyId, setHighlightPolicyId] = useState<string | undefined>(undefined);
   const [addRowOpen, setAddRowOpen] = useState(false);
-  const [addTarget, setAddTarget] = useState<string | null>(null);
-  const [pickerVehicles, setPickerVehicles] = useState<Vehicle[] | null>(null);
-  const [loadingPicker, setLoadingPicker] = useState(false);
 
   const navigate = useCallback<MobileNavigate>((next, params) => {
     if (params?.vehicleId) {
@@ -135,45 +136,23 @@ export function MobileApp() {
   };
 
   // The raised "+" button is global (not vehicle-scoped): tapping it reveals a horizontal
-  // row of all 5 add targets, just above the bottom nav. "Vehicle" goes straight to Add
-  // Vehicle. For the other 4, if we're already inside a specific vehicle's page we jump
-  // straight to that vehicle's full-screen add page; otherwise a lightweight vehicle-picker
-  // sheet lets the dealer pick which vehicle first (that picker is a quick utility
-  // selection, not the "add" experience itself, so a small popup is fine there).
+  // row of all 7 targets, just above the bottom nav. "Vehicle" goes straight to Add
+  // Vehicle. Every other target lands on its own full-screen page that owns its own
+  // vehicle-select dropdown, so if we're already inside a specific vehicle's page we
+  // just pass that vehicleId along as a convenience preselect; otherwise the page opens
+  // with nothing selected and the dealer picks a vehicle right there.
   const handlePickAddVehicle = () => {
     setAddRowOpen(false);
     navigate("add-vehicle");
   };
 
-  const handlePickAddTarget = (key: string, targetScreen: MobileScreen) => {
+  const handlePickAddTarget = (targetScreen: MobileScreen) => {
     setAddRowOpen(false);
-    if (screen === "vehicle" && vehicleId) {
-      navigate(targetScreen, { vehicleId });
-      return;
-    }
-    setAddTarget(key);
-    setPickerVehicles(null);
-    setLoadingPicker(true);
-    fetchVehicles()
-      .then(setPickerVehicles)
-      .catch(() => setPickerVehicles([]))
-      .finally(() => setLoadingPicker(false));
+    navigate(targetScreen, screen === "vehicle" && vehicleId ? { vehicleId } : undefined);
   };
 
-  const handlePickVehicleForTarget = (v: Vehicle) => {
-    if (!addTarget) return;
-    const target = ADD_TARGETS.find((t) => t.key === addTarget);
-    setAddTarget(null);
-    setPickerVehicles(null);
-    if (target) navigate(target.screen, { vehicleId: v.id });
-  };
-
-  const closeVehiclePicker = () => {
-    setAddTarget(null);
-    setPickerVehicles(null);
-  };
-
-  const backToVehicleTab = (tab: string) => () => navigate("vehicle", { vehicleId: vehicleId ?? undefined, tab });
+  const genericBack = (tab: string) => () =>
+    vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("inventory");
 
   const renderScreen = () => {
     switch (screen) {
@@ -203,30 +182,18 @@ export function MobileApp() {
         );
       case "reports":
         return <MobileReports />;
+      case "update-vehicle":
+        return <MobileUpdateVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("overview")} />;
       case "add-expense":
-        return vehicleId ? (
-          <MobileAddExpense vehicleId={vehicleId} onNavigate={navigate} onBack={backToVehicleTab("expenses")} />
-        ) : (
-          <MobileInventory onNavigate={navigate} />
-        );
+        return <MobileAddExpense vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("expenses")} />;
       case "add-document":
-        return vehicleId ? (
-          <MobileAddDocument vehicleId={vehicleId} onNavigate={navigate} onBack={backToVehicleTab("documents")} />
-        ) : (
-          <MobileInventory onNavigate={navigate} />
-        );
+        return <MobileAddDocument vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("documents")} />;
       case "add-inspection":
-        return vehicleId ? (
-          <MobileAddInspection vehicleId={vehicleId} onNavigate={navigate} onBack={backToVehicleTab("inspection")} />
-        ) : (
-          <MobileInventory onNavigate={navigate} />
-        );
+        return <MobileAddInspection vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("inspection")} />;
       case "add-sale":
-        return vehicleId ? (
-          <MobileAddSale vehicleId={vehicleId} onNavigate={navigate} onBack={backToVehicleTab("sale")} />
-        ) : (
-          <MobileInventory onNavigate={navigate} />
-        );
+        return <MobileAddSale vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("sale")} />;
+      case "view-vehicle":
+        return <MobileViewVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={() => navigate("inventory")} />;
       default:
         return <MobileDashboard onNavigate={navigate} />;
     }
@@ -254,7 +221,7 @@ export function MobileApp() {
         <div className="fixed bottom-0 left-0 right-0 z-30">
           {addRowOpen && canAddVehicle && (
             <div className="mx-auto max-w-md w-full bg-mobile-card border-t border-x border-mobile-border rounded-t-2xl shadow-mobile-lg px-2 pt-3 pb-2 animate-slide-up">
-              <div className="grid grid-cols-5 gap-1">
+              <div className="grid grid-cols-4 gap-1">
                 <button
                   onClick={handlePickAddVehicle}
                   className="flex flex-col items-center gap-1 py-1 active:opacity-70"
@@ -265,7 +232,7 @@ export function MobileApp() {
                 {ADD_TARGETS.map(({ key, screen: targetScreen, labelKey, icon: Icon }) => (
                   <button
                     key={key}
-                    onClick={() => handlePickAddTarget(key, targetScreen)}
+                    onClick={() => handlePickAddTarget(targetScreen)}
                     className="flex flex-col items-center gap-1 py-1 active:opacity-70"
                   >
                     <span className="flex h-11 w-11 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary"><Icon size={20} /></span>
@@ -315,30 +282,6 @@ export function MobileApp() {
           </nav>
         </div>
       )}
-
-      <Sheet open={addTarget !== null} onClose={closeVehiclePicker} title={t("mobileAdd.chooseVehicle")}>
-        {loadingPicker ? (
-          <div className="flex items-center justify-center py-10"><Spinner size={24} /></div>
-        ) : (
-          <div className="space-y-2">
-            {(pickerVehicles ?? []).map((v) => (
-              <button
-                key={v.id}
-                onClick={() => handlePickVehicleForTarget(v)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-mobile-border bg-white px-3.5 py-3 text-left active:bg-mobile-bg"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-mobile-text truncate">{v.manufacturer} {v.model}</p>
-                  <p className="text-xs text-mobile-text-muted font-mono">{v.stock_number}</p>
-                </div>
-              </button>
-            ))}
-            {!loadingPicker && (pickerVehicles ?? []).length === 0 && (
-              <p className="text-sm text-mobile-text-muted text-center py-6">{t("mobileAdd.noVehicles")}</p>
-            )}
-          </div>
-        )}
-      </Sheet>
     </div>
   );
 }

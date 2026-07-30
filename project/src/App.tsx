@@ -11,6 +11,12 @@ import { CreateOrganization } from "@/pages/CreateOrganization";
 import { Dashboard } from "@/pages/Dashboard";
 import { Inventory } from "@/pages/Inventory";
 import { AddVehicle } from "@/pages/AddVehicle";
+import { UpdateVehicle } from "@/pages/UpdateVehicle";
+import { QuickAddExpense } from "@/pages/QuickAddExpense";
+import { QuickAddDocument } from "@/pages/QuickAddDocument";
+import { QuickAddInspection } from "@/pages/QuickAddInspection";
+import { QuickMakeSale } from "@/pages/QuickMakeSale";
+import { QuickViewVehicle } from "@/pages/QuickViewVehicle";
 import { VehicleDetail } from "@/pages/VehicleDetail";
 import { Passport } from "@/pages/Passport";
 import { Partners } from "@/pages/Partners";
@@ -31,6 +37,12 @@ const PAGE_KEYS: ReadonlySet<PageKey> = new Set([
   "dashboard",
   "inventory",
   "add-vehicle",
+  "update-vehicle",
+  "quick-add-expense",
+  "quick-add-document",
+  "quick-add-inspection",
+  "quick-add-sale",
+  "view-vehicle",
   "vehicle",
   "parties",
   "partners",
@@ -131,6 +143,18 @@ function AppContent() {
         return <Inventory onNavigate={handleNavigate} />;
       case "add-vehicle":
         return <AddVehicle onNavigate={handleNavigate} />;
+      case "update-vehicle":
+        return <UpdateVehicle onNavigate={handleNavigate} />;
+      case "quick-add-expense":
+        return <QuickAddExpense onNavigate={handleNavigate} />;
+      case "quick-add-document":
+        return <QuickAddDocument onNavigate={handleNavigate} />;
+      case "quick-add-inspection":
+        return <QuickAddInspection onNavigate={handleNavigate} />;
+      case "quick-add-sale":
+        return <QuickMakeSale onNavigate={handleNavigate} />;
+      case "view-vehicle":
+        return <QuickViewVehicle onNavigate={handleNavigate} />;
       case "vehicle":
         return vehicleId ? (
           <VehicleDetail

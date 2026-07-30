@@ -675,7 +675,11 @@
     "chooseVehicle": "एक वाहन चुनें",
     "noVehicles": "कोई वाहन नहीं मिला",
     "openMenu": "जोड़ें",
-    "closeMenu": "बंद करें"
+    "closeMenu": "बंद करें",
+    "updateVehicle": "वाहन अपडेट करें",
+    "makeSales": "बिक्री करें",
+    "viewVehicle": "वाहन देखें",
+    "selectVehicle": "वाहन चुनें"
   },
   "mobileVehicle": {
     "vehicle": "वाहन",
@@ -781,6 +785,21 @@
     "summary": "सारांश (वैकल्पिक)",
     "summaryPlaceholder": "समग्र स्थिति नोट्स…"
   },
+  "mobileUpdateVehicle": {
+    "title": "वाहन अपडेट करें",
+    "field": "फ़ील्ड",
+    "newValue": "नया मान",
+    "selectValue": "मान चुनें",
+    "addField": "एक और फ़ील्ड जोड़ें",
+    "save": "अपडेट सहेजें",
+    "needsValue": "कम से कम एक फ़ील्ड के लिए मान दर्ज करें",
+    "updated": "वाहन अपडेट हो गया",
+    "saveFailed": "वाहन अपडेट करने में विफल",
+    "currentLocation": "वर्तमान स्थान"
+  },
+  "mobileViewVehicle": {
+    "title": "वाहन देखें"
+  },
   "mobileDocuments": {
     "prepFailed": "दस्तावेज़ चेकलिस्ट तैयार करने में विफल",
     "saveFailed": "दस्तावेज़ सेव करने में विफल",
@@ -793,7 +812,13 @@
     "addAnother": "एक और दस्तावेज़ जोड़ें",
     "addDocument": "दस्तावेज़ जोड़ें",
     "documentType": "दस्तावेज़ प्रकार",
-    "added": "दस्तावेज़ जोड़ा गया"
+    "added": "दस्तावेज़ जोड़ा गया",
+    "addDocuments": "दस्तावेज़ जोड़ें",
+    "addRow": "एक और दस्तावेज़ जोड़ें",
+    "saveCount_one": "{{count}} दस्तावेज़ सहेजें",
+    "saveCount_other": "{{count}} दस्तावेज़ सहेजें",
+    "addedCount_one": "{{count}} दस्तावेज़ जोड़ा गया",
+    "addedCount_other": "{{count}} दस्तावेज़ जोड़े गए"
   },
   "deleteVehicle": {
     "title": "{{stock}} हटाएं",

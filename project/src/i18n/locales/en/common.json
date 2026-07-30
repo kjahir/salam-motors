@@ -675,7 +675,11 @@
     "chooseVehicle": "Choose a vehicle",
     "noVehicles": "No vehicles found",
     "openMenu": "Add",
-    "closeMenu": "Close"
+    "closeMenu": "Close",
+    "updateVehicle": "Update Vehicle",
+    "makeSales": "Make Sales",
+    "viewVehicle": "View Vehicle",
+    "selectVehicle": "Select Vehicle"
   },
   "mobileVehicle": {
     "vehicle": "Vehicle",
@@ -781,6 +785,21 @@
     "summary": "Summary (optional)",
     "summaryPlaceholder": "Overall condition notes…"
   },
+  "mobileUpdateVehicle": {
+    "title": "Update Vehicle",
+    "field": "Field",
+    "newValue": "New Value",
+    "selectValue": "Select value",
+    "addField": "Add Another Field",
+    "save": "Save Updates",
+    "needsValue": "Enter a value for at least one field",
+    "updated": "Vehicle updated",
+    "saveFailed": "Failed to update vehicle",
+    "currentLocation": "Current Location"
+  },
+  "mobileViewVehicle": {
+    "title": "View Vehicle"
+  },
   "mobileDocuments": {
     "prepFailed": "Failed to prepare document checklist",
     "saveFailed": "Failed to save document",
@@ -793,7 +812,13 @@
     "addAnother": "Add another document",
     "addDocument": "Add Document",
     "documentType": "Document Type",
-    "added": "Document added"
+    "added": "Document added",
+    "addDocuments": "Add Documents",
+    "addRow": "Add Another Document",
+    "saveCount_one": "Save {{count}} Document",
+    "saveCount_other": "Save {{count}} Documents",
+    "addedCount_one": "{{count}} document added",
+    "addedCount_other": "{{count}} documents added"
   },
   "deleteVehicle": {
     "title": "Delete {{stock}}",
