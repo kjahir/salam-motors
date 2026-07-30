@@ -73,9 +73,11 @@ interface MobileVehicleFormProps {
   vehicleId?: string;
   onNavigate: MobileNavigate;
   onBack: () => void;
+  /** Rendered under the picker on MobileUpdateVehicle, which owns the screen heading. */
+  embedded?: boolean;
 }
 
-export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: MobileVehicleFormProps) {
+export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedded }: MobileVehicleFormProps) {
   const { t } = useTranslation();
   const [form, setForm] = useState<CoreForm>(initialCore);
   const [sellerPartyId, setSellerPartyId] = useState("");
@@ -104,8 +106,20 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
     if (mode !== "edit" || !vehicleId) return;
     let cancelled = false;
     (async () => {
-      const full = await fetchVehicleFull(vehicleId);
-      if (cancelled || !full) return;
+      // loading has to clear on every path: this form is now reached by picking any
+      // vehicle from a dropdown, so a failed or empty fetch used to strand the screen
+      // on a spinner with no way back.
+      let full: Awaited<ReturnType<typeof fetchVehicleFull>> = null;
+      try {
+        full = await fetchVehicleFull(vehicleId);
+      } catch (e) {
+        if (!cancelled) toast(e instanceof Error ? e.message : t("vehicleDetail.failedToLoad"), "error");
+      }
+      if (cancelled) return;
+      if (!full) {
+        setLoading(false);
+        return;
+      }
       setVehicle(full);
       setForm({
         registration_number: full.registration_number ?? "",
@@ -145,6 +159,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, vehicleId]);
 
   useEffect(() => {
@@ -316,7 +331,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
   if (loading) {
     return (
       <div>
-        <TopBar title={mode === "create" ? t("vehicleForm.onboardTitle") : t("vehicleForm.editVehicle")} onBack={onBack} />
+        {!embedded && <TopBar title={mode === "create" ? t("vehicleForm.onboardTitle") : t("vehicleForm.editVehicle")} onBack={onBack} />}
         <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
       </div>
     );
@@ -324,7 +339,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack }: Mobil
 
   return (
     <div>
-      <TopBar title={mode === "create" ? t("vehicleForm.onboardTitle") : t("vehicleForm.editTitle", { stock: vehicle?.stock_number ?? "" })} onBack={onBack} />
+      {!embedded && <TopBar title={mode === "create" ? t("vehicleForm.onboardTitle") : t("vehicleForm.editTitle", { stock: vehicle?.stock_number ?? "" })} onBack={onBack} />}
       <div className="p-4 space-y-4 pb-28">
         <Card className="p-4 space-y-4">
           <Field label={t("vehicleForm.category")} required>

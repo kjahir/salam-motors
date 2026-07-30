@@ -663,7 +663,12 @@
     "needsAttention": "Needs Attention",
     "allClear": "All clear",
     "noOpenAlerts": "No open alerts right now.",
-    "daysInStock": "{{days}}d in stock"
+    "daysInStock": "{{days}}d in stock",
+    "askingValue": "Asking Value",
+    "paidToPartners": "Total Paid to Partners",
+    "readyForSale": "Ready for Sale",
+    "totalSold": "Total Sold",
+    "underRepair": "Under Repair"
   },
   "mobileInventory": {
     "title": "Inventory",

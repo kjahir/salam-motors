@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, TrendingUp, ShoppingCart, Bike, ArrowUpDown } from "lucide-react";
+import { Search, TrendingUp, ShoppingCart, Bike, ArrowUpDown, Wallet, Receipt, Users } from "lucide-react";
 import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs, Button } from "./ui/primitives";
 import { formatINR, formatDate, daysSince } from "@/lib/format";
 import {
@@ -26,7 +26,7 @@ import type {
   Partner,
 } from "@/lib/types";
 
-type ReportTab = "purchases" | "inventory" | "sales";
+type ReportTab = "investments" | "purchases" | "expenses" | "inventory" | "sales" | "settlements";
 type SortDir = "desc" | "asc";
 
 const PAGE_SIZE = 10;
@@ -37,9 +37,9 @@ export function MobileReports() {
   const [sales, setSales] = useState<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
+  const [investments, setInvestments] = useState<(Investment & { vehicle?: Vehicle | null; partner?: Partner | null })[]>([]);
+  const [expenses, setExpenses] = useState<(Expense & { vehicle?: Vehicle | null; partner?: Partner | null })[]>([]);
+  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null; vehicle?: Vehicle | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRangeKey>("all");
@@ -77,20 +77,6 @@ export function MobileReports() {
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
 
-  const totals = useMemo(() => {
-    const totalInvested = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
-      .reduce((s, i) => s + i.amount, 0);
-    const totalExpenses = expenses.filter((e) => e.approval_status === "Approved").reduce((s, e) => s + e.amount, 0);
-    const totalPurchases = purchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
-    const totalPurchaseAndExpenses = totalPurchases + totalExpenses;
-    const completedSales = sales.filter((s) => s.status === "Completed");
-    const totalSales = completedSales.reduce((s, sale) => s + sale.sale_price, 0);
-    const totalProfit = distributions.reduce((s, d) => s + d.profit_share, 0);
-    const totalPayable = distributions.reduce((s, d) => s + d.balance_payable, 0);
-    return { totalInvested, totalExpenses, totalPurchases, totalPurchaseAndExpenses, totalSales, totalProfit, totalPayable };
-  }, [investments, expenses, purchases, sales, distributions]);
-
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (v: Vehicle | null | undefined) =>
@@ -106,6 +92,24 @@ export function MobileReports() {
   const saleRows = useMemo(
     () => sales.filter((s) => isWithinDateRange(s.sale_date, dateRange) && matches(s.vehicle)).sort((a, b) => dirFactor * (+new Date(a.sale_date) - +new Date(b.sale_date))),
     [sales, dateRange, matches, dirFactor],
+  );
+  const investmentRows = useMemo(
+    () =>
+      investments
+        .filter((i) => isWithinDateRange(i.investment_date, dateRange) && matches(i.vehicle))
+        .sort((a, b) => dirFactor * (+new Date(a.investment_date) - +new Date(b.investment_date))),
+    [investments, dateRange, matches, dirFactor],
+  );
+  const expenseRows = useMemo(
+    () =>
+      expenses
+        .filter((e) => isWithinDateRange(e.expense_date, dateRange) && matches(e.vehicle))
+        .sort((a, b) => dirFactor * (+new Date(a.expense_date) - +new Date(b.expense_date))),
+    [expenses, dateRange, matches, dirFactor],
+  );
+  const settlementRows = useMemo(
+    () => distributions.filter((d) => matches(d.vehicle)),
+    [distributions, matches],
   );
   const inventoryRows = useMemo(
     () =>
@@ -127,16 +131,6 @@ export function MobileReports() {
   return (
     <div>
       <TopBar title={t("mobileReports.title")} />
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <StatTile label={t("financePage.totalInvested")} value={formatINR(totals.totalInvested)} />
-        <StatTile
-          label={t("mobileReports.purchaseExpenses")}
-          value={formatINR(totals.totalPurchaseAndExpenses)}
-          sub={t("financePage.purchasesExpensesShort", { purchases: formatINR(totals.totalPurchases), expenses: formatINR(totals.totalExpenses) })}
-        />
-        <StatTile label={t("mobileReports.salesProfit")} value={formatINR(totals.totalSales)} sub={t("financePage.profitHint", { profit: formatINR(totals.totalProfit) })} />
-        <StatTile label={t("financePage.payableToPartners")} value={formatINR(totals.totalPayable)} />
-      </div>
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
@@ -144,9 +138,12 @@ export function MobileReports() {
         </div>
         <SegmentedTabs
           tabs={[
-            { key: "purchases", label: t("mobileReports.tabs.purchases") },
             { key: "inventory", label: t("mobileReports.tabs.inventory") },
+            { key: "investments", label: t("financePage.tabs.investments") },
+            { key: "purchases", label: t("mobileReports.tabs.purchases") },
+            { key: "expenses", label: t("financePage.tabs.expenses") },
             { key: "sales", label: t("mobileReports.tabs.sales") },
+            { key: "settlements", label: t("financePage.tabs.settlements") },
           ]}
           active={tab}
           onChange={(k) => setTab(k as ReportTab)}
@@ -270,6 +267,105 @@ export function MobileReports() {
             )}
           </>
         )}
+        {tab === "investments" && (
+          <>
+            <ListSection
+              empty={{ icon: <Wallet size={20} />, title: t("financePage.empty.investments") }}
+              rows={investmentRows.slice(0, limit)}
+              total={investmentRows.length}
+              limit={limit}
+              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+              render={(i) => (
+                <Card key={i.id} className="p-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-mobile-text truncate">{i.partner?.name ?? "—"}</p>
+                      <p className="text-xs text-mobile-text-muted truncate">
+                        {i.vehicle ? vehicleRef(i.vehicle) : t("financePage.generalCapital")} · {formatDate(i.investment_date)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-mobile-text shrink-0">{formatINR(i.amount)}</span>
+                  </div>
+                </Card>
+              )}
+            />
+            {investmentRows.length > 0 && (
+              <TotalFooter
+                label={t("mobileReports.totalWithCount", { count: investmentRows.length })}
+                value={formatINR(investmentRows.reduce((sum, i) => sum + i.amount, 0))}
+              />
+            )}
+          </>
+        )}
+        {tab === "expenses" && (
+          <>
+            <ListSection
+              empty={{ icon: <Receipt size={20} />, title: t("financePage.empty.expenses") }}
+              rows={expenseRows.slice(0, limit)}
+              total={expenseRows.length}
+              limit={limit}
+              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+              render={(e) => (
+                <Card key={e.id} className="p-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-mobile-text truncate">{e.category}</p>
+                      <p className="text-xs text-mobile-text-muted truncate">
+                        {vehicleRef(e.vehicle)} · {formatDate(e.expense_date)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-mobile-text">{formatINR(e.amount)}</p>
+                      <p className="text-xs text-mobile-text-muted">{e.partner?.name ?? t("financePage.business")}</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            />
+            {expenseRows.length > 0 && (
+              <TotalFooter
+                label={t("mobileReports.totalWithCount", { count: expenseRows.length })}
+                value={formatINR(expenseRows.reduce((sum, e) => sum + e.amount, 0))}
+              />
+            )}
+          </>
+        )}
+        {tab === "settlements" && (
+          <>
+            <ListSection
+              empty={{ icon: <Users size={20} />, title: t("financePage.empty.settlements") }}
+              rows={settlementRows.slice(0, limit)}
+              total={settlementRows.length}
+              limit={limit}
+              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+              render={(d) => (
+                <Card key={d.id} className="p-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-mobile-text truncate">{d.partner?.name ?? "—"}</p>
+                      <p className="text-xs text-mobile-text-muted truncate">
+                        {d.vehicle ? vehicleRef(d.vehicle) : "—"} · {t("financePage.columns.profit")} {formatINR(d.profit_share)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-mobile-text">{formatINR(d.total_entitlement)}</p>
+                      <p className={`text-xs font-medium ${d.balance_payable > 0 ? "text-mobile-warning" : "text-mobile-success"}`}>
+                        {formatINR(d.balance_payable)}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            />
+            {settlementRows.length > 0 && (
+              <TotalFooter
+                label={t("mobileReports.totalWithCount", { count: settlementRows.length })}
+                value={formatINR(settlementRows.reduce((sum, d) => sum + d.total_entitlement, 0))}
+                sub={t("financePage.payableToPartners") + ": " + formatINR(settlementRows.reduce((sum, d) => sum + d.balance_payable, 0))}
+              />
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -310,16 +406,6 @@ function TotalFooter({ label, value, sub }: { label: string; value: string; sub?
           {sub && <p className="text-xs text-mobile-text-muted mt-0.5">{sub}</p>}
         </div>
       </div>
-    </Card>
-  );
-}
-
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-mobile-text-muted">{label}</p>
-      <p className="font-poppins text-[20px] font-bold text-mobile-text mt-1.5 truncate">{value}</p>
-      {sub && <p className="text-[12px] text-mobile-text-secondary mt-0.5 truncate">{sub}</p>}
     </Card>
   );
 }

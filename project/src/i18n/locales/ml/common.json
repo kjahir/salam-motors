@@ -663,7 +663,12 @@
     "needsAttention": "ശ്രദ്ധ വേണ്ടത്",
     "allClear": "എല്ലാം ശരിയാണ്",
     "noOpenAlerts": "ഇപ്പോൾ തുറന്ന അലേർട്ടുകളില്ല.",
-    "daysInStock": "സ്റ്റോക്കിൽ {{days}} ദിവസം"
+    "daysInStock": "സ്റ്റോക്കിൽ {{days}} ദിവസം",
+    "askingValue": "ചോദിക്കുന്ന വില",
+    "paidToPartners": "പങ്കാളികൾക്ക് ആകെ നൽകിയത്",
+    "readyForSale": "വിൽപ്പനയ്ക്ക് തയ്യാർ",
+    "totalSold": "ആകെ വിറ്റത്",
+    "underRepair": "അറ്റകുറ്റപ്പണിയിൽ"
   },
   "mobileInventory": {
     "title": "ഇൻവെന്ററി",

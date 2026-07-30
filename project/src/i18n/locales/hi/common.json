@@ -663,7 +663,12 @@
     "needsAttention": "ध्यान चाहिए",
     "allClear": "सब ठीक",
     "noOpenAlerts": "अभी कोई खुला अलर्ट नहीं।",
-    "daysInStock": "स्टॉक में {{days}} दिन"
+    "daysInStock": "स्टॉक में {{days}} दिन",
+    "askingValue": "मांग मूल्य",
+    "paidToPartners": "साझेदारों को कुल भुगतान",
+    "readyForSale": "बिक्री के लिए तैयार",
+    "totalSold": "कुल बिक्री",
+    "underRepair": "मरम्मत में"
   },
   "mobileInventory": {
     "title": "इन्वेंटरी",

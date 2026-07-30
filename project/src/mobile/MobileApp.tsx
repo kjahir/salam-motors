@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, Warehouse, Receipt, FileText, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, Bike, FileBarChart, Warehouse, Receipt, FileText, ClipboardCheck, X } from "lucide-react";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
 import { MobileVehicleDetail } from "./MobileVehicleDetail";
@@ -262,12 +262,14 @@ export function MobileApp() {
             <div className="flex items-stretch max-w-md mx-auto">
               <NavButton
                 active={isTabActive("dashboard")}
+                disabled={addRowOpen}
                 icon={<LayoutDashboard size={20} />}
                 label={t("nav.dashboard")}
                 onClick={() => navigate("dashboard")}
               />
               <NavButton
                 active={isTabActive("inventory")}
+                disabled={addRowOpen}
                 icon={<Warehouse size={20} />}
                 label={t("nav.inventory")}
                 onClick={() => navigate("inventory")}
@@ -280,14 +282,17 @@ export function MobileApp() {
                   aria-expanded={addRowOpen}
                 >
                   <span className={`flex h-[30px] w-[30px] items-center justify-center rounded-full text-white transition-colors ${addRowOpen ? "bg-mobile-primary-active" : "bg-mobile-primary"}`}>
-                    <Bike size={18} />
+                    {addRowOpen ? <X size={18} /> : <Bike size={18} />}
                   </span>
-                  <span className="text-[11px] font-semibold leading-none text-mobile-primary">{t("nav.vehicle")}</span>
+                  <span className="text-[11px] font-semibold leading-none text-mobile-primary">
+                    {addRowOpen ? t("mobileAdd.closeMenu") : t("nav.vehicle")}
+                  </span>
                 </button>
               )}
               {canAccessMobileTab("reports") && (
                 <NavButton
                   active={isTabActive("reports")}
+                  disabled={addRowOpen}
                   icon={<FileBarChart size={20} />}
                   label={t("nav.reports")}
                   onClick={() => navigate("reports")}
@@ -301,9 +306,22 @@ export function MobileApp() {
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+function NavButton({ active, icon, label, onClick, disabled }: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  /** Dimmed and inert while the vehicle-action row has the bar. */
+  disabled?: boolean;
+}) {
   return (
-    <button onClick={onClick} className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 ${active ? "text-mobile-primary" : "text-mobile-text-muted"}`}>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 transition-opacity ${
+        disabled ? "opacity-30" : active ? "text-mobile-primary" : "text-mobile-text-muted"
+      }`}
+    >
       {icon}
       <span className="text-[10px] font-medium leading-none">{label}</span>
     </button>

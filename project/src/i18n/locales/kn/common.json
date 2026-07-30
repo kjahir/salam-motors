@@ -663,7 +663,12 @@
     "needsAttention": "ಗಮನ ಬೇಕು",
     "allClear": "ಎಲ್ಲಾ ಸರಿಯಾಗಿದೆ",
     "noOpenAlerts": "ಸದ್ಯಕ್ಕೆ ಯಾವುದೇ ಬಾಕಿ ಅಲರ್ಟ್‌ಗಳಿಲ್ಲ.",
-    "daysInStock": "ಸ್ಟಾಕ್‌ನಲ್ಲಿ {{days}}ದಿ"
+    "daysInStock": "ಸ್ಟಾಕ್‌ನಲ್ಲಿ {{days}}ದಿ",
+    "askingValue": "ಕೇಳುವ ಬೆಲೆ",
+    "paidToPartners": "ಪಾಲುದಾರರಿಗೆ ಒಟ್ಟು ಪಾವತಿ",
+    "readyForSale": "ಮಾರಾಟಕ್ಕೆ ಸಿದ್ಧ",
+    "totalSold": "ಒಟ್ಟು ಮಾರಾಟ",
+    "underRepair": "ದುರಸ್ತಿಯಲ್ಲಿ"
   },
   "mobileInventory": {
     "title": "ಇನ್ವೆಂಟರಿ",

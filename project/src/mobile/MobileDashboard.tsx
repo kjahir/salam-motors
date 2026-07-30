@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, Bike, CalendarDays, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert, ShoppingCart, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Spinner, Card, EmptyState, Sheet } from "./ui/primitives";
-import { formatINR, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
+import { formatINR, formatINRRange, daysSince } from "@/lib/format";
+import { computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies, fetchInvestments, fetchProfitDistributions, fetchAppSettings } from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
 import { useAuth } from "@/lib/useAuth";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy, Investment, ProfitDistribution, Partner, AppSettings } from "@/lib/types";
 import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { MobileNavigate } from "./MobileApp";
 
@@ -19,8 +20,11 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [panel, setPanel] = useState<"finance" | "sold" | "month" | null>(null);
+  const [panel, setPanel] = useState<"finance" | "stock" | "month" | null>(null);
   const { signOut } = useAuth();
   const { t } = useTranslation();
 
@@ -29,13 +33,16 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchAlerts(), fetchComplianceStatuses(), fetchCompliancePolicies()]);
+        const [v, s, a, c, p, inv, dist, st] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchAlerts(), fetchComplianceStatuses(), fetchCompliancePolicies(), fetchInvestments(), fetchProfitDistributions(), fetchAppSettings()]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
         setAlerts(a);
         setComplianceStatuses(c);
         setPolicies(p);
+        setInvestments(inv);
+        setDistributions(dist);
+        setSettings(st);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -76,6 +83,17 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     };
     const soldThisMonthList = sold.filter((v) => inThisMonth(v.sold_at));
     return {
+      readyForSale: inStock.filter((v) => v.current_status === "READY_FOR_SALE").length,
+      underRepair: inStock.filter((v) => v.current_status === "UNDER_REPAIR").length,
+      totalAsking: inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0),
+      totalInvested: investments
+        .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+        .reduce((s, i) => s + i.amount, 0),
+      paidToPartners: distributions.reduce((s, d) => s + d.amount_paid, 0),
+      purchaseAndExpenses: vehicles.reduce(
+        (s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0) + (summaryMap.get(v.id)?.total_expense ?? 0),
+        0,
+      ),
       soldThisMonth: soldThisMonthList.length,
       boughtThisMonth: vehicles.filter((v) => inThisMonth(v.onboarded_at)).length,
       profitThisMonth: soldThisMonthList.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0),
@@ -91,7 +109,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       openAlertCount: openAlerts.length,
       complianceIssues,
     };
-  }, [vehicles, summaries, alerts, complianceStatuses]);
+  }, [vehicles, summaries, alerts, complianceStatuses, investments, distributions]);
 
   if (loading) {
     return (
@@ -102,6 +120,11 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   }
 
   const plPositive = stats.overallProfit >= 0;
+  const estRange = computeEstimatedProfitRange(
+    stats.inStockValue,
+    settings?.estimated_profit_margin_low_pct ?? 10,
+    settings?.estimated_profit_margin_high_pct ?? 30,
+  );
 
   return (
     <div>
@@ -144,41 +167,27 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
 
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
         <IconTile
-          label={t("mobileDashboard.sold")}
-          value={String(stats.soldCount)}
-          icon={<TrendingUp size={18} />}
-          tone="success"
-          onClick={() => setPanel("sold")}
+          label={t("dashboard.stockTile")}
+          value={String(stats.inStockCount)}
+          icon={<Bike size={18} />}
+          tone="primary"
+          onClick={() => setPanel("stock")}
         />
         <IconTile
           label={t("dashboard.thisMonth")}
           value={String(stats.soldThisMonth)}
           icon={<CalendarDays size={18} />}
-          tone="primary"
+          tone="success"
           onClick={() => setPanel("month")}
-        />
-        <StatTile label={t("mobileDashboard.purchased")} value={t("mobileDashboard.bikeCount", { count: stats.purchasedCount })} sub={formatINR(stats.purchasedValue)} />
-        <StatTile
-          label={t("mobileDashboard.inStock")}
-          value={t("mobileDashboard.bikeCount", { count: stats.inStockCount })}
-          sub={formatINR(stats.inStockValue)}
-          onClick={() => onNavigate("inventory")}
-        />
-        <StatTile label={t("mobileDashboard.totalExpenses")} value={formatINR(stats.totalExpenses)} sub={t("mobileDashboard.serviceMore")} />
-        <StatTile
-          label={t("mobileDashboard.complianceIssues")}
-          value={String(stats.complianceIssues)}
-          sub={stats.complianceIssues > 0 ? t("mobileDashboard.needsAttentionSub") : t("mobileDashboard.allCompliant")}
-          onClick={() => onNavigate("inventory")}
         />
       </div>
 
       <div className="px-4 pt-5">
         <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.quickActions")}</p>
-        <div className="grid grid-cols-2 gap-3">
-          <QuickAction icon={<PlusCircle size={18} />} label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
-          <QuickAction icon={<ShoppingCart size={18} />} label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
-          <QuickAction icon={<ClipboardList size={18} />} label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
+        <div className="grid grid-cols-3 gap-3">
+          <BigAction icon={<PlusCircle size={26} />} label={t("mobileDashboard.addVehicle")} tone="primary" onClick={() => onNavigate("add-vehicle")} />
+          <BigAction icon={<ShoppingCart size={26} />} label={t("dashboard.sellVehicle")} tone="success" onClick={() => onNavigate("add-sale")} />
+          <BigAction icon={<ClipboardList size={26} />} label={t("mobileDashboard.viewReports")} tone="navy" onClick={() => onNavigate("reports")} />
         </div>
       </div>
 
@@ -210,26 +219,30 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         )}
       </div>
 
-      <Sheet open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
-        <SheetRow label={t("mobileDashboard.purchased")} value={formatINR(stats.purchasedValue)} />
-        <SheetRow label={t("mobileDashboard.sold")} value={formatINR(stats.soldValue)} />
-        <SheetRow label={t("mobileDashboard.totalExpenses")} value={formatINR(stats.totalExpenses)} />
-        <SheetRow label={t("mobileDashboard.inStock")} value={formatINR(stats.inStockValue)} />
+      <Sheet open={panel === "stock"} onClose={() => setPanel(null)} title={t("dashboard.asOfToday")}>
+        <SheetRow label={t("dashboard.vehiclesInStock")} value={String(stats.inStockCount)} />
+        <SheetRow label={t("mobileDashboard.readyForSale")} value={String(stats.readyForSale)} />
+        <SheetRow label={t("mobileDashboard.underRepair")} value={String(stats.underRepair)} />
+        <SheetRow label={t("dashboard.totalInventoryCost")} value={formatINR(stats.inStockValue)} />
+        <SheetRow label={t("mobileDashboard.askingValue")} value={formatINR(stats.totalAsking)} />
         <SheetRow
-          label={t("dashboard.totalProfit")}
-          value={formatINR(stats.overallProfit)}
-          valueClass={plPositive ? "text-mobile-success" : "text-mobile-error"}
+          label={t("dashboard.estimatedProfit")}
+          value={formatINRRange(estRange.low, estRange.high, { compact: true })}
+          valueClass="text-mobile-success"
         />
       </Sheet>
 
-      <Sheet open={panel === "sold"} onClose={() => setPanel(null)} title={t("mobileDashboard.sold")}>
-        <SheetRow label={t("mobileDashboard.sold")} value={t("mobileDashboard.bikeCount", { count: stats.soldCount })} />
-        <SheetRow label={t("dashboard.totalSales")} value={formatINR(stats.soldValue)} />
+      <Sheet open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
+        <SheetRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvested)} />
         <SheetRow
           label={t("dashboard.totalProfit")}
           value={formatINR(stats.overallProfit)}
           valueClass={plPositive ? "text-mobile-success" : "text-mobile-error"}
         />
+        <SheetRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners)} />
+        <SheetRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.purchaseAndExpenses)} />
+        <SheetRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.soldValue)} />
+        <SheetRow label={t("mobileDashboard.inStock")} value={formatINR(stats.inStockValue)} />
       </Sheet>
 
       <Sheet open={panel === "month"} onClose={() => setPanel(null)} title={t("dashboard.thisMonth")}>
@@ -242,6 +255,26 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         />
       </Sheet>
     </div>
+  );
+}
+
+/** Icon-first shortcut: the icon carries the meaning, the label just confirms it. */
+function BigAction({ icon, label, tone, onClick }: {
+  icon: ReactNode;
+  label: string;
+  tone: "primary" | "success" | "navy";
+  onClick: () => void;
+}) {
+  const tones = {
+    primary: "bg-mobile-primary text-white",
+    success: "bg-mobile-success text-white",
+    navy: "bg-mobile-navy text-white",
+  };
+  return (
+    <button onClick={onClick} className="flex flex-col items-center gap-2 active:opacity-80">
+      <span className={`flex h-16 w-16 items-center justify-center rounded-2xl shadow-mobile-md ${tones[tone]}`}>{icon}</span>
+      <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
+    </button>
   );
 }
 
@@ -276,24 +309,5 @@ function SheetRow({ label, value, valueClass = "text-mobile-text" }: { label: st
       <p className="text-sm text-mobile-text-secondary">{label}</p>
       <p className={`text-sm font-semibold ${valueClass}`}>{value}</p>
     </div>
-  );
-}
-
-function StatTile({ label, value, sub, onClick }: { label: string; value: string; sub: string; onClick?: () => void }) {
-  return (
-    <Card className="p-4" onClick={onClick}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-mobile-text-muted">{label}</p>
-      <p className="font-poppins text-[22px] font-bold text-mobile-text mt-1.5">{value}</p>
-      <p className="text-[13px] text-mobile-text-secondary mt-0.5">{sub}</p>
-    </Card>
-  );
-}
-
-function QuickAction({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="flex items-center gap-2.5 rounded-2xl border border-mobile-border bg-white p-3.5 active:bg-mobile-bg">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary shrink-0">{icon}</div>
-      <span className="text-sm font-medium text-mobile-text">{label}</span>
-    </button>
   );
 }

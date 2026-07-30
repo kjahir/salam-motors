@@ -663,7 +663,12 @@
     "needsAttention": "கவனம் தேவை",
     "allClear": "எல்லாம் சரி",
     "noOpenAlerts": "தற்போது திறந்த எச்சரிக்கைகள் இல்லை.",
-    "daysInStock": "ஸ்டாக்கில் {{days}}நா"
+    "daysInStock": "ஸ்டாக்கில் {{days}}நா",
+    "askingValue": "கேட்கும் விலை",
+    "paidToPartners": "பங்குதாரர்களுக்கு மொத்தம் வழங்கியது",
+    "readyForSale": "விற்பனைக்குத் தயார்",
+    "totalSold": "மொத்த விற்பனை",
+    "underRepair": "பழுதுபார்ப்பில்"
   },
   "mobileInventory": {
     "title": "இன்வென்டரி",

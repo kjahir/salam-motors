@@ -663,7 +663,12 @@
     "needsAttention": "శ్రద్ధ అవసరం",
     "allClear": "అంతా క్లియర్‌గా ఉంది",
     "noOpenAlerts": "ప్రస్తుతం ఓపెన్ అలర్ట్‌లు లేవు.",
-    "daysInStock": "స్టాక్‌లో {{days}}d"
+    "daysInStock": "స్టాక్‌లో {{days}}d",
+    "askingValue": "అడిగే ధర",
+    "paidToPartners": "భాగస్వాములకు చెల్లించిన మొత్తం",
+    "readyForSale": "అమ్మకానికి సిద్ధం",
+    "totalSold": "మొత్తం అమ్మకం",
+    "underRepair": "మరమ్మతులో"
   },
   "mobileInventory": {
     "title": "ఇన్వెంటరీ",
