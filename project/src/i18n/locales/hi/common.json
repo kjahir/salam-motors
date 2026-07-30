@@ -34,7 +34,8 @@
     "team": "टीम",
     "audit": "ऑडिट",
     "manageVehicles": "वाहन प्रबंधन",
-    "vehicles": "वाहन"
+    "vehicles": "वाहन",
+    "vehicle": "वाहन"
   },
   "dashboard": {
     "title": "डैशबोर्ड",

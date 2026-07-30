@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bike,
-  IndianRupee,
+  Wallet,
+  TrendingUp,
+  BellRing,
   AlertTriangle,
-  CheckCircle2,
   ArrowRight,
   Activity,
   Pencil,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Modal } from "@/components/ui/Modal";
 import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/useToast";
@@ -223,7 +225,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         description={t("dashboard.description")}
         actions={
           <>
-            <button onClick={() => onNavigate("quick-add-sale")} className="btn-secondary">
+            <LanguageSwitcher preferredLanguage={settings?.preferred_language ?? null} />
+            <button onClick={() => onNavigate("quick-add-sale")} className="btn-sell">
               <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
             </button>
             <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
@@ -240,7 +243,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           label={t("dashboard.stockTile")}
           value={String(stats.inStockCount)}
           hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
-          icon={<Bike size={22} />}
+          icon={<Bike size={24} />}
           color="brand"
           onClick={() => setPanel("stock")}
         />
@@ -248,7 +251,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           label={t("dashboard.thisMonth")}
           value={String(stats.soldThisMonth)}
           hint={t("dashboard.soldBoughtHint", { bought: stats.boughtThisMonth })}
-          icon={<CheckCircle2 size={22} />}
+          icon={<TrendingUp size={24} />}
           color="emerald"
           onClick={() => setPanel("month")}
         />
@@ -256,15 +259,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           label={t("dashboard.financialOverview")}
           value={formatINR(stats.totalProfitAllTime, { compact: true })}
           hint={t("dashboard.totalProfitHint")}
-          icon={<IndianRupee size={22} />}
-          color={stats.totalProfitAllTime >= 0 ? "emerald" : "red"}
+          icon={<Wallet size={24} />}
+          color={stats.totalProfitAllTime >= 0 ? "amber" : "red"}
           onClick={() => setPanel("finance")}
         />
         <HeadlineTile
           label={t("dashboard.alertsTile")}
           value={String(stats.openAlerts)}
           hint={t("dashboard.alertsVehiclesHint", { count: stats.openAlertVehicleCount })}
-          icon={<AlertTriangle size={22} />}
+          icon={<BellRing size={24} />}
           color={stats.openAlerts > 0 ? "red" : "slate"}
           onClick={() => onNavigate("alerts")}
         />
@@ -573,32 +576,64 @@ function DualRangeSlider({ low, high, onLowChange, onHighChange, min = 0, max = 
 }
 
 // A dashboard headline: one number big enough to read across the room, with the
-// supporting figures a click away rather than crowding the page.
+// supporting figures a click away rather than crowding the page. Each tile owns a colour
+// so the four read as four different things at a glance rather than one grey row.
+const TILE_THEMES = {
+  brand: {
+    card: "border-brand-200 bg-gradient-to-br from-brand-50 via-white to-white hover:border-brand-300",
+    icon: "bg-brand-600 text-white shadow-sm",
+    value: "text-brand-700",
+    label: "text-brand-600",
+  },
+  emerald: {
+    card: "border-accent-200 bg-gradient-to-br from-accent-50 via-white to-white hover:border-accent-300",
+    icon: "bg-accent-600 text-white shadow-sm",
+    value: "text-accent-700",
+    label: "text-accent-600",
+  },
+  amber: {
+    card: "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white hover:border-amber-300",
+    icon: "bg-amber-500 text-white shadow-sm",
+    value: "text-amber-700",
+    label: "text-amber-600",
+  },
+  red: {
+    card: "border-red-200 bg-gradient-to-br from-red-50 via-white to-white hover:border-red-300",
+    icon: "bg-red-600 text-white shadow-sm",
+    value: "text-red-700",
+    label: "text-red-600",
+  },
+  slate: {
+    card: "border-slate-200 bg-gradient-to-br from-slate-50 via-white to-white hover:border-slate-300",
+    icon: "bg-slate-600 text-white shadow-sm",
+    value: "text-slate-800",
+    label: "text-slate-500",
+  },
+} as const;
+
 function HeadlineTile({ label, value, hint, icon, color, onClick }: {
   label: string;
   value: string;
   hint?: string;
   icon: ReactNode;
-  color: "brand" | "emerald" | "red" | "slate";
+  color: keyof typeof TILE_THEMES;
   onClick: () => void;
 }) {
-  const iconColors = {
-    brand: "bg-brand-50 text-brand-600",
-    emerald: "bg-emerald-50 text-emerald-600",
-    red: "bg-red-50 text-red-600",
-    slate: "bg-slate-100 text-slate-500",
-  };
+  const theme = TILE_THEMES[color];
   return (
-    <Card hover onClick={onClick} className="p-5">
+    <button
+      onClick={onClick}
+      className={`card card-hover w-full p-5 text-left transition-all ${theme.card}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="stat-label">{label}</p>
-          <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900 truncate">{value}</p>
+          <p className={`text-xs font-semibold uppercase tracking-wide ${theme.label}`}>{label}</p>
+          <p className={`mt-2 text-3xl font-bold tracking-tight truncate ${theme.value}`}>{value}</p>
           {hint && <p className="mt-1.5 text-xs text-slate-500 truncate">{hint}</p>}
         </div>
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconColors[color]}`}>{icon}</div>
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${theme.icon}`}>{icon}</div>
       </div>
-    </Card>
+    </button>
   );
 }
 

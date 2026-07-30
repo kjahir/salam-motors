@@ -34,6 +34,7 @@ import {
   type BrowserSpeechPreview,
 } from "./browserSpeech";
 import { useAssistant } from "./AssistantProvider";
+import { useDraggableLauncher } from "./useDraggableLauncher";
 
 const MAX_RECORDING_MS = 60_000;
 const NO_SPEECH_TIMEOUT_MS = 10_000;
@@ -427,6 +428,7 @@ export function AssistantShell() {
   } = useAssistant();
   const { user, membership, partner, orgName } = useAuth();
   const isMobile = useIsMobileViewport();
+  const launcher = useDraggableLauncher(isMobile);
   const [draft, setDraft] = useState("");
   const [voiceError, setVoiceError] = useState("");
   const voicePreviewLocale: SpokenAssistantLocale =
@@ -563,10 +565,25 @@ export function AssistantShell() {
       {!isOpen && (
         <button
           type="button"
-          onClick={open}
+          onClick={() => {
+            // A drag that ends over the button would otherwise also fire a click.
+            if (launcher.wasDragged() || launcher.dragging) return;
+            open();
+          }}
+          {...launcher.handlers}
+          style={
+            launcher.position
+              ? { left: launcher.position.x, top: launcher.position.y, right: "auto", bottom: "auto", touchAction: "none" }
+              : isMobile
+                ? { bottom: "calc(5.5rem + var(--mobile-action-row, 0rem))", touchAction: "none" }
+                : undefined
+          }
           className={`fixed z-40 flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-600 to-blue-600 text-white shadow-xl shadow-brand-900/20 transition hover:-translate-y-0.5 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
             isMobile
-              ? "bottom-[5.5rem] right-4 h-12 w-12 justify-center"
+              // Rests above the bottom nav, rising when the vehicle-action row opens (the
+              // --mobile-action-row variable set by MobileApp). Drag it anywhere if it
+              // still covers something — see useDraggableLauncher.
+              ? "right-4 h-12 w-12 justify-center"
               : "bottom-6 right-6 px-4 py-3"
           }`}
           aria-label={t("assistant.launcher.openAria")}

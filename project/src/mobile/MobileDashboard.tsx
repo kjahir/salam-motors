@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert, ShoppingCart } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Spinner, Card, EmptyState } from "./ui/primitives";
+import { Spinner, Card, EmptyState, Sheet } from "./ui/primitives";
 import { formatINR, daysSince } from "@/lib/format";
 import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
 import { useAuth } from "@/lib/useAuth";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
 import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { MobileNavigate } from "./MobileApp";
@@ -19,6 +20,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [panel, setPanel] = useState<"finance" | "sold" | "month" | null>(null);
   const { signOut } = useAuth();
   const { t } = useTranslation();
 
@@ -66,7 +68,17 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     const overallProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
     const openAlerts = alerts.filter((a) => a.status === "Open").sort((a, b) => (b.days_in_inventory ?? 0) - (a.days_in_inventory ?? 0));
     const complianceIssues = complianceStatuses.filter((c) => c.violation_count > 0).length;
+    const now = new Date();
+    const inThisMonth = (iso: string | null | undefined) => {
+      if (!iso) return false;
+      const d = new Date(iso);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    };
+    const soldThisMonthList = sold.filter((v) => inThisMonth(v.sold_at));
     return {
+      soldThisMonth: soldThisMonthList.length,
+      boughtThisMonth: vehicles.filter((v) => inThisMonth(v.onboarded_at)).length,
+      profitThisMonth: soldThisMonthList.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0),
       purchasedCount: vehicles.length,
       purchasedValue,
       soldCount: sold.length,
@@ -98,27 +110,54 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
           <p className="font-poppins text-[13px] font-medium uppercase tracking-wide text-white/70">Salam</p>
           <h1 className="font-poppins text-2xl font-bold mt-1"> {t("mobileDashboard.dashboard")}</h1>
         </div>
-        <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label={t("auth.signOut")}>
-          <LogOut size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher variant="mobile" />
+          <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label={t("auth.signOut")}>
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="px-4 -mt-4">
         <Card className="p-5">
-          <p className="text-[13px] font-medium text-mobile-text-secondary"> {t("mobileDashboard.overallProfitLoss")}</p>
-          <p className={`font-poppins text-[32px] font-bold mt-1 ${plPositive ? "text-mobile-success" : "text-mobile-error"}`}>
-            {plPositive ? "+" : ""}
-            {formatINR(stats.overallProfit)}
-          </p>
-          <p className="text-xs text-mobile-text-muted mt-1">
-            {t("mobileDashboard.soldToDate", { count: stats.soldCount })}
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-mobile-text-secondary"> {t("mobileDashboard.overallProfitLoss")}</p>
+              <p className={`font-poppins text-[32px] font-bold mt-1 ${plPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+                {plPositive ? "+" : ""}
+                {formatINR(stats.overallProfit)}
+              </p>
+              <p className="text-xs text-mobile-text-muted mt-1">
+                {t("mobileDashboard.soldToDate", { count: stats.soldCount })}
+              </p>
+            </div>
+            <button
+              onClick={() => setPanel("finance")}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mobile-secondary text-mobile-navy active:opacity-80"
+              aria-label={t("dashboard.financialOverview")}
+            >
+              <Wallet size={18} />
+            </button>
+          </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+        <IconTile
+          label={t("mobileDashboard.sold")}
+          value={String(stats.soldCount)}
+          icon={<TrendingUp size={18} />}
+          tone="success"
+          onClick={() => setPanel("sold")}
+        />
+        <IconTile
+          label={t("dashboard.thisMonth")}
+          value={String(stats.soldThisMonth)}
+          icon={<CalendarDays size={18} />}
+          tone="primary"
+          onClick={() => setPanel("month")}
+        />
         <StatTile label={t("mobileDashboard.purchased")} value={t("mobileDashboard.bikeCount", { count: stats.purchasedCount })} sub={formatINR(stats.purchasedValue)} />
-        <StatTile label={t("mobileDashboard.sold")} value={t("mobileDashboard.bikeCount", { count: stats.soldCount })} sub={formatINR(stats.soldValue)} />
         <StatTile
           label={t("mobileDashboard.inStock")}
           value={t("mobileDashboard.bikeCount", { count: stats.inStockCount })}
@@ -170,6 +209,72 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
           </div>
         )}
       </div>
+
+      <Sheet open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
+        <SheetRow label={t("mobileDashboard.purchased")} value={formatINR(stats.purchasedValue)} />
+        <SheetRow label={t("mobileDashboard.sold")} value={formatINR(stats.soldValue)} />
+        <SheetRow label={t("mobileDashboard.totalExpenses")} value={formatINR(stats.totalExpenses)} />
+        <SheetRow label={t("mobileDashboard.inStock")} value={formatINR(stats.inStockValue)} />
+        <SheetRow
+          label={t("dashboard.totalProfit")}
+          value={formatINR(stats.overallProfit)}
+          valueClass={plPositive ? "text-mobile-success" : "text-mobile-error"}
+        />
+      </Sheet>
+
+      <Sheet open={panel === "sold"} onClose={() => setPanel(null)} title={t("mobileDashboard.sold")}>
+        <SheetRow label={t("mobileDashboard.sold")} value={t("mobileDashboard.bikeCount", { count: stats.soldCount })} />
+        <SheetRow label={t("dashboard.totalSales")} value={formatINR(stats.soldValue)} />
+        <SheetRow
+          label={t("dashboard.totalProfit")}
+          value={formatINR(stats.overallProfit)}
+          valueClass={plPositive ? "text-mobile-success" : "text-mobile-error"}
+        />
+      </Sheet>
+
+      <Sheet open={panel === "month"} onClose={() => setPanel(null)} title={t("dashboard.thisMonth")}>
+        <SheetRow label={t("dashboard.boughtThisMonth")} value={String(stats.boughtThisMonth)} />
+        <SheetRow label={t("dashboard.soldThisMonth")} value={String(stats.soldThisMonth)} />
+        <SheetRow
+          label={t("dashboard.realisedProfitMonth")}
+          value={formatINR(stats.profitThisMonth)}
+          valueClass={stats.profitThisMonth >= 0 ? "text-mobile-success" : "text-mobile-error"}
+        />
+      </Sheet>
+    </div>
+  );
+}
+
+/** A colour-led tile whose figures live in a sheet, so the dashboard stays scannable. */
+function IconTile({ label, value, icon, tone, onClick }: {
+  label: string;
+  value: string;
+  icon: ReactNode;
+  tone: "primary" | "success";
+  onClick: () => void;
+}) {
+  const tones = {
+    primary: "bg-mobile-primary text-white",
+    success: "bg-mobile-success text-white",
+  };
+  return (
+    <Card className="p-3.5" onClick={onClick}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] text-mobile-text-muted uppercase truncate">{label}</p>
+          <p className="font-poppins text-xl font-bold text-mobile-text mt-0.5">{value}</p>
+        </div>
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}>{icon}</span>
+      </div>
+    </Card>
+  );
+}
+
+function SheetRow({ label, value, valueClass = "text-mobile-text" }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-mobile-border last:border-0">
+      <p className="text-sm text-mobile-text-secondary">{label}</p>
+      <p className={`text-sm font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
 }

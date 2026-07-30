@@ -20,7 +20,6 @@ import {
   FileText,
   ClipboardCheck,
 } from "lucide-react";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/lib/useAuth";
 import { usePermissions } from "@/lib/usePermissions";
 import { ROLE_LABELS } from "@/lib/constants";
@@ -208,8 +207,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         ))}
       </nav>
 
-      <div className="space-y-3 px-3 py-4 border-t border-slate-800">
-        <LanguageSwitcher />
+      {/* Language lives on the Dashboard only — see LanguageSwitcher. */}
+      <div className="px-3 py-4 border-t border-slate-800">
         <UserMenu />
       </div>
     </div>

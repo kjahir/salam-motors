@@ -200,7 +200,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         actions={
           <>
             {!isSold && (
-              <button onClick={() => setTab("sale")} className="btn-primary">
+              <button onClick={() => setTab("sale")} className="btn-sell">
                 <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
               </button>
             )}

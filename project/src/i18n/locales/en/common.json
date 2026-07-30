@@ -33,8 +33,9 @@
     "policies": "Policies",
     "team": "Team",
     "audit": "Audit",
-    "manageVehicles": "Manage Vehicles",
-    "vehicles": "Vehicles"
+    "manageVehicles": "Vehicles",
+    "vehicles": "Manage",
+    "vehicle": "Vehicle"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1405,7 +1406,7 @@
     "rowSaved": "Saved"
   },
   "manageVehicles": {
-    "title": "Manage Vehicles",
+    "title": "Manage",
     "description": "Pick a vehicle to edit its record, or add a new one.",
     "selectToEdit": "Vehicle to edit",
     "addNew": "New Vehicle",

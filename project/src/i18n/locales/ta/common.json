@@ -34,7 +34,8 @@
     "team": "குழு",
     "audit": "ஆடிட்",
     "manageVehicles": "வாகன நிர்வாகம்",
-    "vehicles": "வாகனங்கள்"
+    "vehicles": "வாகனங்கள்",
+    "vehicle": "வாகனம்"
   },
   "dashboard": {
     "title": "டாஷ்போர்டு",

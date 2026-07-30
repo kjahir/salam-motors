@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, Plus, Receipt, FileText, ClipboardCheck } from "lucide-react";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LayoutDashboard, Bike, FileBarChart, Warehouse, Receipt, FileText, ClipboardCheck } from "lucide-react";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
 import { MobileVehicleDetail } from "./MobileVehicleDetail";
@@ -51,6 +50,9 @@ const ADD_TARGETS: { key: string; screen: MobileScreen; labelKey: string; icon: 
   { key: "inspection", screen: "add-inspection", labelKey: "vehicleDetail.inspection", icon: ClipboardCheck },
 ];
 
+/** Screens that keep the bottom bar (and so can host the vehicle-action row). */
+const BOTTOM_NAV_SCREENS: MobileScreen[] = ["dashboard", "inventory", "reports", "vehicle"];
+
 export interface MobileNavigate {
   (screen: MobileScreen, params?: MobileNavigateParams): void;
 }
@@ -84,6 +86,12 @@ export function MobileApp() {
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
   const [highlightPolicyId, setHighlightPolicyId] = useState<string | undefined>(undefined);
   const [addRowOpen, setAddRowOpen] = useState(false);
+  /**
+   * The screen the vehicle-action row was opened from. Kept in a ref so `navigate` can stay
+   * a stable callback: leaving an action page for any bottom-nav screen drops the dealer
+   * back where they started with the row still open, ready for the next entry.
+   */
+  const addOriginRef = useRef<MobileScreen | null>(null);
 
   const navigate = useCallback<MobileNavigate>((next, params) => {
     if (params?.vehicleId) {
@@ -99,11 +107,25 @@ export function MobileApp() {
       setHighlightPolicyId(undefined);
     }
     setScreen(next);
+    if (addOriginRef.current && BOTTOM_NAV_SCREENS.includes(next)) {
+      addOriginRef.current = null;
+      setAddRowOpen(true);
+    }
   }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
+
+  // Published as a CSS variable rather than a prop because the assistant launcher lives
+  // outside this tree (AssistantShell), and only needs to know how much room to leave.
+  useEffect(() => {
+    const showing = addRowOpen && BOTTOM_NAV_SCREENS.includes(screen);
+    document.documentElement.style.setProperty("--mobile-action-row", showing ? "6.5rem" : "0rem");
+    return () => {
+      document.documentElement.style.removeProperty("--mobile-action-row");
+    };
+  }, [addRowOpen, screen]);
 
   useEffect(() => {
     setAppContext({
@@ -143,12 +165,20 @@ export function MobileApp() {
   // just pass that vehicleId along as a convenience preselect; otherwise the page opens
   // with nothing selected and the dealer picks a vehicle right there.
   const handlePickAddTarget = (targetScreen: MobileScreen) => {
+    addOriginRef.current = screen;
     setAddRowOpen(false);
     navigate(targetScreen, screen === "vehicle" && vehicleId ? { vehicleId } : undefined);
   };
 
-  const genericBack = (tab: string) => () =>
-    vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("inventory");
+  // Backing out of a vehicle-action page returns to whatever was on screen when it was
+  // opened — dashboard, inventory, reports or the vehicle itself (on its matching tab, so
+  // the record just added is visible). navigate() reopens the action row on arrival.
+  const genericBack = (tab: string) => () => {
+    const origin = addOriginRef.current;
+    if (origin === "vehicle" && vehicleId) return navigate("vehicle", { vehicleId, tab });
+    if (origin) return navigate(origin);
+    return vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("inventory");
+  };
 
   const renderScreen = () => {
     switch (screen) {
@@ -198,15 +228,11 @@ export function MobileApp() {
   // "vehicle" is included so the global "+" button (and its jump-straight-to-page behavior
   // for a vehicle already open) stays reachable from a vehicle's own detail page, not just
   // from Dashboard/Inventory/Reports.
-  const showBottomNav = screen === "dashboard" || screen === "inventory" || screen === "reports" || screen === "vehicle";
+  const showBottomNav = BOTTOM_NAV_SCREENS.includes(screen);
   const canAddVehicle = canAccessMobileTab("add-vehicle");
 
   return (
     <div className="mobile-shell min-h-screen">
-      <div className="fixed right-3 top-3 z-30">
-        <LanguageSwitcher variant="mobile" />
-      </div>
-
       <div className={showBottomNav ? "pb-20" : ""}>{renderScreen()}</div>
 
       {/* Transparent tap-outside-to-dismiss layer: purely functional, never visually
@@ -242,7 +268,7 @@ export function MobileApp() {
               />
               <NavButton
                 active={isTabActive("inventory")}
-                icon={<Bike size={20} />}
+                icon={<Warehouse size={20} />}
                 label={t("nav.inventory")}
                 onClick={() => navigate("inventory")}
               />
@@ -253,10 +279,10 @@ export function MobileApp() {
                   aria-label={addRowOpen ? t("mobileAdd.closeMenu") : t("mobileAdd.openMenu")}
                   aria-expanded={addRowOpen}
                 >
-                  <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-mobile-primary text-white">
-                    <Plus size={18} className={`transition-transform duration-200 ${addRowOpen ? "rotate-45" : ""}`} />
+                  <span className={`flex h-[30px] w-[30px] items-center justify-center rounded-full text-white transition-colors ${addRowOpen ? "bg-mobile-primary-active" : "bg-mobile-primary"}`}>
+                    <Bike size={18} />
                   </span>
-                  <span className="text-[11px] font-semibold leading-none text-mobile-primary">{t("common.add")}</span>
+                  <span className="text-[11px] font-semibold leading-none text-mobile-primary">{t("nav.vehicle")}</span>
                 </button>
               )}
               {canAccessMobileTab("reports") && (

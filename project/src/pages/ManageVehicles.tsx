@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bike, Check, ExternalLink, Plus, Spline, X } from "lucide-react";
+import { Bike, Check, ExternalLink, Plus, ShoppingCart, Spline, X } from "lucide-react";
 import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/useToast";
@@ -299,9 +299,14 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
         icon={<Bike size={20} />}
         actions={
           vehicleId ? (
-            <button onClick={() => onNavigate("vehicle", { vehicleId })} className="btn-secondary">
-              <ExternalLink size={16} /> {t("quickEntry.openVehicle")}
-            </button>
+            <>
+              <button onClick={() => onNavigate("vehicle", { vehicleId, tab: "sale" })} className="btn-sell">
+                <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
+              </button>
+              <button onClick={() => onNavigate("vehicle", { vehicleId })} className="btn-secondary">
+                <ExternalLink size={16} /> {t("quickEntry.openVehicle")}
+              </button>
+            </>
           ) : undefined
         }
       />

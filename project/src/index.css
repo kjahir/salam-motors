@@ -89,6 +89,9 @@
   .btn-ghost {
     @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900;
   }
+  .btn-sell {
+    @apply btn bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-sm hover:from-accent-600 hover:to-accent-700 active:from-accent-700 active:to-accent-800;
+  }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700;
   }
