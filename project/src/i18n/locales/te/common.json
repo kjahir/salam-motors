@@ -32,7 +32,8 @@
     "history": "చరిత్ర",
     "policies": "పాలసీలు",
     "team": "టీమ్",
-    "audit": "ఆడిట్"
+    "audit": "ఆడిట్",
+    "manageVehicles": "వాహన నిర్వహణ"
   },
   "dashboard": {
     "title": "డ్యాష్‌బోర్డ్",
@@ -1358,5 +1359,51 @@
         "cancelled": "రద్దు చేయబడింది"
       }
     }
+  },
+  "combobox": {
+    "toggle": "ఎంపికలను చూపించు",
+    "newValue": "“{{value}}”ని కొత్త ఎంపికగా జోడించు"
+  },
+  "quickEntry": {
+    "addRow": "ఈ వరుసను జోడించండి",
+    "saveChanges": "మార్పులను సేవ్ చేయండి",
+    "deleteRow": "ఈ వరుసను తొలగించండి",
+    "moreDetails": "మరిన్ని వివరాలు",
+    "attach": "ఫైళ్లను జోడించండి",
+    "attachedCount": "{{count}} ఫైళ్లు జోడించబడ్డాయి",
+    "openVehicle": "వాహనాన్ని తెరవండి",
+    "pickVehicle": "వాహనాన్ని ఎంచుకోండి",
+    "pickVehicleExpense": "ఖర్చులను నమోదు చేయడానికి పైన వాహనాన్ని ఎంచుకోండి.",
+    "pickVehicleDocument": "పత్రాలను నమోదు చేయడానికి పైన వాహనాన్ని ఎంచుకోండి.",
+    "pickVehicleInspection": "తనిఖీని నమోదు చేయడానికి పైన వాహనాన్ని ఎంచుకోండి.",
+    "pickVehicleView": "పూర్తి రికార్డును చూడడానికి పైన వాహనాన్ని ఎంచుకోండి.",
+    "categoryRequired": "కేటగిరీని నమోదు చేయండి",
+    "documentTypeRequired": "డాక్యుమెంట్ రకాన్ని నమోదు చేయండి",
+    "categoryPlaceholder": "కేటగిరీని ఎంచుకోండి లేదా టైప్ చేయండి",
+    "documentTypePlaceholder": "రకాన్ని ఎంచుకోండి లేదా టైప్ చేయండి",
+    "total": "మొత్తం",
+    "date": "తేదీ",
+    "bill": "బిల్లు",
+    "documentNumber": "డాక్యుమెంట్ సంఖ్య",
+    "issueDate": "జారీ తేదీ",
+    "expiryDate": "గడువు తేదీ",
+    "issuer": "జారీ చేసినవారు",
+    "notes": "గమనికలు",
+    "documentUpdated": "డాక్యుమెంట్ నవీకరించబడింది",
+    "documentRemoved": "డాక్యుమెంట్ తొలగించబడింది",
+    "deleteDocumentConfirm": "ఈ డాక్యుమెంట్‌ను తొలగించాలా?",
+    "checklistHint": "Pass → Fail → Pending మార్చడానికి ప్రతి భాగంపై క్లిక్ చేయండి. {{total}}లో {{checked}} తనిఖీ చేయబడింది.",
+    "weightClick": "బరువు {{weight}}% · మార్చడానికి క్లిక్ చేయండి",
+    "rowSaved": "సేవ్ చేయబడింది"
+  },
+  "manageVehicles": {
+    "title": "వాహన నిర్వహణ",
+    "description": "రికార్డును సవరించడానికి వాహనాన్ని ఎంచుకోండి, లేదా కొత్తది జోడించండి.",
+    "selectToEdit": "సవరించాల్సిన వాహనం",
+    "addNew": "కొత్త వాహనం",
+    "cancelNew": "రద్దు చేయండి",
+    "saveChanges": "మార్పులను సేవ్ చేయండి",
+    "emptyTitle": "వాహనం ఎంచుకోలేదు",
+    "emptyDescription": "వివరాలను సవరించడానికి పైన వాహనాన్ని ఎంచుకోండి, లేదా కొత్త వాహనాన్ని జోడించండి."
   }
 }

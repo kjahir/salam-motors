@@ -23,7 +23,6 @@ import { PageHeader, Tabs, Field, Select, Spinner } from "@/components/ui/Primit
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge, StatusBadge, VerificationBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
-import { SideNav } from "@/components/ui/SideNav";
 import { InlineEditableField } from "@/components/ui/InlineEditableField";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
@@ -71,9 +70,11 @@ interface VehicleDetailProps {
   initialTab?: string;
   openEditVehicle?: boolean;
   highlightPolicyId?: string;
+  /** Rendered inside another page (QuickViewVehicle), which owns the page-level navigation. */
+  embedded?: boolean;
 }
 
-export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openEditVehicle, highlightPolicyId }: VehicleDetailProps) {
+export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openEditVehicle, highlightPolicyId, embedded }: VehicleDetailProps) {
   const { t } = useTranslation();
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -179,16 +180,18 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   const isSold = vehicle.current_status === "SOLD" || vehicle.current_status === "DELIVERED";
 
   const navItems = [
-    { key: "overview", label: t("vehicleDetail.overview"), icon: <Bike size={16} />, badge: (vehicle.alerts?.filter((a) => a.status === "Open").length ?? 0) > 0 ? <Badge color="red">{vehicle.alerts?.filter((a) => a.status === "Open").length}</Badge> : undefined },
-    { key: "expenses", label: t("vehicleDetail.expenses"), icon: <Receipt size={16} />, badge: <Badge color="slate">{vehicle.expenses?.length ?? 0}</Badge> },
-    { key: "inspection", label: t("vehicleDetail.inspection"), icon: <ClipboardCheck size={16} /> },
-    { key: "documents", label: t("vehicleDetail.documents"), icon: <FileText size={16} />, badge: <Badge color="slate">{vehicle.documents?.length ?? 0}</Badge> },
-    { key: "sale", label: t("vehicleDetail.saleProfit"), icon: <ShoppingCart size={16} /> },
+    { key: "overview", label: t("vehicleDetail.overview"), badge: (vehicle.alerts?.filter((a) => a.status === "Open").length ?? 0) > 0 ? <Badge color="red">{vehicle.alerts?.filter((a) => a.status === "Open").length}</Badge> : undefined },
+    { key: "expenses", label: t("vehicleDetail.expenses"), badge: <Badge color="slate">{vehicle.expenses?.length ?? 0}</Badge> },
+    { key: "inspection", label: t("vehicleDetail.inspection") },
+    { key: "documents", label: t("vehicleDetail.documents"), badge: <Badge color="slate">{vehicle.documents?.length ?? 0}</Badge> },
+    { key: "sale", label: t("vehicleDetail.saleProfit") },
   ];
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <button onClick={onBack} className="btn-ghost mb-3 text-sm"><ChevronLeft size={16} /> {t("vehicleDetail.backToInventory")}</button>
+      {!embedded && (
+        <button onClick={onBack} className="btn-ghost mb-3 text-sm"><ChevronLeft size={16} /> {t("vehicleDetail.backToInventory")}</button>
+      )}
 
       <PageHeader
         title={`${vehicle.manufacturer} ${vehicle.model}`}
@@ -249,33 +252,26 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         </Card>
       </div>
 
-      <div className="lg:hidden">
-        <Tabs tabs={navItems} active={tab} onChange={setTab} />
-      </div>
+      <Tabs tabs={navItems} active={tab} onChange={setTab} />
 
-      <div className="mt-5 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-5">
-        <div className="hidden lg:block">
-          <SideNav items={navItems} active={tab} onChange={setTab} />
-        </div>
-        <div>
-          {tab === "overview" && (
-            <OverviewTab
-              vehicle={vehicle}
-              cost={cost}
-              profit={profit}
-              overallScore={overallScore}
-              docCompleteness={docCompleteness}
-              funding={funding}
-              complianceViolations={complianceViolations}
-              onNavigate={onNavigate}
-              onChanged={reload}
-            />
-          )}
-          {tab === "expenses" && <ExpensesTab vehicle={vehicle} cost={cost} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
-          {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
-          {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
-          {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} complianceViolations={complianceViolations} onChanged={reload} />}
-        </div>
+      <div className="mt-5">
+        {tab === "overview" && (
+          <OverviewTab
+            vehicle={vehicle}
+            cost={cost}
+            profit={profit}
+            overallScore={overallScore}
+            docCompleteness={docCompleteness}
+            funding={funding}
+            complianceViolations={complianceViolations}
+            onNavigate={onNavigate}
+            onChanged={reload}
+          />
+        )}
+        {tab === "expenses" && <ExpensesTab vehicle={vehicle} cost={cost} partners={partners} onChanged={reload} highlightIds={highlightRecordIds} />}
+        {tab === "inspection" && <InspectionTab vehicle={vehicle} overallScore={overallScore} onChanged={reload} />}
+        {tab === "documents" && <DocumentsTab vehicle={vehicle} onChanged={reload} highlightIds={highlightRecordIds} />}
+        {tab === "sale" && <SaleTab vehicle={vehicle} cost={cost} profit={profit} funding={funding} partners={partners} marginLow={marginLow} marginHigh={marginHigh} complianceViolations={complianceViolations} onChanged={reload} />}
       </div>
     </div>
   );

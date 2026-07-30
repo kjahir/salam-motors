@@ -16,7 +16,6 @@ import {
   FileBarChart,
   UserCog,
   ScrollText,
-  Pencil,
   Receipt,
   FileText,
   ClipboardCheck,
@@ -32,7 +31,7 @@ export type PageKey =
   | "dashboard"
   | "inventory"
   | "add-vehicle"
-  | "update-vehicle"
+  | "manage-vehicles"
   | "quick-add-expense"
   | "quick-add-document"
   | "quick-add-inspection"
@@ -54,7 +53,6 @@ export type PageKey =
 // (src/components/VehicleSelectField.tsx), the desktop counterpart to the mobile "+"
 // icon row's targets (src/mobile/MobileApp.tsx's ADD_TARGETS).
 const QUICK_VEHICLE_ACTIONS: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
-  { key: "update-vehicle", labelKey: "mobileAdd.updateVehicle", icon: <Pencil size={15} /> },
   { key: "quick-add-expense", labelKey: "vehicleDetail.expenses", icon: <Receipt size={15} /> },
   { key: "quick-add-document", labelKey: "vehicleDetail.documents", icon: <FileText size={15} /> },
   { key: "quick-add-inspection", labelKey: "vehicleDetail.inspection", icon: <ClipboardCheck size={15} /> },
@@ -79,7 +77,7 @@ interface LayoutProps {
 
 const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
   { key: "dashboard", labelKey: "nav.dashboard", icon: <LayoutDashboard size={18} /> },
-  { key: "add-vehicle", labelKey: "nav.addVehicle", icon: <PlusCircle size={18} /> },
+  { key: "manage-vehicles", labelKey: "nav.manageVehicles", icon: <PlusCircle size={18} /> },
   { key: "inventory", labelKey: "nav.inventory", icon: <Bike size={18} /> },
   { key: "finance", labelKey: "nav.reports", icon: <FileBarChart size={18} /> },
   { key: "parties", labelKey: "nav.parties", icon: <UserCircle size={18} /> },
@@ -92,7 +90,7 @@ const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
 ];
 
 const navSections: { key: PageKey }[][] = [
-  [{ key: "dashboard" }, { key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
+  [{ key: "dashboard" }, { key: "manage-vehicles" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
   [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }, { key: "audit" }],
 ];
@@ -157,7 +155,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
                         {alertCount}
                       </span>
                     )}
-                    {item.key === "add-vehicle" && visibleQuickActions.length > 0 && (
+                    {item.key === "manage-vehicles" && visibleQuickActions.length > 0 && (
                       <span
                         role="button"
                         tabIndex={0}
@@ -173,7 +171,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
                       </span>
                     )}
                   </button>
-                  {item.key === "add-vehicle" && quickAddOpen && visibleQuickActions.length > 0 && (
+                  {item.key === "manage-vehicles" && quickAddOpen && visibleQuickActions.length > 0 && (
                     <div className="mt-0.5 ml-4 space-y-0.5 border-l border-slate-800 pl-3">
                       {visibleQuickActions.map((action) => (
                         <button

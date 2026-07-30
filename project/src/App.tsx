@@ -11,7 +11,7 @@ import { CreateOrganization } from "@/pages/CreateOrganization";
 import { Dashboard } from "@/pages/Dashboard";
 import { Inventory } from "@/pages/Inventory";
 import { AddVehicle } from "@/pages/AddVehicle";
-import { UpdateVehicle } from "@/pages/UpdateVehicle";
+import { ManageVehicles } from "@/pages/ManageVehicles";
 import { QuickAddExpense } from "@/pages/QuickAddExpense";
 import { QuickAddDocument } from "@/pages/QuickAddDocument";
 import { QuickAddInspection } from "@/pages/QuickAddInspection";
@@ -37,7 +37,7 @@ const PAGE_KEYS: ReadonlySet<PageKey> = new Set([
   "dashboard",
   "inventory",
   "add-vehicle",
-  "update-vehicle",
+  "manage-vehicles",
   "quick-add-expense",
   "quick-add-document",
   "quick-add-inspection",
@@ -143,8 +143,8 @@ function AppContent() {
         return <Inventory onNavigate={handleNavigate} />;
       case "add-vehicle":
         return <AddVehicle onNavigate={handleNavigate} />;
-      case "update-vehicle":
-        return <UpdateVehicle onNavigate={handleNavigate} />;
+      case "manage-vehicles":
+        return <ManageVehicles onNavigate={handleNavigate} />;
       case "quick-add-expense":
         return <QuickAddExpense onNavigate={handleNavigate} />;
       case "quick-add-document":

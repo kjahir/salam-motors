@@ -32,7 +32,8 @@
     "history": "History",
     "policies": "Policies",
     "team": "Team",
-    "audit": "Audit"
+    "audit": "Audit",
+    "manageVehicles": "Manage Vehicles"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1358,5 +1359,51 @@
         "cancelled": "Cancelled"
       }
     }
+  },
+  "combobox": {
+    "toggle": "Show options",
+    "newValue": "Add “{{value}}” as a new option"
+  },
+  "quickEntry": {
+    "addRow": "Add this row",
+    "saveChanges": "Save changes",
+    "deleteRow": "Delete this row",
+    "moreDetails": "More details",
+    "attach": "Attach files",
+    "attachedCount": "{{count}} file(s) attached",
+    "openVehicle": "Open Vehicle",
+    "pickVehicle": "Select a vehicle",
+    "pickVehicleExpense": "Choose a vehicle above to record its expenses.",
+    "pickVehicleDocument": "Choose a vehicle above to record its documents.",
+    "pickVehicleInspection": "Choose a vehicle above to record an inspection.",
+    "pickVehicleView": "Choose a vehicle above to see its full record.",
+    "categoryRequired": "Enter a category",
+    "documentTypeRequired": "Enter a document type",
+    "categoryPlaceholder": "Select or type a category",
+    "documentTypePlaceholder": "Select or type a document type",
+    "total": "Total",
+    "date": "Date",
+    "bill": "Bill",
+    "documentNumber": "Document Number",
+    "issueDate": "Issue Date",
+    "expiryDate": "Expiry Date",
+    "issuer": "Issued By",
+    "notes": "Notes",
+    "documentUpdated": "Document updated",
+    "documentRemoved": "Document removed",
+    "deleteDocumentConfirm": "Delete this document?",
+    "checklistHint": "Click a component to cycle Pass → Fail → Pending. {{checked}} of {{total}} checked.",
+    "weightClick": "Weight {{weight}}% · click to change",
+    "rowSaved": "Saved"
+  },
+  "manageVehicles": {
+    "title": "Manage Vehicles",
+    "description": "Pick a vehicle to edit its record, or add a new one.",
+    "selectToEdit": "Vehicle to edit",
+    "addNew": "New Vehicle",
+    "cancelNew": "Cancel",
+    "saveChanges": "Save Changes",
+    "emptyTitle": "No vehicle selected",
+    "emptyDescription": "Choose a vehicle above to edit its details, or add a new vehicle."
   }
 }

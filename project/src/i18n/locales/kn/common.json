@@ -32,7 +32,8 @@
     "history": "ಇತಿಹಾಸ",
     "policies": "ನೀತಿಗಳು",
     "team": "ತಂಡ",
-    "audit": "ಲೆಕ್ಕಪರಿಶೋಧನೆ"
+    "audit": "ಲೆಕ್ಕಪರಿಶೋಧನೆ",
+    "manageVehicles": "ವಾಹನ ನಿರ್ವಹಣೆ"
   },
   "dashboard": {
     "title": "ಡ್ಯಾಶ್ಬೋರ್ಡ್",
@@ -1358,5 +1359,51 @@
         "cancelled": "ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ"
       }
     }
+  },
+  "combobox": {
+    "toggle": "ಆಯ್ಕೆಗಳನ್ನು ತೋರಿಸು",
+    "newValue": "“{{value}}” ಅನ್ನು ಹೊಸ ಆಯ್ಕೆಯಾಗಿ ಸೇರಿಸಿ"
+  },
+  "quickEntry": {
+    "addRow": "ಈ ಸಾಲನ್ನು ಸೇರಿಸಿ",
+    "saveChanges": "ಬದಲಾವಣೆಗಳನ್ನು ಉಳಿಸಿ",
+    "deleteRow": "ಈ ಸಾಲನ್ನು ಅಳಿಸಿ",
+    "moreDetails": "ಹೆಚ್ಚಿನ ವಿವರಗಳು",
+    "attach": "ಫೈಲ್‌ಗಳನ್ನು ಲಗತ್ತಿಸಿ",
+    "attachedCount": "{{count}} ಫೈಲ್‌ಗಳನ್ನು ಲಗತ್ತಿಸಲಾಗಿದೆ",
+    "openVehicle": "ವಾಹನವನ್ನು ತೆರೆಯಿರಿ",
+    "pickVehicle": "ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "pickVehicleExpense": "ಖರ್ಚುಗಳನ್ನು ದಾಖಲಿಸಲು ಮೇಲೆ ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+    "pickVehicleDocument": "ದಾಖಲೆಗಳನ್ನು ಸೇರಿಸಲು ಮೇಲೆ ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+    "pickVehicleInspection": "ತಪಾಸಣೆಯನ್ನು ದಾಖಲಿಸಲು ಮೇಲೆ ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+    "pickVehicleView": "ಸಂಪೂರ್ಣ ದಾಖಲೆಯನ್ನು ನೋಡಲು ಮೇಲೆ ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+    "categoryRequired": "ವರ್ಗವನ್ನು ನಮೂದಿಸಿ",
+    "documentTypeRequired": "ದಾಖಲೆ ಪ್ರಕಾರವನ್ನು ನಮೂದಿಸಿ",
+    "categoryPlaceholder": "ವರ್ಗವನ್ನು ಆಯ್ಕೆಮಾಡಿ ಅಥವಾ ಟೈಪ್ ಮಾಡಿ",
+    "documentTypePlaceholder": "ಪ್ರಕಾರವನ್ನು ಆಯ್ಕೆಮಾಡಿ ಅಥವಾ ಟೈಪ್ ಮಾಡಿ",
+    "total": "ಒಟ್ಟು",
+    "date": "ದಿನಾಂಕ",
+    "bill": "ಬಿಲ್",
+    "documentNumber": "ದಾಖಲೆ ಸಂಖ್ಯೆ",
+    "issueDate": "ನೀಡಿದ ದಿನಾಂಕ",
+    "expiryDate": "ಮುಕ್ತಾಯ ದಿನಾಂಕ",
+    "issuer": "ನೀಡಿದವರು",
+    "notes": "ಟಿಪ್ಪಣಿಗಳು",
+    "documentUpdated": "ದಾಖಲೆ ನವೀಕರಿಸಲಾಗಿದೆ",
+    "documentRemoved": "ದಾಖಲೆ ತೆಗೆದುಹಾಕಲಾಗಿದೆ",
+    "deleteDocumentConfirm": "ಈ ದಾಖಲೆಯನ್ನು ಅಳಿಸುವುದೇ?",
+    "checklistHint": "Pass → Fail → Pending ಬದಲಿಸಲು ಪ್ರತಿ ಭಾಗವನ್ನು ಕ್ಲಿಕ್ ಮಾಡಿ. {{total}} ರಲ್ಲಿ {{checked}} ಪರಿಶೀಲಿಸಲಾಗಿದೆ.",
+    "weightClick": "ತೂಕ {{weight}}% · ಬದಲಿಸಲು ಕ್ಲಿಕ್ ಮಾಡಿ",
+    "rowSaved": "ಉಳಿಸಲಾಗಿದೆ"
+  },
+  "manageVehicles": {
+    "title": "ವಾಹನ ನಿರ್ವಹಣೆ",
+    "description": "ದಾಖಲೆಯನ್ನು ಸಂಪಾದಿಸಲು ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ, ಅಥವಾ ಹೊಸದನ್ನು ಸೇರಿಸಿ.",
+    "selectToEdit": "ಸಂಪಾದಿಸಬೇಕಾದ ವಾಹನ",
+    "addNew": "ಹೊಸ ವಾಹನ",
+    "cancelNew": "ರದ್ದುಮಾಡಿ",
+    "saveChanges": "ಬದಲಾವಣೆಗಳನ್ನು ಉಳಿಸಿ",
+    "emptyTitle": "ಯಾವುದೇ ವಾಹನ ಆಯ್ಕೆಯಾಗಿಲ್ಲ",
+    "emptyDescription": "ವಿವರಗಳನ್ನು ಸಂಪಾದಿಸಲು ಮೇಲೆ ವಾಹನವನ್ನು ಆಯ್ಕೆಮಾಡಿ, ಅಥವಾ ಹೊಸ ವಾಹನವನ್ನು ಸೇರಿಸಿ."
   }
 }

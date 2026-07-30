@@ -14,7 +14,7 @@ import type { MobileScreen } from "@/mobile/MobileApp";
  */
 export const PAGE_ACCESS: Partial<Record<PageKey, Role[]>> = {
   "add-vehicle": ["owner", "manager", "sales_executive"],
-  "update-vehicle": ["owner", "manager", "sales_executive"],
+  "manage-vehicles": ["owner", "manager", "sales_executive"],
   "quick-add-expense": ["owner", "manager", "sales_executive"],
   "quick-add-document": ["owner", "manager", "sales_executive"],
   "quick-add-inspection": ["owner", "manager", "sales_executive"],

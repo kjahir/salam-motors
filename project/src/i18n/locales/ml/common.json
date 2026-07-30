@@ -32,7 +32,8 @@
     "history": "ചരിത്രം",
     "policies": "നയങ്ങൾ",
     "team": "ടീം",
-    "audit": "ഓഡിറ്റ്"
+    "audit": "ഓഡിറ്റ്",
+    "manageVehicles": "വാഹന നിർവഹണം"
   },
   "dashboard": {
     "title": "ഡാഷ്ബോർഡ്",
@@ -1358,5 +1359,51 @@
         "cancelled": "റദ്ദാക്കി"
       }
     }
+  },
+  "combobox": {
+    "toggle": "ഓപ്ഷനുകൾ കാണിക്കുക",
+    "newValue": "“{{value}}” പുതിയ ഓപ്ഷനായി ചേർക്കുക"
+  },
+  "quickEntry": {
+    "addRow": "ഈ വരി ചേർക്കുക",
+    "saveChanges": "മാറ്റങ്ങൾ സേവ് ചെയ്യുക",
+    "deleteRow": "ഈ വരി നീക്കം ചെയ്യുക",
+    "moreDetails": "കൂടുതൽ വിവരങ്ങൾ",
+    "attach": "ഫയലുകൾ ചേർക്കുക",
+    "attachedCount": "{{count}} ഫയലുകൾ ചേർത്തു",
+    "openVehicle": "വാഹനം തുറക്കുക",
+    "pickVehicle": "വാഹനം തിരഞ്ഞെടുക്കുക",
+    "pickVehicleExpense": "ചെലവുകൾ രേഖപ്പെടുത്താൻ മുകളിൽ വാഹനം തിരഞ്ഞെടുക്കുക.",
+    "pickVehicleDocument": "രേഖകൾ ചേർക്കാൻ മുകളിൽ വാഹനം തിരഞ്ഞെടുക്കുക.",
+    "pickVehicleInspection": "പരിശോധന രേഖപ്പെടുത്താൻ മുകളിൽ വാഹനം തിരഞ്ഞെടുക്കുക.",
+    "pickVehicleView": "പൂർണ്ണ രേഖ കാണാൻ മുകളിൽ വാഹനം തിരഞ്ഞെടുക്കുക.",
+    "categoryRequired": "വിഭാഗം നൽകുക",
+    "documentTypeRequired": "രേഖയുടെ തരം നൽകുക",
+    "categoryPlaceholder": "വിഭാഗം തിരഞ്ഞെടുക്കുക അല്ലെങ്കിൽ ടൈപ്പ് ചെയ്യുക",
+    "documentTypePlaceholder": "തരം തിരഞ്ഞെടുക്കുക അല്ലെങ്കിൽ ടൈപ്പ് ചെയ്യുക",
+    "total": "ആകെ",
+    "date": "തീയതി",
+    "bill": "ബിൽ",
+    "documentNumber": "രേഖ നമ്പർ",
+    "issueDate": "നൽകിയ തീയതി",
+    "expiryDate": "കാലാവധി തീയതി",
+    "issuer": "നൽകിയത്",
+    "notes": "കുറിപ്പുകൾ",
+    "documentUpdated": "രേഖ പുതുക്കി",
+    "documentRemoved": "രേഖ നീക്കം ചെയ്തു",
+    "deleteDocumentConfirm": "ഈ രേഖ ഇല്ലാതാക്കണോ?",
+    "checklistHint": "Pass → Fail → Pending മാറ്റാൻ ഓരോ ഭാഗത്തിലും ക്ലിക്ക് ചെയ്യുക. {{total}}-ൽ {{checked}} പരിശോധിച്ചു.",
+    "weightClick": "വെയ്റ്റ് {{weight}}% · മാറ്റാൻ ക്ലിക്ക് ചെയ്യുക",
+    "rowSaved": "സേവ് ചെയ്തു"
+  },
+  "manageVehicles": {
+    "title": "വാഹന നിർവഹണം",
+    "description": "രേഖ എഡിറ്റ് ചെയ്യാൻ വാഹനം തിരഞ്ഞെടുക്കുക, അല്ലെങ്കിൽ പുതിയത് ചേർക്കുക.",
+    "selectToEdit": "എഡിറ്റ് ചെയ്യേണ്ട വാഹനം",
+    "addNew": "പുതിയ വാഹനം",
+    "cancelNew": "റദ്ദാക്കുക",
+    "saveChanges": "മാറ്റങ്ങൾ സേവ് ചെയ്യുക",
+    "emptyTitle": "വാഹനം തിരഞ്ഞെടുത്തിട്ടില്ല",
+    "emptyDescription": "വിവരങ്ങൾ എഡിറ്റ് ചെയ്യാൻ മുകളിൽ വാഹനം തിരഞ്ഞെടുക്കുക, അല്ലെങ്കിൽ പുതിയ വാഹനം ചേർക്കുക."
   }
 }

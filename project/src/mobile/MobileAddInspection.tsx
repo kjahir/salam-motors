@@ -6,7 +6,8 @@ import { VehicleSelectField } from "./ui/VehicleSelectField";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { SCORE_WEIGHTS } from "@/lib/constants";
-import { QUICK_CHECK_CATEGORIES, STATUS_META, nextStatus, type CheckStatus } from "./MobileInspectionTab";
+import { QUICK_CHECK_CATEGORIES, CHECK_STATUS_SCORE, nextStatus, type CheckStatus } from "@/lib/inspectionChecklist";
+import { STATUS_META } from "./MobileInspectionTab";
 import type { MobileNavigate } from "./MobileApp";
 
 // Full-screen "Add Inspection" page: a multi-row builder over the same quick-check
@@ -54,12 +55,12 @@ export function MobileAddInspection({ vehicleId: initialVehicleId, onNavigate, o
 
       const { error: itemsErr } = await supabase.from("inspection_items").insert(
         QUICK_CHECK_CATEGORIES.map((category) => {
-          const meta = STATUS_META[statuses[category]];
+          const scoring = CHECK_STATUS_SCORE[statuses[category]];
           return {
             inspection_id: inspectionId,
             category,
-            score: meta.score,
-            condition_level: meta.condition,
+            score: scoring.score,
+            condition_level: scoring.condition,
             weight: SCORE_WEIGHTS[category] ?? 0,
           };
         }),

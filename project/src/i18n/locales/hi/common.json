@@ -32,7 +32,8 @@
     "history": "इतिहास",
     "policies": "नीतियां",
     "team": "टीम",
-    "audit": "ऑडिट"
+    "audit": "ऑडिट",
+    "manageVehicles": "वाहन प्रबंधन"
   },
   "dashboard": {
     "title": "डैशबोर्ड",
@@ -1358,5 +1359,51 @@
         "cancelled": "रद्द"
       }
     }
+  },
+  "combobox": {
+    "toggle": "विकल्प दिखाएं",
+    "newValue": "“{{value}}” को नए विकल्प के रूप में जोड़ें"
+  },
+  "quickEntry": {
+    "addRow": "यह पंक्ति जोड़ें",
+    "saveChanges": "बदलाव सहेजें",
+    "deleteRow": "यह पंक्ति हटाएं",
+    "moreDetails": "अधिक विवरण",
+    "attach": "फाइलें जोड़ें",
+    "attachedCount": "{{count}} फाइलें जुड़ी हैं",
+    "openVehicle": "वाहन खोलें",
+    "pickVehicle": "वाहन चुनें",
+    "pickVehicleExpense": "खर्च दर्ज करने के लिए ऊपर वाहन चुनें।",
+    "pickVehicleDocument": "दस्तावेज़ दर्ज करने के लिए ऊपर वाहन चुनें।",
+    "pickVehicleInspection": "निरीक्षण दर्ज करने के लिए ऊपर वाहन चुनें।",
+    "pickVehicleView": "पूरा रिकॉर्ड देखने के लिए ऊपर वाहन चुनें।",
+    "categoryRequired": "श्रेणी दर्ज करें",
+    "documentTypeRequired": "दस्तावेज़ प्रकार दर्ज करें",
+    "categoryPlaceholder": "श्रेणी चुनें या लिखें",
+    "documentTypePlaceholder": "प्रकार चुनें या लिखें",
+    "total": "कुल",
+    "date": "तारीख",
+    "bill": "बिल",
+    "documentNumber": "दस्तावेज़ संख्या",
+    "issueDate": "जारी तिथि",
+    "expiryDate": "समाप्ति तिथि",
+    "issuer": "जारीकर्ता",
+    "notes": "नोट्स",
+    "documentUpdated": "दस्तावेज़ अपडेट हुआ",
+    "documentRemoved": "दस्तावेज़ हटाया गया",
+    "deleteDocumentConfirm": "इस दस्तावेज़ को हटाएं?",
+    "checklistHint": "Pass → Fail → Pending बदलने के लिए किसी भाग पर क्लिक करें। {{total}} में से {{checked}} जांचे गए।",
+    "weightClick": "भार {{weight}}% · बदलने के लिए क्लिक करें",
+    "rowSaved": "सहेजा गया"
+  },
+  "manageVehicles": {
+    "title": "वाहन प्रबंधन",
+    "description": "रिकॉर्ड संपादित करने के लिए वाहन चुनें, या नया जोड़ें।",
+    "selectToEdit": "संपादित करने का वाहन",
+    "addNew": "नया वाहन",
+    "cancelNew": "रद्द करें",
+    "saveChanges": "बदलाव सहेजें",
+    "emptyTitle": "कोई वाहन नहीं चुना गया",
+    "emptyDescription": "विवरण संपादित करने के लिए ऊपर वाहन चुनें, या नया वाहन जोड़ें।"
   }
 }

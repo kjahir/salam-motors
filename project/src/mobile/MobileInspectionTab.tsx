@@ -6,35 +6,17 @@ import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { SCORE_WEIGHTS } from "@/lib/constants";
+import { QUICK_CHECK_CATEGORIES, CHECK_STATUS_SCORE, statusOf, nextStatus, type CheckStatus } from "@/lib/inspectionChecklist";
 import type { VehicleWithRelations, InspectionItem } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
-// The mobile design's simple 6-item Pass/Fail/Pending checklist, mapped onto 6 of our
-// real, weighted INSPECTION_CATEGORIES so the health-score ring stays accurate
-// everywhere — several real categories have no SCORE_WEIGHTS entry and were excluded.
-// Exported so MobileAddInspection.tsx (the full-screen "add a new inspection" page) can
-// reuse the exact same category set and Pass/Fail/Pending scoring semantics rather than
-// reimplementing them.
-export const QUICK_CHECK_CATEGORIES = ["Engine", "Brakes", "Tyres", "Suspension", "Frame and chassis", "Transmission and clutch"];
-
-export type CheckStatus = "pass" | "fail" | "pending";
-
-export function statusOf(item: InspectionItem): CheckStatus {
-  if (item.condition_level === "Good") return "pass";
-  if (item.condition_level === "Poor") return "fail";
-  return "pending";
-}
-
-export function nextStatus(s: CheckStatus): CheckStatus {
-  if (s === "pending") return "pass";
-  if (s === "pass") return "fail";
-  return "pending";
-}
-
-export const STATUS_META: Record<CheckStatus, { label: string; score: number | null; condition: string; icon: typeof CheckCircle2; className: string }> = {
-  pass: { label: "Pass", score: 90, condition: "Good", icon: CheckCircle2, className: "bg-mobile-success-bg text-mobile-success" },
-  fail: { label: "Fail", score: 30, condition: "Poor", icon: XCircle, className: "bg-mobile-error-bg text-mobile-error" },
-  pending: { label: "Pending", score: null, condition: "Not inspected", icon: HelpCircle, className: "bg-mobile-warning-bg text-mobile-warning" },
+// The categories and Pass/Fail/Pending scoring live in @/lib/inspectionChecklist so the
+// desktop QuickAddInspection page can share them; only the mobile presentation (icons and
+// mobile.* tokens) belongs here.
+export const STATUS_META: Record<CheckStatus, { icon: typeof CheckCircle2; className: string }> = {
+  pass: { icon: CheckCircle2, className: "bg-mobile-success-bg text-mobile-success" },
+  fail: { icon: XCircle, className: "bg-mobile-error-bg text-mobile-error" },
+  pending: { icon: HelpCircle, className: "bg-mobile-warning-bg text-mobile-warning" },
 };
 
 export function MobileInspectionTab({ vehicle, overallScore, onChanged, onNavigate }: { vehicle: VehicleWithRelations; overallScore: number | null; onChanged: () => void; onNavigate: MobileNavigate }) {
@@ -81,12 +63,12 @@ export function MobileInspectionTab({ vehicle, overallScore, onChanged, onNaviga
 
   const handleToggle = async (item: InspectionItem) => {
     const next = nextStatus(statusOf(item));
-    const meta = STATUS_META[next];
+    const scoring = CHECK_STATUS_SCORE[next];
     setUpdatingId(item.id);
     try {
       const { error } = await supabase
         .from("inspection_items")
-        .update({ score: meta.score, condition_level: meta.condition })
+        .update({ score: scoring.score, condition_level: scoring.condition })
         .eq("id", item.id);
       if (error) throw error;
       onChanged();
