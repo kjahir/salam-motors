@@ -52,14 +52,38 @@ export async function updateAppSettings(
   if (error) throw error;
 }
 
+/**
+ * `app_settings` is one row per org, so this used to update with no filter at all and
+ * lean entirely on RLS to hit the right row. That made a save that changed nothing
+ * indistinguishable from a save that succeeded: PostgREST answers a zero-row UPDATE with
+ * the same empty 204 as a one-row UPDATE, so a row the caller could read but not write
+ * came back as "saved" and the old value reappeared on reload. The org filter is now
+ * explicit, and `select()` makes the affected row observable so a no-op can be reported
+ * as the failure it is.
+ *
+ * `preferred_language` is derived here rather than passed in: it is the legacy single
+ * "company's own language" column, and keeping it equal to the first non-English entry of
+ * `preferred_languages` means the two can never disagree.
+ */
 export async function updateCompanyPreferences(
-  patch: Pick<AppSettings, "preferred_language" | "instagram_handle" | "twitter_handle" | "whatsapp_business_number" | "website_url" | "google_business_handle">,
+  patch: Pick<AppSettings, "preferred_languages" | "instagram_handle" | "twitter_handle" | "whatsapp_business_number" | "website_url" | "google_business_handle">,
+  orgId: string,
   updatedBy: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const languages = patch.preferred_languages?.length ? patch.preferred_languages : ["en"];
+  const { data, error } = await supabase
     .from("app_settings")
-    .update({ ...patch, updated_by: updatedBy });
+    .update({
+      ...patch,
+      preferred_languages: languages,
+      preferred_language: languages.find((code) => code !== "en") ?? "en",
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("org_id", orgId)
+    .select("org_id");
   if (error) throw error;
+  if (!data?.length) throw new Error("Company settings were not updated - you may not have permission to change them.");
 }
 
 export async function fetchVehicleAdPosts(vehicleId: string): Promise<VehicleAdPost[]> {
@@ -381,7 +405,11 @@ export async function fetchProfitDistributions(): Promise<
 }
 
 export interface AuditLogFilters {
-  entityType?: string;
+  /**
+   * Every `entity_type` spelling that counts as the selected entity. App-code inserts use
+   * the singular ("vehicle"); the generic audit trigger uses the table name ("vehicles").
+   */
+  entityTypes?: string[];
   action?: string;
   actor?: string;
   dateFrom?: string;
@@ -403,7 +431,7 @@ export async function fetchAuditLogs(
     .select("*", { count: "exact" })
     .order("performed_at", { ascending: false })
     .range(page * pageSize, page * pageSize + pageSize - 1);
-  if (filters.entityType) query = query.eq("entity_type", filters.entityType);
+  if (filters.entityTypes?.length) query = query.in("entity_type", filters.entityTypes);
   if (filters.action) query = query.eq("action", filters.action);
   if (filters.actor) query = query.ilike("performed_by", `%${filters.actor}%`);
   if (filters.dateFrom) query = query.gte("performed_at", filters.dateFrom);

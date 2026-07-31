@@ -400,7 +400,10 @@ export interface VehicleComplianceStatus {
 export interface AppSettings {
   estimated_profit_margin_low_pct: number;
   estimated_profit_margin_high_pct: number;
+  /** The company's own language: the first non-English entry of `preferred_languages`. */
   preferred_language: string | null;
+  /** Every language offered in the switcher. Always contains "en". */
+  preferred_languages: string[] | null;
   instagram_handle: string | null;
   twitter_handle: string | null;
   whatsapp_business_number: string | null;

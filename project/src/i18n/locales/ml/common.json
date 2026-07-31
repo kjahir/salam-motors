@@ -26,6 +26,7 @@
     "addVehicle": "വാഹനം ചേർക്കുക",
     "inventory": "ഇൻവെന്ററി",
     "reports": "റിപ്പോർട്ടുകൾ",
+    "setup": "സജ്ജീകരണം",
     "parties": "പാർട്ടികൾ",
     "partners": "പാർട്ണർമാർ",
     "alerts": "അലർട്ടുകൾ",
@@ -572,6 +573,10 @@
     "loadMore": "കൂടുതൽ ലോഡ് ചെയ്യുക ({{count}} ബാക്കി)",
     "totalWithCount": "ആകെ ({{count}})"
   },
+  "mobileSetup": {
+    "title": "സജ്ജീകരണം",
+    "description": "രേഖകൾ, ആളുകൾ, ക്രമീകരണങ്ങൾ"
+  },
   "financeModals": {
     "addInvestmentTitle": "നിക്ഷേപം ചേർക്കുക - {{partner}}",
     "cancel": "റദ്ദാക്കുക",
@@ -1069,7 +1074,8 @@
     },
     "company": {
       "dealershipName": "ഡീലർഷിപ്പിന്റെ പേര്",
-      "preferredLanguage": "ഇഷ്ടപ്പെട്ട ഭാഷ",
+      "preferredLanguages": "ലഭ്യമായ ഭാഷകൾ",
+      "preferredLanguagesHint": "നിങ്ങളുടെ ടീമിന് മാറാൻ കഴിയേണ്ട എല്ലാ ഭാഷകളും തിരഞ്ഞെടുക്കുക. ഇംഗ്ലീഷ് എപ്പോഴും ലഭ്യമാണ്.",
       "instagramHandle": "ഇൻസ്റ്റാഗ്രാം ഹാൻഡിൽ",
       "twitterHandle": "ട്വിറ്റർ / X ഹാൻഡിൽ",
       "whatsappNumber": "വാട്ട്‌സ്ആപ്പ് ബിസിനസ് നമ്പർ",
@@ -1311,6 +1317,20 @@
       "dateFrom": "തീയതി മുതൽ",
       "dateTo": "തീയതി വരെ",
       "clear": "ഫിൽട്ടറുകൾ മായ്ക്കുക"
+    },
+    "entities": {
+      "vehicle": "വാഹനം",
+      "purchase": "വാങ്ങൽ",
+      "purchase_payment": "വാങ്ങൽ പേയ്‌മെന്റ്",
+      "sale": "വിൽപ്പന",
+      "expense": "ചെലവ്",
+      "listing": "ലിസ്റ്റിംഗ്",
+      "party": "കക്ഷി",
+      "partner": "പങ്കാളി",
+      "compliance_policy": "അനുസരണ നയം",
+      "vehicle_document": "രേഖ",
+      "vehicle_media": "ഫോട്ടോ",
+      "profit_distribution": "ലാഭ വിതരണം"
     },
     "columns": {
       "field": "ഫീൽഡ്",

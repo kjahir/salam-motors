@@ -26,6 +26,7 @@
     "addVehicle": "వాహనం జోడించు",
     "inventory": "ఇన్వెంటరీ",
     "reports": "రిపోర్ట్స్",
+    "setup": "సెటప్",
     "parties": "పార్టీలు",
     "partners": "పార్ట్నర్లు",
     "alerts": "అలర్ట్స్",
@@ -572,6 +573,10 @@
     "loadMore": "మరిన్ని లోడ్ చేయండి ({{count}} మిగిలి ఉన్నాయి)",
     "totalWithCount": "మొత్తం ({{count}})"
   },
+  "mobileSetup": {
+    "title": "సెటప్",
+    "description": "రికార్డులు, వ్యక్తులు మరియు సెట్టింగ్‌లు"
+  },
   "financeModals": {
     "addInvestmentTitle": "పెట్టుబడి జోడించండి - {{partner}}",
     "cancel": "రద్దు చేయండి",
@@ -1069,7 +1074,8 @@
     },
     "company": {
       "dealershipName": "డీలర్‌షిప్ పేరు",
-      "preferredLanguage": "ఇష్టపడే భాష",
+      "preferredLanguages": "అందించే భాషలు",
+      "preferredLanguagesHint": "మీ బృందం మారగలిగే ప్రతి భాషను ఎంచుకోండి. ఇంగ్లీష్ ఎల్లప్పుడూ అందుబాటులో ఉంటుంది.",
       "instagramHandle": "Instagram హ్యాండిల్",
       "twitterHandle": "Twitter / X హ్యాండిల్",
       "whatsappNumber": "WhatsApp వ్యాపార నంబర్",
@@ -1311,6 +1317,20 @@
       "dateFrom": "తేదీ నుండి",
       "dateTo": "తేదీ వరకు",
       "clear": "ఫిల్టర్లు క్లియర్ చేయండి"
+    },
+    "entities": {
+      "vehicle": "వాహనం",
+      "purchase": "కొనుగోలు",
+      "purchase_payment": "కొనుగోలు చెల్లింపు",
+      "sale": "అమ్మకం",
+      "expense": "ఖర్చు",
+      "listing": "జాబితా",
+      "party": "పక్షం",
+      "partner": "భాగస్వామి",
+      "compliance_policy": "సమ్మతి విధానం",
+      "vehicle_document": "పత్రం",
+      "vehicle_media": "ఫోటో",
+      "profit_distribution": "లాభ పంపిణీ"
     },
     "columns": {
       "field": "ఫీల్డ్",

@@ -26,6 +26,7 @@
     "addVehicle": "वाहन जोड़ें",
     "inventory": "इन्वेंटरी",
     "reports": "रिपोर्ट",
+    "setup": "सेटअप",
     "parties": "पार्टियां",
     "partners": "पार्टनर",
     "alerts": "अलर्ट",
@@ -572,6 +573,10 @@
     "loadMore": "और लोड करें ({{count}} बाकी)",
     "totalWithCount": "कुल ({{count}})"
   },
+  "mobileSetup": {
+    "title": "सेटअप",
+    "description": "रिकॉर्ड, लोग और सेटिंग्स"
+  },
   "financeModals": {
     "addInvestmentTitle": "निवेश जोड़ें - {{partner}}",
     "cancel": "रद्द करें",
@@ -1069,7 +1074,8 @@
     },
     "company": {
       "dealershipName": "डीलरशिप का नाम",
-      "preferredLanguage": "पसंदीदा भाषा",
+      "preferredLanguages": "उपलब्ध भाषाएँ",
+      "preferredLanguagesHint": "हर वह भाषा चुनें जिनके बीच आपकी टीम बदल सके। अंग्रेज़ी हमेशा उपलब्ध रहती है।",
       "instagramHandle": "इंस्टाग्राम हैंडल",
       "twitterHandle": "ट्विटर / X हैंडल",
       "whatsappNumber": "व्हाट्सएप बिज़नेस नंबर",
@@ -1311,6 +1317,20 @@
       "dateFrom": "तिथि से",
       "dateTo": "तिथि तक",
       "clear": "फ़िल्टर साफ़ करें"
+    },
+    "entities": {
+      "vehicle": "वाहन",
+      "purchase": "खरीद",
+      "purchase_payment": "खरीद भुगतान",
+      "sale": "बिक्री",
+      "expense": "व्यय",
+      "listing": "लिस्टिंग",
+      "party": "पक्ष",
+      "partner": "साझेदार",
+      "compliance_policy": "अनुपालन नीति",
+      "vehicle_document": "दस्तावेज़",
+      "vehicle_media": "फ़ोटो",
+      "profit_distribution": "लाभ वितरण"
     },
     "columns": {
       "field": "फ़ील्ड",

@@ -26,6 +26,7 @@
     "addVehicle": "வாகனம் சேர்",
     "inventory": "இன்வென்டரி",
     "reports": "அறிக்கைகள்",
+    "setup": "அமைப்பு",
     "parties": "தரப்புகள்",
     "partners": "கூட்டாளர்கள்",
     "alerts": "எச்சரிக்கைகள்",
@@ -572,6 +573,10 @@
     "loadMore": "மேலும் ஏற்று ({{count}} மீதம்)",
     "totalWithCount": "மொத்தம் ({{count}})"
   },
+  "mobileSetup": {
+    "title": "அமைப்பு",
+    "description": "பதிவுகள், நபர்கள் மற்றும் அமைப்புகள்"
+  },
   "financeModals": {
     "addInvestmentTitle": "முதலீடு சேர் - {{partner}}",
     "cancel": "ரத்து",
@@ -1069,7 +1074,8 @@
     },
     "company": {
       "dealershipName": "டீலர்ஷிப் பெயர்",
-      "preferredLanguage": "விருப்பமான மொழி",
+      "preferredLanguages": "வழங்கப்படும் மொழிகள்",
+      "preferredLanguagesHint": "உங்கள் குழு மாற்றிக்கொள்ளக்கூடிய அனைத்து மொழிகளையும் தேர்ந்தெடுக்கவும். ஆங்கிலம் எப்போதும் கிடைக்கும்.",
       "instagramHandle": "இன்ஸ்டாகிராம் ஹேண்டில்",
       "twitterHandle": "ட்விட்டர் / X ஹேண்டில்",
       "whatsappNumber": "வாட்ஸ்அப் பிசினஸ் எண்",
@@ -1311,6 +1317,20 @@
       "dateFrom": "தேதி முதல்",
       "dateTo": "தேதி வரை",
       "clear": "வடிகட்டிகளை அழி"
+    },
+    "entities": {
+      "vehicle": "வாகனம்",
+      "purchase": "கொள்முதல்",
+      "purchase_payment": "கொள்முதல் கட்டணம்",
+      "sale": "விற்பனை",
+      "expense": "செலவு",
+      "listing": "பட்டியல்",
+      "party": "தரப்பு",
+      "partner": "பங்குதாரர்",
+      "compliance_policy": "இணக்கக் கொள்கை",
+      "vehicle_document": "ஆவணம்",
+      "vehicle_media": "புகைப்படம்",
+      "profit_distribution": "லாப பங்கீடு"
     },
     "columns": {
       "field": "புலம்",

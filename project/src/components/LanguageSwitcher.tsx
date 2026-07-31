@@ -5,41 +5,42 @@ import { fetchAppSettings } from "@/lib/queries";
 
 interface LanguageSwitcherProps {
   variant?: "sidebar" | "mobile";
-  /** The company's default language (app_settings.preferred_language). Fetched if omitted. */
-  preferredLanguage?: string | null;
+  /** The languages the company offers (app_settings.preferred_languages). Fetched if omitted. */
+  preferredLanguages?: string[] | null;
 }
 
 const isAppLanguage = (code: string | null | undefined): code is AppLanguage =>
   Boolean(code) && languageOptions.some((o) => o.code === code);
 
 /**
- * Two-way toggle rather than a dropdown: English and the company's own language, both
- * visible, one tap apart. Shown only on the Dashboard — a dealer picks their language once,
- * so it does not need to follow them onto every screen.
+ * A pill per language the company has switched on, all visible, one tap apart, rather
+ * than a dropdown. Shown only on the Dashboard - a dealer picks their language once, so
+ * it does not need to follow them onto every screen.
  */
-export function LanguageSwitcher({ variant = "sidebar", preferredLanguage }: LanguageSwitcherProps) {
+export function LanguageSwitcher({ variant = "sidebar", preferredLanguages }: LanguageSwitcherProps) {
   const { i18n, t } = useTranslation();
-  const [companyDefault, setCompanyDefault] = useState<AppLanguage | null>(null);
+  const [companyLanguages, setCompanyLanguages] = useState<AppLanguage[] | null>(null);
   const current = getAppLanguage(i18n.resolvedLanguage ?? i18n.language);
 
   useEffect(() => {
-    if (preferredLanguage !== undefined) return;
+    if (preferredLanguages !== undefined) return;
     let cancelled = false;
     fetchAppSettings()
       .then((s) => {
-        if (!cancelled && isAppLanguage(s.preferred_language)) setCompanyDefault(s.preferred_language);
+        if (!cancelled) setCompanyLanguages((s.preferred_languages ?? []).filter(isAppLanguage));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [preferredLanguage]);
+  }, [preferredLanguages]);
 
-  const preferred = isAppLanguage(preferredLanguage) ? preferredLanguage : companyDefault;
+  const preferred = (preferredLanguages ?? companyLanguages ?? []).filter(isAppLanguage);
 
-  // English, the company's language, and whatever is active right now (so the active
-  // language is always one of the visible options, even if it is neither of the first two).
-  const codes = Array.from(new Set<AppLanguage>(["en", ...(preferred ? [preferred] : []), current]));
+  // English (the i18n fallback, and always part of the stored set), everything the company
+  // switched on, and whatever is active right now - so the active language is always one of
+  // the visible options even if the company has since turned it off.
+  const codes = Array.from(new Set<AppLanguage>(["en", ...preferred, current]));
   if (codes.length < 2) return null;
 
   const isMobile = variant === "mobile";

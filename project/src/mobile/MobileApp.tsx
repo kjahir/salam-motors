@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, Warehouse, Receipt, FileText, ClipboardCheck, X } from "lucide-react";
+import { LayoutDashboard, Bike, FileBarChart, Settings2, Receipt, FileText, ClipboardCheck, X } from "lucide-react";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
+import { MobileSetup } from "./MobileSetup";
+import { MobileDesktopPage } from "./MobileDesktopPage";
+import { Alerts } from "@/pages/Alerts";
+import { Audit } from "@/pages/Audit";
+import { History } from "@/pages/History";
+import { Parties } from "@/pages/Parties";
+import { Partners } from "@/pages/Partners";
+import { Policies } from "@/pages/Policies";
+import { Team } from "@/pages/Team";
+import type { NavigateParams, PageKey } from "@/components/Layout";
 import { MobileVehicleDetail } from "./MobileVehicleDetail";
 import { MobileVehicleForm } from "./MobileVehicleForm";
 import { MobileReports } from "./MobileReports";
@@ -27,7 +37,29 @@ export type MobileScreen =
   | "add-document"
   | "add-inspection"
   | "add-sale"
-  | "view-vehicle";
+  | "view-vehicle"
+  | "setup"
+  // Setup's children: the desktop pages, hosted in the mobile shell (see MobileDesktopPage).
+  | "alerts"
+  | "parties"
+  | "partners"
+  | "team"
+  | "policies"
+  | "history"
+  | "audit";
+
+/** Setup children, so back always returns to Setup and the bottom bar stays hidden. */
+const SETUP_SCREENS: MobileScreen[] = ["alerts", "parties", "partners", "team", "policies", "history", "audit"];
+
+const SETUP_TITLE_KEYS: Record<string, string> = {
+  alerts: "nav.alerts",
+  parties: "nav.parties",
+  partners: "nav.partners",
+  team: "nav.team",
+  policies: "nav.policies",
+  history: "nav.history",
+  audit: "nav.audit",
+};
 
 export interface MobileNavigateParams {
   vehicleId?: string;
@@ -51,7 +83,7 @@ const ADD_TARGETS: { key: string; screen: MobileScreen; labelKey: string; icon: 
 ];
 
 /** Screens that keep the bottom bar (and so can host the vehicle-action row). */
-const BOTTOM_NAV_SCREENS: MobileScreen[] = ["dashboard", "inventory", "reports", "vehicle"];
+const BOTTOM_NAV_SCREENS: MobileScreen[] = ["dashboard", "inventory", "reports", "vehicle", "setup"];
 
 export interface MobileNavigate {
   (screen: MobileScreen, params?: MobileNavigateParams): void;
@@ -153,8 +185,12 @@ export function MobileApp() {
     return () => registerNavigation(null);
   }, [canAccessMobileTab, navigate, registerNavigation, screen, vehicleId]);
 
-  const isTabActive = (key: "dashboard" | "inventory" | "reports") => {
-    if (key === "inventory") return screen === "inventory" || screen === "vehicle" || screen === "edit-vehicle";
+  // Inventory no longer has its own tab - it is reached through Setup - so the vehicle
+  // screens it leads to light up Setup, which is the tab they now sit under.
+  const isTabActive = (key: "dashboard" | "reports" | "setup") => {
+    if (key === "setup") {
+      return screen === "setup" || screen === "inventory" || screen === "vehicle" || screen === "edit-vehicle" || SETUP_SCREENS.includes(screen);
+    }
     return screen === key;
   };
 
@@ -179,6 +215,32 @@ export function MobileApp() {
     if (origin) return navigate(origin);
     return vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("inventory");
   };
+
+  /**
+   * The Setup screens are the desktop page components, so they hand back desktop PageKeys.
+   * A vehicle is the only destination any of them actually links to; map that onto the
+   * mobile vehicle screens and let anything else fall through rather than dead-end.
+   */
+  const desktopNavigate = (page: PageKey, params?: NavigateParams) => {
+    const targetVehicleId = params?.vehicleId ?? params?.historyVehicleId;
+    if ((page === "vehicle" || page === "passport") && targetVehicleId) {
+      if (params?.openEditVehicle) {
+        navigate("edit-vehicle", { vehicleId: targetVehicleId });
+      } else {
+        navigate("vehicle", { vehicleId: targetVehicleId, tab: params?.tab, highlightPolicyId: params?.highlightPolicyId });
+      }
+      return;
+    }
+    if (page === "inventory" || page === "dashboard") navigate(page);
+  };
+
+  // A plain function, not a component: an inline component would be a new type on every
+  // render and would remount (and so reset) the hosted page's state.
+  const setupPage = (target: MobileScreen, content: React.ReactNode) => (
+    <MobileDesktopPage title={t(SETUP_TITLE_KEYS[target])} onBack={() => navigate("setup")}>
+      {content}
+    </MobileDesktopPage>
+  );
 
   const renderScreen = () => {
     switch (screen) {
@@ -220,6 +282,22 @@ export function MobileApp() {
         return <MobileAddSale vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("sale")} />;
       case "view-vehicle":
         return <MobileViewVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={() => navigate("inventory")} />;
+      case "setup":
+        return <MobileSetup onNavigate={navigate} />;
+      case "alerts":
+        return setupPage("alerts", <Alerts onNavigate={desktopNavigate} />);
+      case "parties":
+        return setupPage("parties", <Parties onNavigate={desktopNavigate} />);
+      case "partners":
+        return setupPage("partners", <Partners onNavigate={desktopNavigate} />);
+      case "team":
+        return setupPage("team", <Team />);
+      case "policies":
+        return setupPage("policies", <Policies />);
+      case "history":
+        return setupPage("history", <History vehicleFilter={null} />);
+      case "audit":
+        return setupPage("audit", <Audit />);
       default:
         return <MobileDashboard onNavigate={navigate} />;
     }
@@ -267,13 +345,6 @@ export function MobileApp() {
                 label={t("nav.dashboard")}
                 onClick={() => navigate("dashboard")}
               />
-              <NavButton
-                active={isTabActive("inventory")}
-                disabled={addRowOpen}
-                icon={<Warehouse size={20} />}
-                label={t("nav.inventory")}
-                onClick={() => navigate("inventory")}
-              />
               {canAddVehicle && (
                 <button
                   onClick={() => setAddRowOpen((o) => !o)}
@@ -298,6 +369,13 @@ export function MobileApp() {
                   onClick={() => navigate("reports")}
                 />
               )}
+              <NavButton
+                active={isTabActive("setup")}
+                disabled={addRowOpen}
+                icon={<Settings2 size={20} />}
+                label={t("nav.setup")}
+                onClick={() => navigate("setup")}
+              />
             </div>
           </nav>
         </div>

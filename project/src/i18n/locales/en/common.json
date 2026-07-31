@@ -26,6 +26,7 @@
     "addVehicle": "Add Vehicle",
     "inventory": "Inventory",
     "reports": "Reports",
+    "setup": "Setup",
     "parties": "Parties",
     "partners": "Partners",
     "alerts": "Alerts",
@@ -572,6 +573,10 @@
     "loadMore": "Load more ({{count}} remaining)",
     "totalWithCount": "Total ({{count}})"
   },
+  "mobileSetup": {
+    "title": "Setup",
+    "description": "Records, people and settings"
+  },
   "financeModals": {
     "addInvestmentTitle": "Add Investment - {{partner}}",
     "cancel": "Cancel",
@@ -1069,7 +1074,8 @@
     },
     "company": {
       "dealershipName": "Dealership Name",
-      "preferredLanguage": "Preferred language",
+      "preferredLanguages": "Languages offered",
+      "preferredLanguagesHint": "Pick every language your team should be able to switch between. English is always available.",
       "instagramHandle": "Instagram handle",
       "twitterHandle": "Twitter / X handle",
       "whatsappNumber": "WhatsApp business number",
@@ -1311,6 +1317,20 @@
       "dateFrom": "From date",
       "dateTo": "To date",
       "clear": "Clear filters"
+    },
+    "entities": {
+      "vehicle": "Vehicle",
+      "purchase": "Purchase",
+      "purchase_payment": "Purchase payment",
+      "sale": "Sale",
+      "expense": "Expense",
+      "listing": "Listing",
+      "party": "Party",
+      "partner": "Partner",
+      "compliance_policy": "Compliance policy",
+      "vehicle_document": "Document",
+      "vehicle_media": "Photo",
+      "profit_distribution": "Profit distribution"
     },
     "columns": {
       "field": "Field",

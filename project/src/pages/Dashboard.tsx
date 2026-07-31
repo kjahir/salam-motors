@@ -225,7 +225,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         description={t("dashboard.description")}
         actions={
           <>
-            <LanguageSwitcher preferredLanguage={settings?.preferred_language ?? null} />
+            <LanguageSwitcher preferredLanguages={settings?.preferred_languages ?? null} />
             <button onClick={() => onNavigate("quick-add-sale")} className="btn-sell">
               <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
             </button>

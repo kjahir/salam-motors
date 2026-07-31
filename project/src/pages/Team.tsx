@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/useAuth";
 import { fetchMemberships, fetchAppSettings, updateCompanyPreferences } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { ROLES, ROLE_LABELS } from "@/lib/constants";
-import { languageOptions } from "@/i18n";
+import { getAppLanguage, languageOptions } from "@/i18n";
 import type { AppSettings, Membership, Role } from "@/lib/types";
 
 const emptyForm = {
@@ -18,6 +18,18 @@ const emptyForm = {
   display_name: "",
   role: "sales_executive" as Role,
 };
+
+/**
+ * English is always on and cannot be switched off: it is the i18n fallback locale, so a
+ * company without it could strand a user on untranslated keys. It is also pinned first so
+ * the stored order matches the order of the pills in the language switcher.
+ */
+function normalizeLanguages(codes: string[]): string[] {
+  const supported = new Set(languageOptions.map((option) => option.code as string));
+  const selected = new Set(codes.filter((code) => supported.has(code)));
+  selected.add("en");
+  return languageOptions.map((option) => option.code as string).filter((code) => selected.has(code));
+}
 
 export function Team() {
   const [members, setMembers] = useState<Membership[]>([]);
@@ -31,7 +43,7 @@ export function Team() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [companyForm, setCompanyForm] = useState({
     name: "",
-    preferred_language: "en",
+    preferred_languages: ["en"] as string[],
     instagram_handle: "",
     twitter_handle: "",
     whatsapp_business_number: "",
@@ -41,7 +53,7 @@ export function Team() {
   const [savingCompany, setSavingCompany] = useState(false);
   const { toast } = useToast();
   const { orgId, role: myRole, user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const roleLabel = (role: Role) => t("roles." + role, { defaultValue: ROLE_LABELS[role] });
   const isOwner = myRole === "owner";
   const canEditCompany = myRole === "owner" || myRole === "manager";
@@ -67,7 +79,7 @@ export function Team() {
     setSettings(appSettings);
     setCompanyForm({
       name: orgRow?.name ?? "",
-      preferred_language: appSettings.preferred_language ?? "en",
+      preferred_languages: normalizeLanguages(appSettings.preferred_languages ?? [appSettings.preferred_language ?? "en"]),
       instagram_handle: appSettings.instagram_handle ?? "",
       twitter_handle: appSettings.twitter_handle ?? "",
       whatsapp_business_number: appSettings.whatsapp_business_number ?? "",
@@ -84,8 +96,19 @@ export function Team() {
     reloadCompany();
   }, [reloadCompany]);
 
+  const toggleLanguage = (code: string) => {
+    setCompanyForm((f) => ({
+      ...f,
+      preferred_languages: normalizeLanguages(
+        f.preferred_languages.includes(code)
+          ? f.preferred_languages.filter((c) => c !== code)
+          : [...f.preferred_languages, code],
+      ),
+    }));
+  };
+
   const handleSaveCompany = async () => {
-    if (!user) return;
+    if (!user || !orgId) return;
     setSavingCompany(true);
     try {
       const trimmedName = companyForm.name.trim();
@@ -96,17 +119,24 @@ export function Team() {
           .eq("id", orgId);
         if (nameError) throw nameError;
       }
+      const languages = normalizeLanguages(companyForm.preferred_languages);
       await updateCompanyPreferences(
         {
-          preferred_language: companyForm.preferred_language || null,
+          preferred_languages: languages,
           instagram_handle: companyForm.instagram_handle.trim().replace(/^@/, "") || null,
           twitter_handle: companyForm.twitter_handle.trim().replace(/^@/, "") || null,
           whatsapp_business_number: companyForm.whatsapp_business_number.trim() || null,
           website_url: companyForm.website_url.trim() || null,
           google_business_handle: companyForm.google_business_handle.trim().replace(/^@/, "") || null,
         },
+        orgId,
         user.email ?? user.id,
       );
+      // A language that was just switched off must not stay on screen, or the dealer is
+      // left reading a language the company no longer offers with no pill to leave it by.
+      if (!languages.includes(getAppLanguage(i18n.resolvedLanguage ?? i18n.language))) {
+        await i18n.changeLanguage(languages[0]);
+      }
       toast(t("teamPage.company.saved"), "success");
       await reloadCompany();
     } catch (e) {
@@ -234,13 +264,30 @@ export function Team() {
             />
             {!isOwner && <p className="text-xs text-slate-400 mt-1">{t("teamPage.company.ownerOnlyName")}</p>}
           </Field>
-          <Field label={t("teamPage.company.preferredLanguage")}>
-            <Select
-              value={companyForm.preferred_language}
-              onChange={(v) => setCompanyForm((f) => ({ ...f, preferred_language: v }))}
-              options={languageOptions.map((option) => ({ value: option.code, label: option.nativeName }))}
-              className={canEditCompany ? "" : "pointer-events-none opacity-60"}
-            />
+          <Field label={t("teamPage.company.preferredLanguages")} hint={t("teamPage.company.preferredLanguagesHint")}>
+            <div className="flex flex-wrap gap-2">
+              {languageOptions.map((option) => {
+                const checked = companyForm.preferred_languages.includes(option.code);
+                const locked = option.code === "en";
+                return (
+                  <label
+                    key={option.code}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      checked ? "border-brand-300 bg-brand-50 text-brand-800" : "border-slate-200 text-slate-700"
+                    } ${canEditCompany && !locked ? "cursor-pointer" : "cursor-default opacity-70"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-600"
+                      checked={checked}
+                      disabled={!canEditCompany || locked}
+                      onChange={() => toggleLanguage(option.code)}
+                    />
+                    {option.nativeName}
+                  </label>
+                );
+              })}
+            </div>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label={t("teamPage.company.instagramHandle")}>

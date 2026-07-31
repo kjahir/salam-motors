@@ -26,6 +26,7 @@
     "addVehicle": "ವಾಹನ ಸೇರಿಸಿ",
     "inventory": "ಇನ್ವೆಂಟರಿ",
     "reports": "ವರದಿಗಳು",
+    "setup": "ಸೆಟಪ್",
     "parties": "ಪಾರ್ಟಿಗಳು",
     "partners": "ಪಾರ್ಟ್ನರ್‌ಗಳು",
     "alerts": "ಅಲರ್ಟ್‌ಗಳು",
@@ -572,6 +573,10 @@
     "loadMore": "ಇನ್ನಷ್ಟು ಲೋಡ್ ಮಾಡಿ ({{count}} ಬಾಕಿ)",
     "totalWithCount": "ಒಟ್ಟು ({{count}})"
   },
+  "mobileSetup": {
+    "title": "ಸೆಟಪ್",
+    "description": "ದಾಖಲೆಗಳು, ಜನರು ಮತ್ತು ಸೆಟ್ಟಿಂಗ್‌ಗಳು"
+  },
   "financeModals": {
     "addInvestmentTitle": "ಹೂಡಿಕೆ ಸೇರಿಸಿ - {{partner}}",
     "cancel": "ರದ್ದುಮಾಡಿ",
@@ -1069,7 +1074,8 @@
     },
     "company": {
       "dealershipName": "ಡೀಲರ್‌ಶಿಪ್ ಹೆಸರು",
-      "preferredLanguage": "ಆದ್ಯತೆಯ ಭಾಷೆ",
+      "preferredLanguages": "ನೀಡಲಾದ ಭಾಷೆಗಳು",
+      "preferredLanguagesHint": "ನಿಮ್ಮ ತಂಡ ಬದಲಾಯಿಸಬಹುದಾದ ಎಲ್ಲಾ ಭಾಷೆಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ. ಇಂಗ್ಲಿಷ್ ಯಾವಾಗಲೂ ಲಭ್ಯವಿದೆ.",
       "instagramHandle": "ಇನ್‌ಸ್ಟಾಗ್ರಾಮ್ ಹ್ಯಾಂಡಲ್",
       "twitterHandle": "ಟ್ವಿಟರ್ / X ಹ್ಯಾಂಡಲ್",
       "whatsappNumber": "ವಾಟ್ಸ್‌ಆ್ಯಪ್ ವ್ಯಾಪಾರ ಸಂಖ್ಯೆ",
@@ -1311,6 +1317,20 @@
       "dateFrom": "ದಿನಾಂಕದಿಂದ",
       "dateTo": "ದಿನಾಂಕದವರೆಗೆ",
       "clear": "ಫಿಲ್ಟರ್‌ಗಳನ್ನು ತೆರವುಗೊಳಿಸಿ"
+    },
+    "entities": {
+      "vehicle": "ವಾಹನ",
+      "purchase": "ಖರೀದಿ",
+      "purchase_payment": "ಖರೀದಿ ಪಾವತಿ",
+      "sale": "ಮಾರಾಟ",
+      "expense": "ವೆಚ್ಚ",
+      "listing": "ಪಟ್ಟಿ",
+      "party": "ಪಕ್ಷ",
+      "partner": "ಪಾಲುದಾರ",
+      "compliance_policy": "ಅನುಸರಣೆ ನೀತಿ",
+      "vehicle_document": "ದಾಖಲೆ",
+      "vehicle_media": "ಫೋಟೋ",
+      "profit_distribution": "ಲಾಭ ಹಂಚಿಕೆ"
     },
     "columns": {
       "field": "ಕ್ಷೇತ್ರ",

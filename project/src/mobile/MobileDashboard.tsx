@@ -185,9 +185,9 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       <div className="px-4 pt-5">
         <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.quickActions")}</p>
         <div className="grid grid-cols-3 gap-3">
-          <BigAction icon={<PlusCircle size={26} />} label={t("mobileDashboard.addVehicle")} tone="primary" onClick={() => onNavigate("add-vehicle")} />
-          <BigAction icon={<ShoppingCart size={26} />} label={t("dashboard.sellVehicle")} tone="success" onClick={() => onNavigate("add-sale")} />
-          <BigAction icon={<ClipboardList size={26} />} label={t("mobileDashboard.viewReports")} tone="navy" onClick={() => onNavigate("reports")} />
+          <QuickAction icon={<PlusCircle size={24} />} label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
+          <QuickAction icon={<ShoppingCart size={24} />} label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
+          <QuickAction icon={<ClipboardList size={24} />} label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
         </div>
       </div>
 
@@ -258,21 +258,19 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   );
 }
 
-/** Icon-first shortcut: the icon carries the meaning, the label just confirms it. */
-function BigAction({ icon, label, tone, onClick }: {
+/**
+ * Icon-first shortcut, deliberately unfilled: no tile, no colour block, no shadow. These
+ * are conveniences, not the dashboard's headline - the figures above them are. The 44px
+ * tap target is kept via the padded hit area rather than a visible button surface.
+ */
+function QuickAction({ icon, label, onClick }: {
   icon: ReactNode;
   label: string;
-  tone: "primary" | "success" | "navy";
   onClick: () => void;
 }) {
-  const tones = {
-    primary: "bg-mobile-primary text-white",
-    success: "bg-mobile-success text-white",
-    navy: "bg-mobile-navy text-white",
-  };
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-2 active:opacity-80">
-      <span className={`flex h-16 w-16 items-center justify-center rounded-2xl shadow-mobile-md ${tones[tone]}`}>{icon}</span>
+    <button onClick={onClick} className="flex flex-col items-center gap-2 py-2 active:opacity-60">
+      <span className="flex h-11 w-11 items-center justify-center text-mobile-text-secondary">{icon}</span>
       <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
     </button>
   );

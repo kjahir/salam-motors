@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { ScrollText, AlertTriangle, ChevronDown, ChevronRight, ChevronLeft, X, Bot, Activity, FileJson2 } from "lucide-react";
 import { PageHeader, Tabs, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
@@ -21,43 +22,46 @@ import type {
   ToolEntitySummary,
 } from "@/lib/types";
 
-const ENTITY_TYPE_OPTIONS = [
-  "vehicle",
-  "vehicles",
-  "purchase",
-  "purchases",
-  "purchase_payments",
-  "sale",
-  "sales",
-  "expense",
-  "expenses",
-  "listing",
-  "listings",
-  "party",
-  "parties",
-  "partner",
-  "partners",
-  "compliance_policies",
-  "vehicle_documents",
-  "vehicle_media",
-  "profit_distributions",
+/*
+ * One entry per business entity, not per `entity_type` string. The same entity is
+ * written under two different names depending on who wrote the row: hand-rolled
+ * `audit_logs.insert(...)` call sites in app code use the singular ("vehicle",
+ * "purchase"), while the generic database trigger
+ * (20260728130000_generic_audit_trigger.sql) uses `TG_TABLE_NAME`, which is the plural
+ * table name ("vehicles", "purchases"). Listing both spellings made the filter look like
+ * it had duplicates and split one entity's history across two options - so each option
+ * now carries every alias it should match, and the query filters with `in`.
+ */
+const ENTITY_TYPE_OPTIONS: { key: string; aliases: string[] }[] = [
+  { key: "vehicle", aliases: ["vehicle", "vehicles"] },
+  { key: "purchase", aliases: ["purchase", "purchases"] },
+  { key: "purchase_payment", aliases: ["purchase_payment", "purchase_payments"] },
+  { key: "sale", aliases: ["sale", "sales"] },
+  { key: "expense", aliases: ["expense", "expenses"] },
+  { key: "listing", aliases: ["listing", "listings"] },
+  { key: "party", aliases: ["party", "parties"] },
+  { key: "partner", aliases: ["partner", "partners"] },
+  { key: "compliance_policy", aliases: ["compliance_policy", "compliance_policies"] },
+  { key: "vehicle_document", aliases: ["vehicle_document", "vehicle_documents"] },
+  { key: "vehicle_media", aliases: ["vehicle_media"] },
+  { key: "profit_distribution", aliases: ["profit_distribution", "profit_distributions"] },
 ];
 
 const ACTION_OPTIONS = ["created", "updated", "deleted", "sold"];
 
-const ACTION_COLOR: Record<string, "emerald" | "blue" | "red" | "amber" | "slate"> = {
-  created: "emerald",
-  updated: "blue",
-  deleted: "red",
-  sold: "amber",
-};
+/** Maps any stored `entity_type` spelling back to the single option it belongs to. */
+const ENTITY_KEY_BY_ALIAS = new Map(
+  ENTITY_TYPE_OPTIONS.flatMap((option) => option.aliases.map((alias) => [alias, option.key] as const)),
+);
 
-const SOURCE_COLOR: Record<string, "slate" | "purple" | "brand" | "orange"> = {
-  app: "slate",
-  trigger: "purple",
-  assistant: "brand",
-  system: "orange",
-};
+/**
+ * Business Activity rows show the entity under one name whichever writer produced them,
+ * so a trigger-written "vehicles" row and an app-written "vehicle" row read identically.
+ */
+function entityLabel(entityType: string, t: TFunction): string {
+  const key = ENTITY_KEY_BY_ALIAS.get(entityType);
+  return key ? t(`auditPage.entities.${key}`, { defaultValue: key }) : entityType;
+}
 
 function formatDiffValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -126,7 +130,9 @@ function BusinessActivityTab() {
 
   const filters: AuditLogFilters = useMemo(
     () => ({
-      entityType: entityType || undefined,
+      entityTypes: entityType
+        ? ENTITY_TYPE_OPTIONS.find((option) => option.key === entityType)?.aliases
+        : undefined,
       action: action || undefined,
       actor: actor || undefined,
       dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
@@ -186,7 +192,10 @@ function BusinessActivityTab() {
             value={entityType}
             onChange={setEntityType}
             placeholder={t("auditPage.filters.allEntities")}
-            options={ENTITY_TYPE_OPTIONS.map((v) => ({ value: v, label: v }))}
+            options={ENTITY_TYPE_OPTIONS.map((option) => ({
+              value: option.key,
+              label: t(`auditPage.entities.${option.key}`, { defaultValue: option.key }),
+            }))}
           />
           <Select
             value={action}
@@ -246,10 +255,7 @@ function BusinessActivityTab() {
                         ) : (
                           <span className="w-3.5 shrink-0" />
                         )}
-                        <Badge color={ACTION_COLOR[row.action] ?? "slate"}>{t(`auditPage.actions.${row.action}`, { defaultValue: row.action })}</Badge>
-                        <span className="text-sm font-medium text-slate-900">{row.entity_type}</span>
-                        {row.entity_id && <span className="text-xs text-slate-400 font-mono">{row.entity_id.slice(0, 8)}</span>}
-                        <Badge color={SOURCE_COLOR[row.source] ?? "slate"}>{t(`auditPage.sources.${row.source}`, { defaultValue: row.source })}</Badge>
+                        <span className="text-sm font-medium text-slate-900">{entityLabel(row.entity_type, t)}</span>
                         <span className="text-xs text-slate-500 ml-auto">{row.performed_by ?? "—"}</span>
                         <span className="text-xs text-slate-400">{formatDate(row.performed_at, { withTime: true })}</span>
                       </div>
