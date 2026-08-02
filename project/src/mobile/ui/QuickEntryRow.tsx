@@ -173,10 +173,20 @@ export function Combobox({ value, onChange, options, placeholder }: {
 
       {open && (
         <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-mobile-border bg-white py-1 shadow-mobile-lg animate-fade-in">
+          {/* Tappable, not a caption: this row used to be a <div>, so "+ Add …" looked like an
+              option but did nothing, and the typed value was only ever kept by dismissing the
+              dropdown some other way. Committing the trimmed text is what it always implied. */}
           {isNew && (
-            <div className="flex items-center gap-1.5 bg-mobile-success-bg px-3.5 py-2 text-xs text-mobile-success">
-              <Plus size={12} /> {t("combobox.newValue", { value: value.trim() })}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onChange(value.trim());
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-1.5 bg-mobile-success-bg px-3.5 py-2.5 text-left text-xs font-medium text-mobile-success active:bg-mobile-success/20"
+            >
+              <Plus size={12} className="shrink-0" /> {t("combobox.newValue", { value: value.trim() })}
+            </button>
           )}
           {suggestions.map((option) => (
             <button

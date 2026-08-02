@@ -679,7 +679,8 @@
     "paidToPartners": "പങ്കാളികൾക്ക് ആകെ നൽകിയത്",
     "readyForSale": "വിൽപ്പനയ്ക്ക് തയ്യാർ",
     "totalSold": "ആകെ വിറ്റത്",
-    "underRepair": "അറ്റകുറ്റപ്പണിയിൽ"
+    "underRepair": "അറ്റകുറ്റപ്പണിയിൽ",
+    "totalAmountInvested": "ആകെ നിക്ഷേപ തുക"
   },
   "mobileInventory": {
     "title": "ഇൻവെന്ററി",
@@ -763,7 +764,9 @@
     "belowCostWarning": "ഈ വിൽപ്പന ചെലവിനേക്കാൾ കുറവാണ് - കുറിപ്പുകളിൽ ഒരു കാരണം ആവശ്യമാണ്.",
     "nonBlockingIssues_one": "{{count}} തടസ്സമല്ലാത്ത പ്രശ്നം: {{list}}",
     "nonBlockingIssues_other": "{{count}} തടസ്സമല്ലാത്ത പ്രശ്നങ്ങൾ: {{list}}",
-    "acknowledgeAndProceed": "അംഗീകരിച്ച് തുടരുക"
+    "acknowledgeAndProceed": "അംഗീകരിച്ച് തുടരുക",
+    "paymentProof": "പേയ്‌മെന്റ് തെളിവ്",
+    "paymentProofHint": "സ്ക്രീൻഷോട്ടോ രസീതോ ചേർക്കുക"
   },
   "mobileExpenses": {
     "totalExpenses": "മൊത്തം ചെലവുകൾ",
@@ -794,7 +797,11 @@
     "saveCount_one": "{{count}} ചെലവ് സേവ് ചെയ്യുക",
     "saveCount_other": "{{count}} ചെലവുകൾ സേവ് ചെയ്യുക",
     "addedCount_one": "{{count}} ചെലവ് ചേർത്തു",
-    "addedCount_other": "{{count}} ചെലവുകൾ ചേർത്തു"
+    "addedCount_other": "{{count}} ചെലവുകൾ ചേർത്തു",
+    "purchaseCost": "വാങ്ങൽ",
+    "totalExpense": "മൊത്തം ചെലവ്",
+    "combinedTotal": "ആകെ തുക",
+    "deleteConfirmBody": "ഈ ചെലവ് വാഹനത്തിന്റെ ചെലവുകളിൽ നിന്ന് നീക്കം ചെയ്യും."
   },
   "mobileInspection": {
     "overall": "മൊത്തം",

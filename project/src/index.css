@@ -98,6 +98,11 @@
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
   }
+  /* Icon-only variant: drops the text padding to near-square while keeping .btn's height,
+     so it lines up with an .input beside it. Always pair with an aria-label and title. */
+  .btn-icon {
+    @apply px-2.5 shrink-0;
+  }
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
   }

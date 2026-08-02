@@ -679,7 +679,8 @@
     "paidToPartners": "Total Paid to Partners",
     "readyForSale": "Ready for Sale",
     "totalSold": "Total Sold",
-    "underRepair": "Under Repair"
+    "underRepair": "Under Repair",
+    "totalAmountInvested": "Total Amount Invested"
   },
   "mobileInventory": {
     "title": "Inventory",
@@ -763,7 +764,9 @@
     "belowCostWarning": "This sale is below cost - a reason is required in notes.",
     "nonBlockingIssues_one": "{{count}} non-blocking issue: {{list}}",
     "nonBlockingIssues_other": "{{count}} non-blocking issues: {{list}}",
-    "acknowledgeAndProceed": "Acknowledge and proceed"
+    "acknowledgeAndProceed": "Acknowledge and proceed",
+    "paymentProof": "Payment Proof",
+    "paymentProofHint": "Attach a screenshot or receipt"
   },
   "mobileExpenses": {
     "totalExpenses": "Total Expenses",
@@ -794,7 +797,11 @@
     "saveCount_one": "Save {{count}} Expense",
     "saveCount_other": "Save {{count}} Expenses",
     "addedCount_one": "{{count}} expense added",
-    "addedCount_other": "{{count}} expenses added"
+    "addedCount_other": "{{count}} expenses added",
+    "purchaseCost": "Purchase",
+    "totalExpense": "Total expense",
+    "combinedTotal": "Combined total",
+    "deleteConfirmBody": "This expense will be removed from the vehicle's costs."
   },
   "mobileInspection": {
     "overall": "Overall",

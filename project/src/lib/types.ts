@@ -315,6 +315,7 @@ export interface SalePayment {
   reference: string | null;
   paid_at: string;
   notes: string | null;
+  proof_urls: string[] | null;
 }
 
 export interface ProfitShareAllocation {

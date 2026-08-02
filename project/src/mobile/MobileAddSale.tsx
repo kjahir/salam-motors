@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Check, FileText, Images, Paperclip, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Spinner, Card, Field, Button } from "./ui/primitives";
 import { VehicleSelectField } from "./ui/VehicleSelectField";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { useToast } from "@/components/ui/useToast";
+import { useMultiFileUpload } from "@/hooks/useMultiFileUpload";
 import { useAuth } from "@/lib/useAuth";
+import type { UploadedFile } from "@/lib/uploadedFile";
 import { computeCostBreakdown, computePartnerFunding } from "@/lib/calc";
 import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
@@ -32,6 +34,7 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [loading, setLoading] = useState(Boolean(vehicleId));
   const [form, setForm] = useState({ buyer_party_id: "", sale_price: "", discount: "0", buyer_charges: "0", payment_method: "UPI", notes: "" });
+  const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [acknowledgingAll, setAcknowledgingAll] = useState(false);
   const { toast } = useToast();
@@ -52,6 +55,7 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
     let cancelled = false;
     setLoading(true);
     setForm({ buyer_party_id: "", sale_price: "", discount: "0", buyer_charges: "0", payment_method: "UPI", notes: "" });
+    setProofFiles([]);
     Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies()]).then(([v, p, pol]) => {
       if (cancelled) return;
       setVehicle(v);
@@ -108,6 +112,7 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
           delivery_status: "Pending",
           delivery_location: "",
           notes: form.notes,
+          payment_proof_paths: proofFiles.map((f) => f.path),
         },
         user?.email ?? t("auth.user"),
         complianceViolations,
@@ -180,6 +185,7 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
                   {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{trStatus(m)}</option>)}
                 </select>
               </Field>
+              <PaymentProofField vehicleId={vehicleId} value={proofFiles} onChange={setProofFiles} />
               <Field label={t("mobileVehicle.notes")} required={isBelowCost} hint={isBelowCost ? t("mobileVehicle.belowCostHint") : undefined}>
                 <textarea className="w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
               </Field>
@@ -202,5 +208,109 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Paperclip + a two-option menu for the buyer's payment evidence, rather than the full
+ * FileUploadGrid: a sale takes one screenshot or receipt, not a photo shoot, and offering
+ * "Take Photo" for a UPI confirmation that is already on the phone is noise. Files upload
+ * immediately (like every other upload here) and are attached to sale_payments.proof_urls
+ * when the sale is recorded — abandoning the screen leaves them orphaned in the bucket,
+ * same as the purchase-payment proofs on MobileVehicleForm.
+ */
+function PaymentProofField({ vehicleId, value, onChange }: {
+  vehicleId: string;
+  value: UploadedFile[];
+  onChange: (files: UploadedFile[]) => void;
+}) {
+  const { t } = useTranslation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const { uploading, libraryRef, fileRef, openLibrary, openFile, handleLibraryChange, handleFileChange, removeAt } =
+    useMultiFileUpload({ bucket: "finance-proofs", pathPrefix: `sale-payments/${vehicleId}`, value, onChange });
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [menuOpen]);
+
+  const pick = (open: () => void) => {
+    setMenuOpen(false);
+    open();
+  };
+
+  return (
+    <Field label={t("mobileVehicle.paymentProof")}>
+      <input ref={libraryRef} type="file" accept="image/*" multiple onChange={handleLibraryChange} className="hidden" />
+      <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={handleFileChange} className="hidden" />
+
+      <div ref={wrapRef} className="relative">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            disabled={uploading}
+            aria-label={t("quickEntry.attach")}
+            aria-expanded={menuOpen}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors disabled:opacity-50 ${
+              value.length > 0
+                ? "border-mobile-success bg-mobile-success-bg text-mobile-success"
+                : "border-mobile-border bg-mobile-card text-mobile-text-secondary"
+            }`}
+          >
+            {uploading ? <Spinner size={16} /> : <Paperclip size={18} />}
+          </button>
+          <span className="text-xs text-mobile-text-muted">
+            {value.length > 0 ? t("quickEntry.attachedCount", { count: value.length }) : t("mobileVehicle.paymentProofHint")}
+          </span>
+        </div>
+
+        {menuOpen && (
+          <div className="absolute left-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-mobile-border bg-white py-1 shadow-mobile-lg animate-fade-in">
+            <button
+              type="button"
+              onClick={() => pick(openLibrary)}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-mobile-text active:bg-mobile-bg"
+            >
+              <Images size={16} className="text-mobile-text-secondary" /> {t("uploads.photoLibrary")}
+            </button>
+            <button
+              type="button"
+              onClick={() => pick(openFile)}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-mobile-text active:bg-mobile-bg"
+            >
+              <FileText size={16} className="text-mobile-text-secondary" /> {t("uploads.chooseFile")}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {value.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {value.map((file, index) => (
+            <li key={file.path} className="flex items-center gap-2 rounded-xl bg-mobile-bg px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-xs text-mobile-text">{file.name}</span>
+              <button
+                type="button"
+                onClick={() => removeAt(index)}
+                aria-label={t("uploads.remove", { name: file.name })}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-mobile-text-muted active:bg-mobile-border"
+              >
+                <X size={13} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Field>
   );
 }

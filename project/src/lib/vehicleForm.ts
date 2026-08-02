@@ -1,5 +1,13 @@
 import type { VehicleCoreFormData } from "@/components/VehicleFormFields";
 
+/**
+ * Registration numbers are stored uppercase, always. An Indian plate has no lowercase form,
+ * and mixed case makes the same vehicle look like two ("tn22ab1234" vs "TN22AB1234") to the
+ * unique index and to `check_registration_available()`, both of which compare exactly.
+ * Applied on input (so the dealer sees what will be stored) and again at every write.
+ */
+export const normalizeRegistration = (value: string): string => value.toUpperCase();
+
 /** Vehicle identity + seller + purchase, i.e. everything captured when onboarding a vehicle. */
 export interface VehicleFullFormData extends VehicleCoreFormData {
   seller_party_id: string;

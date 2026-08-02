@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Check, AlertTriangle, ChevronDown } from "lucide-react";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { VEHICLE_CATEGORIES, FUEL_TYPES } from "@/lib/constants";
+import { normalizeRegistration } from "@/lib/vehicleForm";
 
 export interface VehicleCoreFormData {
   category: string;
@@ -58,7 +59,9 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
             <input
               className={`input pr-10 ${regAvailable === false ? "border-red-400 focus:border-red-500" : regAvailable === true ? "border-emerald-400 focus:border-emerald-500" : ""}`}
               value={form.registration_number}
-              onChange={(e) => update("registration_number", e.target.value)}
+              onChange={(e) => update("registration_number", normalizeRegistration(e.target.value))}
+              autoCapitalize="characters"
+              spellCheck={false}
               placeholder="TN 22 AB 1234"
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2">

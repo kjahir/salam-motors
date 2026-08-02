@@ -14,6 +14,9 @@ export interface CompleteSaleInput {
   delivery_status: string;
   delivery_location: string;
   notes: string;
+  /** Paths in the finance-proofs bucket evidencing the payment. Optional: the desktop Sale
+   *  tab does not collect these yet, so callers that have nothing to attach can omit it. */
+  payment_proof_paths?: string[];
 }
 
 /**
@@ -110,11 +113,13 @@ export async function completeSale(
     if (saleErr) throw saleErr;
     saleId = saleRec.id;
 
+    const proofPaths = input.payment_proof_paths ?? [];
     const { error: payErr } = await supabase.from("sale_payments").insert({
       sale_id: saleRec.id,
       amount: netRevenue,
       payment_method: input.payment_method,
       paid_at: new Date().toISOString(),
+      proof_urls: proofPaths.length ? proofPaths : null,
     });
     if (payErr) throw payErr;
 

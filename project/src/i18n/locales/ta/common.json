@@ -679,7 +679,8 @@
     "paidToPartners": "பங்குதாரர்களுக்கு மொத்தம் வழங்கியது",
     "readyForSale": "விற்பனைக்குத் தயார்",
     "totalSold": "மொத்த விற்பனை",
-    "underRepair": "பழுதுபார்ப்பில்"
+    "underRepair": "பழுதுபார்ப்பில்",
+    "totalAmountInvested": "மொத்த முதலீட்டுத் தொகை"
   },
   "mobileInventory": {
     "title": "இன்வென்டரி",
@@ -763,7 +764,9 @@
     "sheetDescription": "{{stock}} · மொத்த செலவு {{cost}}",
     "nonBlockingIssues_one": "{{count}} தடுக்காத சிக்கல்: {{list}}",
     "nonBlockingIssues_other": "{{count}} தடுக்காத சிக்கல்கள்: {{list}}",
-    "acknowledgeAndProceed": "ஒப்புக்கொண்டு தொடரவும்"
+    "acknowledgeAndProceed": "ஒப்புக்கொண்டு தொடரவும்",
+    "paymentProof": "கட்டண ஆதாரம்",
+    "paymentProofHint": "ஸ்கிரீன்ஷாட் அல்லது ரசீதை இணைக்கவும்"
   },
   "mobileExpenses": {
     "totalExpenses": "மொத்த செலவுகள்",
@@ -794,7 +797,11 @@
     "saveCount_one": "{{count}} செலவைச் சேமி",
     "saveCount_other": "{{count}} செலவுகளைச் சேமி",
     "addedCount_one": "{{count}} செலவு சேர்க்கப்பட்டது",
-    "addedCount_other": "{{count}} செலவுகள் சேர்க்கப்பட்டன"
+    "addedCount_other": "{{count}} செலவுகள் சேர்க்கப்பட்டன",
+    "purchaseCost": "கொள்முதல்",
+    "totalExpense": "மொத்த செலவு",
+    "combinedTotal": "ஒட்டுமொத்தத் தொகை",
+    "deleteConfirmBody": "இந்தச் செலவு வாகனத்தின் செலவுகளிலிருந்து நீக்கப்படும்."
   },
   "mobileInspection": {
     "overall": "மொத்தம்",

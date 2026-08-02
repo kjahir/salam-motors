@@ -679,7 +679,8 @@
     "paidToPartners": "साझेदारों को कुल भुगतान",
     "readyForSale": "बिक्री के लिए तैयार",
     "totalSold": "कुल बिक्री",
-    "underRepair": "मरम्मत में"
+    "underRepair": "मरम्मत में",
+    "totalAmountInvested": "कुल निवेश राशि"
   },
   "mobileInventory": {
     "title": "इन्वेंटरी",
@@ -763,7 +764,9 @@
     "sheetDescription": "{{stock}} · कुल लागत {{cost}}",
     "nonBlockingIssues_one": "{{count}} गैर-अवरोधक समस्या: {{list}}",
     "nonBlockingIssues_other": "{{count}} गैर-अवरोधक समस्याएं: {{list}}",
-    "acknowledgeAndProceed": "स्वीकार करें और आगे बढ़ें"
+    "acknowledgeAndProceed": "स्वीकार करें और आगे बढ़ें",
+    "paymentProof": "भुगतान प्रमाण",
+    "paymentProofHint": "स्क्रीनशॉट या रसीद संलग्न करें"
   },
   "mobileExpenses": {
     "totalExpenses": "कुल खर्च",
@@ -794,7 +797,11 @@
     "saveCount_one": "{{count}} खर्च सहेजें",
     "saveCount_other": "{{count}} खर्च सहेजें",
     "addedCount_one": "{{count}} खर्च जोड़ा गया",
-    "addedCount_other": "{{count}} खर्च जोड़े गए"
+    "addedCount_other": "{{count}} खर्च जोड़े गए",
+    "purchaseCost": "खरीद",
+    "totalExpense": "कुल खर्च",
+    "combinedTotal": "संयुक्त कुल",
+    "deleteConfirmBody": "यह खर्च वाहन की लागत से हटा दिया जाएगा।"
   },
   "mobileInspection": {
     "overall": "कुल",

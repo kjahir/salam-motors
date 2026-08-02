@@ -679,7 +679,8 @@
     "paidToPartners": "భాగస్వాములకు చెల్లించిన మొత్తం",
     "readyForSale": "అమ్మకానికి సిద్ధం",
     "totalSold": "మొత్తం అమ్మకం",
-    "underRepair": "మరమ్మతులో"
+    "underRepair": "మరమ్మతులో",
+    "totalAmountInvested": "మొత్తం పెట్టుబడి మొత్తం"
   },
   "mobileInventory": {
     "title": "ఇన్వెంటరీ",
@@ -763,7 +764,9 @@
     "belowCostWarning": "ఈ అమ్మకం వ్యయం కంటే తక్కువగా ఉంది - గమనికల్లో కారణం అవసరం.",
     "nonBlockingIssues_one": "{{count}} అడ్డుకోని సమస్య: {{list}}",
     "nonBlockingIssues_other": "{{count}} అడ్డుకోని సమస్యలు: {{list}}",
-    "acknowledgeAndProceed": "అంగీకరించి కొనసాగించండి"
+    "acknowledgeAndProceed": "అంగీకరించి కొనసాగించండి",
+    "paymentProof": "చెల్లింపు రుజువు",
+    "paymentProofHint": "స్క్రీన్‌షాట్ లేదా రసీదు జతచేయండి"
   },
   "mobileExpenses": {
     "totalExpenses": "మొత్తం ఖర్చులు",
@@ -794,7 +797,11 @@
     "saveCount_one": "{{count}} ఖర్చును సేవ్ చేయండి",
     "saveCount_other": "{{count}} ఖర్చులను సేవ్ చేయండి",
     "addedCount_one": "{{count}} ఖర్చు జోడించబడింది",
-    "addedCount_other": "{{count}} ఖర్చులు జోడించబడ్డాయి"
+    "addedCount_other": "{{count}} ఖర్చులు జోడించబడ్డాయి",
+    "purchaseCost": "కొనుగోలు",
+    "totalExpense": "మొత్తం ఖర్చు",
+    "combinedTotal": "మొత్తం కలిపి",
+    "deleteConfirmBody": "ఈ ఖర్చు వాహనం ఖర్చుల నుండి తొలగించబడుతుంది."
   },
   "mobileInspection": {
     "overall": "మొత్తం",

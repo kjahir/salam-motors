@@ -10,6 +10,7 @@ import { PAYMENT_METHODS } from "@/lib/constants";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { VehicleFormFields, type VehicleCoreFormData } from "@/components/VehicleFormFields";
+import { normalizeRegistration } from "@/lib/vehicleForm";
 import { diffRemovedPaths, type UploadedFile } from "@/lib/uploadedFile";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import type { Vehicle, Purchase, PurchasePayment } from "@/lib/types";
@@ -185,7 +186,7 @@ export function EditVehicleModal({ vehicle, open, onClose, onSaved }: EditVehicl
       const minimumPrice = Number(form.minimum_price) || null;
 
       const { error } = await supabase.from("vehicles").update({
-        registration_number: form.registration_number.trim(),
+        registration_number: normalizeRegistration(form.registration_number.trim()),
         category: form.category,
         manufacturer: form.manufacturer,
         brand: form.brand || form.manufacturer,

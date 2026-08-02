@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, Bike, CalendarDays, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert, ShoppingCart, Wallet } from "lucide-react";
+import { AlertTriangle, BarChart3, Bike, CalendarDays, CheckCircle2, HandCoins, Minus, Plus, PlusCircle, LogOut, ShieldAlert, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Spinner, Card, EmptyState, Sheet } from "./ui/primitives";
 import { formatINR, formatINRRange, daysSince } from "@/lib/format";
@@ -8,6 +8,7 @@ import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceSta
 import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
 import { useAuth } from "@/lib/useAuth";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { translateAlertCopy } from "@/lib/i18nText";
 import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy, Investment, ProfitDistribution, Partner, AppSettings } from "@/lib/types";
 import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { MobileNavigate } from "./MobileApp";
@@ -120,6 +121,10 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   }
 
   const plPositive = stats.overallProfit >= 0;
+  // Headline figure: capital put in, less what has been spent on the vehicles. Positive means
+  // there is still unspent investment; negative means spending has outrun what was invested.
+  const remaining = stats.totalInvested - stats.totalExpenses;
+  const remainingPositive = remaining >= 0;
   const estRange = computeEstimatedProfitRange(
     stats.inStockValue,
     settings?.estimated_profit_margin_low_pct ?? 10,
@@ -144,15 +149,19 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       <div className="px-4 -mt-4">
         <Card className="p-5">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-mobile-text-secondary"> {t("mobileDashboard.overallProfitLoss")}</p>
-              <p className={`font-poppins text-[32px] font-bold mt-1 ${plPositive ? "text-mobile-success" : "text-mobile-error"}`}>
-                {plPositive ? "+" : ""}
-                {formatINR(stats.overallProfit)}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[13px] font-medium text-mobile-text-secondary">{t("mobileDashboard.totalAmountInvested")}</p>
+                <p className="text-[13px] font-semibold text-mobile-text shrink-0">{formatINR(stats.totalInvested)}</p>
+              </div>
+              <p className={`flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 ${remainingPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+                {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
+                {formatINR(Math.abs(remaining))}
               </p>
-              <p className="text-xs text-mobile-text-muted mt-1">
-                {t("mobileDashboard.soldToDate", { count: stats.soldCount })}
-              </p>
+              <div className="flex items-baseline justify-between gap-2 mt-1">
+                <p className="text-xs text-mobile-text-muted">{t("mobileDashboard.totalExpenses")}</p>
+                <p className="text-xs font-medium text-mobile-text-secondary shrink-0">{formatINR(stats.totalExpenses)}</p>
+              </div>
             </div>
             <button
               onClick={() => setPanel("finance")}
@@ -185,9 +194,9 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       <div className="px-4 pt-5">
         <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.quickActions")}</p>
         <div className="grid grid-cols-3 gap-3">
-          <QuickAction icon={<PlusCircle size={24} />} label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
-          <QuickAction icon={<ShoppingCart size={24} />} label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
-          <QuickAction icon={<ClipboardList size={24} />} label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
+          <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
+          <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
+          <QuickAction icon={<BarChart3 size={22} />} tone="secondary" label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
         </div>
       </div>
 
@@ -206,7 +215,9 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
                     {a.alert_type === "Compliance" ? <ShieldAlert size={15} /> : <AlertTriangle size={15} />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-mobile-text truncate">{a.title}</p>
+                    {/* Alert titles are stored in English (compliance.ts writes the policy name
+                        verbatim), so they have to be translated at render time, same as Alerts.tsx. */}
+                    <p className="text-sm font-medium text-mobile-text truncate">{translateAlertCopy(t, a.title, a.message).title}</p>
                     <p className="text-xs text-mobile-text-muted truncate">
                       {vehicleLabel(a.vehicle)}
                       {a.vehicle && ` · ${t("mobileDashboard.daysInStock", { days: daysSince(a.vehicle.onboarded_at) })}`}
@@ -259,18 +270,25 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
 }
 
 /**
- * Icon-first shortcut, deliberately unfilled: no tile, no colour block, no shadow. These
- * are conveniences, not the dashboard's headline - the figures above them are. The 44px
- * tap target is kept via the padded hit area rather than a visible button surface.
+ * Icon-first shortcut on a filled colour tile, one brand colour per action, so the three
+ * actions are told apart by colour before the label is read. Colour is what carries the
+ * distinction here — the tiles are all the same size and shape on purpose. The 44px tap
+ * target comes from the 44px tile itself.
  */
-function QuickAction({ icon, label, onClick }: {
+function QuickAction({ icon, label, tone, onClick }: {
   icon: ReactNode;
   label: string;
+  tone: "primary" | "success" | "secondary";
   onClick: () => void;
 }) {
+  const tones = {
+    primary: "bg-mobile-primary text-white",
+    success: "bg-mobile-success text-white",
+    secondary: "bg-mobile-secondary text-mobile-navy",
+  };
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-2 py-2 active:opacity-60">
-      <span className="flex h-11 w-11 items-center justify-center text-mobile-text-secondary">{icon}</span>
+      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-mobile-sm ${tones[tone]}`}>{icon}</span>
       <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
     </button>
   );

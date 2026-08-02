@@ -9,9 +9,20 @@ export const QUICK_CHECK_CATEGORIES = ["Engine", "Brakes", "Tyres", "Suspension"
 
 export type CheckStatus = "pass" | "fail" | "pending";
 
+/**
+ * Pass is a full 100 and fail a flat 0, so the weighted average in computeOverallScore()
+ * behaves the way the checklist reads: pass everything and the vehicle scores 100%, and a
+ * failed item costs exactly its own weight. The previous 90/30 pair meant an all-pass
+ * vehicle capped out at 90% (nothing was ever "healthy"), while a fail still contributed 30
+ * points of credit and so barely moved the ring.
+ *
+ * `pending` scores null rather than 0 — an item nobody has looked at yet is excluded from
+ * both sides of the average by computeOverallScore(), so an unfinished checklist reports the
+ * score of what has actually been checked instead of being punished for the gaps.
+ */
 export const CHECK_STATUS_SCORE: Record<CheckStatus, { score: number | null; condition: string }> = {
-  pass: { score: 90, condition: "Good" },
-  fail: { score: 30, condition: "Poor" },
+  pass: { score: 100, condition: "Good" },
+  fail: { score: 0, condition: "Poor" },
   pending: { score: null, condition: "Not inspected" },
 };
 

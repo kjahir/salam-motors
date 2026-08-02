@@ -64,7 +64,9 @@ export function LanguageSwitcher({ variant = "sidebar", preferredLanguages }: La
             title={option.nativeName}
             aria-label={option.nativeName}
             aria-pressed={active}
-            className={`rounded-pill px-3 py-1 text-xs font-semibold uppercase transition-colors ${
+            // No `uppercase` here: the labels are native-script letters (த, ಕ, …), which have
+            // no case, and forcing it would only ever affect the Latin one.
+            className={`flex h-7 min-w-7 items-center justify-center rounded-pill px-2.5 text-sm font-semibold leading-none transition-colors ${
               active
                 ? isMobile
                   ? "bg-white text-mobile-navy"
@@ -74,7 +76,7 @@ export function LanguageSwitcher({ variant = "sidebar", preferredLanguages }: La
                   : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {code}
+            {option.shortLabel}
           </button>
         );
       })}

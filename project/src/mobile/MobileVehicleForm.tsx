@@ -11,6 +11,7 @@ import { checkRegistrationUnique, fetchVehicleFull } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { generateSlug } from "@/lib/calc";
 import { VEHICLE_CATEGORIES, FUEL_TYPES, PAYMENT_METHODS } from "@/lib/constants";
+import { normalizeRegistration } from "@/lib/vehicleForm";
 import { diffRemovedPaths, type UploadedFile } from "@/lib/uploadedFile";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import type { Vehicle } from "@/lib/types";
@@ -246,7 +247,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
       const askingPrice = Number(form.asking_price) || null;
       const minimumPrice = Number(form.minimum_price) || null;
       const { error } = await supabase.from("vehicles").update({
-        registration_number: form.registration_number.trim(),
+        registration_number: normalizeRegistration(form.registration_number.trim()),
         category: form.category,
         manufacturer: form.manufacturer,
         brand: form.manufacturer,
@@ -360,7 +361,9 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
             <div className="relative">
               <Input
                 value={form.registration_number}
-                onChange={(e) => update("registration_number", e.target.value)}
+                onChange={(e) => update("registration_number", normalizeRegistration(e.target.value))}
+                autoCapitalize="characters"
+                spellCheck={false}
                 placeholder="TN 22 AB 1234"
                 className={regAvailable === false ? "border-mobile-error" : regAvailable === true ? "border-mobile-success" : ""}
               />

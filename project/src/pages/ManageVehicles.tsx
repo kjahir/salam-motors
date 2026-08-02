@@ -10,7 +10,7 @@ import { checkRegistrationUnique, fetchVehicles } from "@/lib/queries";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import { AddVehicle } from "@/pages/AddVehicle";
 import { VehicleDetailsForm } from "@/components/VehicleDetailsForm";
-import { emptyVehicleForm, type VehicleFullFormData } from "@/lib/vehicleForm";
+import { emptyVehicleForm, normalizeRegistration, type VehicleFullFormData } from "@/lib/vehicleForm";
 import { diffRemovedPaths, fileFromPath, type UploadedFile } from "@/lib/uploadedFile";
 import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { Purchase, PurchasePayment, Vehicle } from "@/lib/types";
@@ -169,7 +169,7 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
       const { error: vErr } = await supabase
         .from("vehicles")
         .update({
-          registration_number: form.registration_number.trim(),
+          registration_number: normalizeRegistration(form.registration_number.trim()),
           category: form.category,
           manufacturer: form.manufacturer.trim(),
           brand: form.brand.trim() || form.manufacturer.trim(),
@@ -299,14 +299,9 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
         icon={<Bike size={20} />}
         actions={
           vehicleId ? (
-            <>
-              <button onClick={() => onNavigate("vehicle", { vehicleId, tab: "sale" })} className="btn-sell">
-                <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
-              </button>
-              <button onClick={() => onNavigate("vehicle", { vehicleId })} className="btn-secondary">
-                <ExternalLink size={16} /> {t("quickEntry.openVehicle")}
-              </button>
-            </>
+            <button onClick={() => onNavigate("vehicle", { vehicleId })} className="btn-secondary">
+              <ExternalLink size={16} /> {t("quickEntry.openVehicle")}
+            </button>
           ) : undefined
         }
       />
@@ -332,15 +327,38 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
               )}
             </Field>
           </div>
+          {/* Both actions are icon-only and sit beside the picker, and the picker decides
+              which one is live: with nothing selected the only thing you can do is start a
+              new vehicle; select one and selling it becomes the action. */}
           {creating ? (
-            <button onClick={() => setCreating(false)} className="btn-secondary shrink-0" title={t("manageVehicles.cancelNew")}>
-              <X size={16} /> {t("manageVehicles.cancelNew")}
+            <button
+              onClick={() => setCreating(false)}
+              className="btn-secondary btn-icon"
+              title={t("manageVehicles.cancelNew")}
+              aria-label={t("manageVehicles.cancelNew")}
+            >
+              <X size={16} />
             </button>
           ) : (
-            <button onClick={startCreate} className="btn-primary shrink-0" title={t("manageVehicles.addNew")}>
-              <Plus size={16} /> {t("manageVehicles.addNew")}
+            <button
+              onClick={startCreate}
+              disabled={Boolean(vehicleId)}
+              className="btn-primary btn-icon"
+              title={t("manageVehicles.addNew")}
+              aria-label={t("manageVehicles.addNew")}
+            >
+              <Plus size={16} />
             </button>
           )}
+          <button
+            onClick={() => onNavigate("vehicle", { vehicleId, tab: "sale" })}
+            disabled={!vehicleId}
+            className="btn-sell btn-icon"
+            title={t("dashboard.sellVehicle")}
+            aria-label={t("dashboard.sellVehicle")}
+          >
+            <ShoppingCart size={16} />
+          </button>
         </div>
       </Card>
 

@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { generateSlug } from "./calc";
 import { nextStockNumber } from "./queries";
 import { syncVehicleAlerts } from "./compliance";
+import { normalizeRegistration } from "./vehicleForm";
 import type { Vehicle } from "./types";
 
 export interface CreateVehicleInput {
@@ -74,7 +75,7 @@ export async function createVehicle(input: CreateVehicleInput, performedBy: stri
       .from("vehicles")
       .insert({
         stock_number: stockNumber,
-        registration_number: input.registration_number.trim(),
+        registration_number: normalizeRegistration(input.registration_number.trim()),
         category: input.category,
         manufacturer: input.manufacturer,
         brand: input.brand || input.manufacturer,

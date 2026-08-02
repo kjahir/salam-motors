@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TopBar, Card, Field, Select, Input, Spinner, EmptyState } from "./ui/primitives";
+import { TopBar, Card, Field, Select, Input, Spinner, EmptyState, Sheet, Button } from "./ui/primitives";
 import { VehicleSelectField } from "./ui/VehicleSelectField";
-import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { AttachButton, Combobox, MoreDetailsButton, RowCommitButton, RowDeleteButton, type QuickRowState } from "./ui/QuickEntryRow";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
@@ -12,7 +11,7 @@ import { syncVehicleAlerts } from "@/lib/compliance";
 import { formatINR } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { fileFromPath, type UploadedFile } from "@/lib/uploadedFile";
-import type { Expense, Partner } from "@/lib/types";
+import type { Expense, Partner, Purchase } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 const BUCKET = "finance-proofs";
@@ -82,6 +81,9 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
   const [partners, setPartners] = useState<Partner[]>([]);
   const [rows, setRows] = useState<ExpenseRow[]>([emptyRow()]);
   const [loadingRows, setLoadingRows] = useState(false);
+  const [purchaseCost, setPurchaseCost] = useState(0);
+  /** Row awaiting delete confirmation — see the Sheet at the bottom of this file. */
+  const [pendingDelete, setPendingDelete] = useState<ExpenseRow | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -92,22 +94,33 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
   useEffect(() => {
     if (!vehicleId) {
       setRows([emptyRow()]);
+      setPurchaseCost(0);
       return;
     }
     let cancelled = false;
     setLoadingRows(true);
-    supabase
-      .from("expenses")
-      .select("*")
-      .eq("vehicle_id", vehicleId)
-      .is("deleted_at", null)
-      .order("expense_date", { ascending: false })
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) toast(error.message, "error");
-        setRows([...((data ?? []) as Expense[]).map(rowFromExpense), emptyRow()]);
-        setLoadingRows(false);
-      });
+    (async () => {
+      const [expensesRes, purchaseRes] = await Promise.all([
+        supabase
+          .from("expenses")
+          .select("*")
+          .eq("vehicle_id", vehicleId)
+          .is("deleted_at", null)
+          .order("expense_date", { ascending: false }),
+        supabase.from("purchases").select("*").eq("vehicle_id", vehicleId).maybeSingle(),
+      ]);
+      if (cancelled) return;
+      if (expensesRes.error) toast(expensesRes.error.message, "error");
+      setRows([...((expensesRes.data ?? []) as Expense[]).map(rowFromExpense), emptyRow()]);
+      // Same three components computeCostBreakdown() treats as purchase cost, so the
+      // "Purchase" line here matches the vehicle's own Total Cost rather than just the
+      // sticker price.
+      const purchase = purchaseRes.data as Purchase | null;
+      setPurchaseCost(
+        (purchase?.agreed_price ?? 0) + (purchase?.broker_commission ?? 0) + (purchase?.other_fee ?? 0),
+      );
+      setLoadingRows(false);
+    })();
     return () => {
       cancelled = true;
     };
@@ -182,7 +195,7 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
 
   const handleDelete = async (row: ExpenseRow) => {
     if (!row.id) return;
-    if (!row.createdHere && !confirm(t("mobileExpenses.deleteConfirm"))) return;
+    setPendingDelete(null);
     patchRow(row.key, { busy: true });
     try {
       const { error } = await supabase.from("expenses").update({ deleted_at: new Date().toISOString() }).eq("id", row.id);
@@ -202,6 +215,20 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
     }
   };
 
+  // A row typed and committed in this session deletes straight away — it is an obvious
+  // undo of something the dealer just did. Anything already on file gets a confirmation,
+  // via the Sheet below rather than window.confirm(): several mobile in-app browsers
+  // suppress the native dialog outright, which silently made the minus button do nothing.
+  const requestDelete = (row: ExpenseRow) => {
+    if (!row.id) return;
+    if (row.createdHere) {
+      handleDelete(row);
+      return;
+    }
+    setPendingDelete(row);
+  };
+
+  // Derived from `rows`, so it moves the moment a row is added, deleted, or retyped.
   const savedTotal = rows.filter((r) => r.id).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   return (
@@ -209,6 +236,14 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
       <TopBar title={t("mobileExpenses.addExpenses")} onBack={onBack} />
       <div className="p-4 space-y-3 pb-28">
         <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+
+        {vehicleId && !loadingRows && (
+          <Card className="p-3.5">
+            <TotalLine label={t("mobileExpenses.purchaseCost")} value={formatINR(purchaseCost)} />
+            <TotalLine label={t("mobileExpenses.totalExpense")} value={formatINR(savedTotal)} />
+            <TotalLine label={t("mobileExpenses.combinedTotal")} value={formatINR(purchaseCost + savedTotal)} emphasis />
+          </Card>
+        )}
 
         {!vehicleId && (
           <Card className="p-5">
@@ -248,7 +283,7 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
                     />
                     <MoreDetailsButton open={row.expanded} onToggle={() => patchRow(row.key, { expanded: !row.expanded })} badge={hasDetails(row)} />
                     <RowCommitButton state={state} busy={row.busy} disabled={!rowComplete(row)} onAdd={() => handleAdd(row)} onSave={() => handleSave(row)} />
-                    <RowDeleteButton state={state} busy={row.busy} onDelete={() => handleDelete(row)} />
+                    <RowDeleteButton state={state} busy={row.busy} onDelete={() => requestDelete(row)} />
                   </div>
 
                   {row.expanded && (
@@ -267,31 +302,20 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
                           options={partners.map((p) => ({ value: p.id, label: p.name }))}
                         />
                       </Field>
+                      {/* No upload grid here on purpose: the paperclip on the row above already
+                          attaches bills, and having camera/library/file in both places made the
+                          same job look like two different jobs. */}
                       <Field label={t("quickEntry.date")}>
                         <Input type="date" value={row.expense_date} onChange={(e) => editRow(row.key, { expense_date: e.target.value })} />
                       </Field>
-                      <FileUploadGrid
-                        bucket={BUCKET}
-                        pathPrefix={`${vehicleId}/${row.key}`}
-                        value={row.files}
-                        onChange={(files) => editRow(row.key, { files })}
-                        hint={t("mobileExpenses.hint")}
-                      />
                     </div>
                   )}
                 </Card>
               );
             })}
 
-            {savedTotal > 0 && (
-              <Card className="p-3.5 bg-mobile-bg border-2 border-mobile-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-mobile-text">{t("quickEntry.total")}</span>
-                  <span className="text-sm font-bold text-mobile-text">{formatINR(savedTotal)}</span>
-                </div>
-              </Card>
-            )}
-
+            {/* The running total lives in the summary card under the vehicle picker now, so
+                there is no second copy of it down here. */}
             <button
               onClick={() => onNavigate("vehicle", { vehicleId, tab: "expenses" })}
               className="w-full py-2 text-sm font-medium text-mobile-primary"
@@ -301,6 +325,39 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
           </>
         )}
       </div>
+
+      <Sheet
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title={t("mobileExpenses.deleteConfirm")}
+        description={
+          pendingDelete
+            ? `${pendingDelete.category || t("mobileExpenses.category")} · ${formatINR(Number(pendingDelete.amount) || 0)}`
+            : undefined
+        }
+        footer={
+          <div className="flex gap-3 w-full">
+            <Button variant="secondary" className="flex-1" onClick={() => setPendingDelete(null)}>
+              {t("mobileExpenses.cancel")}
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={() => pendingDelete && handleDelete(pendingDelete)}>
+              {t("mobileVehicle.delete")}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-mobile-text-secondary">{t("mobileExpenses.deleteConfirmBody")}</p>
+      </Sheet>
+    </div>
+  );
+}
+
+/** One label/value line in the purchase / expense / combined summary. */
+function TotalLine({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 py-1.5 ${emphasis ? "border-t border-mobile-border mt-1 pt-2.5" : ""}`}>
+      <span className={`text-sm ${emphasis ? "font-semibold text-mobile-text" : "text-mobile-text-secondary"}`}>{label}</span>
+      <span className={`shrink-0 ${emphasis ? "text-base font-poppins font-bold text-mobile-text" : "text-sm font-medium text-mobile-text"}`}>{value}</span>
     </div>
   );
 }
