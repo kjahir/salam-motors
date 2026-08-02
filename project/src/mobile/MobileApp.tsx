@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, Settings2, Receipt, FileText, ClipboardCheck, X } from "lucide-react";
+import { LayoutDashboard, Bike, FileBarChart, MoreHorizontal, Receipt, FileText, ClipboardCheck, X } from "lucide-react";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
-import { MobileSetup } from "./MobileSetup";
+import { MobileMore } from "./MobileMore";
 import { MobileDesktopPage } from "./MobileDesktopPage";
 import { Alerts } from "@/pages/Alerts";
 import { Audit } from "@/pages/Audit";
@@ -38,8 +38,8 @@ export type MobileScreen =
   | "add-inspection"
   | "add-sale"
   | "view-vehicle"
-  | "setup"
-  // Setup's children: the desktop pages, hosted in the mobile shell (see MobileDesktopPage).
+  | "more"
+  // More's children: the desktop pages, hosted in the mobile shell (see MobileDesktopPage).
   | "alerts"
   | "parties"
   | "partners"
@@ -48,10 +48,10 @@ export type MobileScreen =
   | "history"
   | "audit";
 
-/** Setup children, so back always returns to Setup and the bottom bar stays hidden. */
-const SETUP_SCREENS: MobileScreen[] = ["alerts", "parties", "partners", "team", "policies", "history", "audit"];
+/** More's children, so back always returns to More and the bottom bar stays hidden. */
+const MORE_SCREENS: MobileScreen[] = ["alerts", "parties", "partners", "team", "policies", "history", "audit"];
 
-const SETUP_TITLE_KEYS: Record<string, string> = {
+const MORE_TITLE_KEYS: Record<string, string> = {
   alerts: "nav.alerts",
   parties: "nav.parties",
   partners: "nav.partners",
@@ -83,7 +83,7 @@ const ADD_TARGETS: { key: string; screen: MobileScreen; labelKey: string; icon: 
 ];
 
 /** Screens that keep the bottom bar (and so can host the vehicle-action row). */
-const BOTTOM_NAV_SCREENS: MobileScreen[] = ["dashboard", "inventory", "reports", "vehicle", "setup"];
+const BOTTOM_NAV_SCREENS: MobileScreen[] = ["dashboard", "inventory", "reports", "vehicle", "more"];
 
 export interface MobileNavigate {
   (screen: MobileScreen, params?: MobileNavigateParams): void;
@@ -185,12 +185,11 @@ export function MobileApp() {
     return () => registerNavigation(null);
   }, [canAccessMobileTab, navigate, registerNavigation, screen, vehicleId]);
 
-  // Inventory no longer has its own tab - it is reached through Setup - so the vehicle
-  // screens it leads to light up Setup, which is the tab they now sit under.
-  const isTabActive = (key: "dashboard" | "reports" | "setup") => {
-    if (key === "setup") {
-      return screen === "setup" || screen === "inventory" || screen === "vehicle" || screen === "edit-vehicle" || SETUP_SCREENS.includes(screen);
-    }
+  // Inventory and the per-vehicle screens no longer sit under any tab (the vehicle list is
+  // reached from Reports' Inventory tab and from a vehicle's own Back), so on those screens
+  // no tab lights up rather than one claiming them.
+  const isTabActive = (key: "dashboard" | "reports" | "more") => {
+    if (key === "more") return screen === "more" || MORE_SCREENS.includes(screen);
     return screen === key;
   };
 
@@ -217,7 +216,7 @@ export function MobileApp() {
   };
 
   /**
-   * The Setup screens are the desktop page components, so they hand back desktop PageKeys.
+   * The More screens are the desktop page components, so they hand back desktop PageKeys.
    * A vehicle is the only destination any of them actually links to; map that onto the
    * mobile vehicle screens and let anything else fall through rather than dead-end.
    */
@@ -236,8 +235,8 @@ export function MobileApp() {
 
   // A plain function, not a component: an inline component would be a new type on every
   // render and would remount (and so reset) the hosted page's state.
-  const setupPage = (target: MobileScreen, content: React.ReactNode) => (
-    <MobileDesktopPage title={t(SETUP_TITLE_KEYS[target])} onBack={() => navigate("setup")}>
+  const morePage = (target: MobileScreen, content: React.ReactNode) => (
+    <MobileDesktopPage title={t(MORE_TITLE_KEYS[target])} onBack={() => navigate("more")}>
       {content}
     </MobileDesktopPage>
   );
@@ -269,7 +268,7 @@ export function MobileApp() {
           <MobileInventory onNavigate={navigate} />
         );
       case "reports":
-        return <MobileReports />;
+        return <MobileReports onNavigate={navigate} />;
       case "update-vehicle":
         return <MobileUpdateVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("overview")} />;
       case "add-expense":
@@ -282,22 +281,22 @@ export function MobileApp() {
         return <MobileAddSale vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("sale")} />;
       case "view-vehicle":
         return <MobileViewVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={() => navigate("inventory")} />;
-      case "setup":
-        return <MobileSetup onNavigate={navigate} />;
+      case "more":
+        return <MobileMore onNavigate={navigate} />;
       case "alerts":
-        return setupPage("alerts", <Alerts onNavigate={desktopNavigate} />);
+        return morePage("alerts", <Alerts onNavigate={desktopNavigate} />);
       case "parties":
-        return setupPage("parties", <Parties onNavigate={desktopNavigate} />);
+        return morePage("parties", <Parties onNavigate={desktopNavigate} />);
       case "partners":
-        return setupPage("partners", <Partners onNavigate={desktopNavigate} />);
+        return morePage("partners", <Partners onNavigate={desktopNavigate} />);
       case "team":
-        return setupPage("team", <Team />);
+        return morePage("team", <Team />);
       case "policies":
-        return setupPage("policies", <Policies />);
+        return morePage("policies", <Policies />);
       case "history":
-        return setupPage("history", <History vehicleFilter={null} />);
+        return morePage("history", <History vehicleFilter={null} />);
       case "audit":
-        return setupPage("audit", <Audit />);
+        return morePage("audit", <Audit />);
       default:
         return <MobileDashboard onNavigate={navigate} />;
     }
@@ -370,11 +369,11 @@ export function MobileApp() {
                 />
               )}
               <NavButton
-                active={isTabActive("setup")}
+                active={isTabActive("more")}
                 disabled={addRowOpen}
-                icon={<Settings2 size={20} />}
-                label={t("nav.setup")}
-                onClick={() => navigate("setup")}
+                icon={<MoreHorizontal size={20} />}
+                label={t("nav.more")}
+                onClick={() => navigate("more")}
               />
             </div>
           </nav>

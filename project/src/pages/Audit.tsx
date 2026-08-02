@@ -54,6 +54,13 @@ const ENTITY_KEY_BY_ALIAS = new Map(
   ENTITY_TYPE_OPTIONS.flatMap((option) => option.aliases.map((alias) => [alias, option.key] as const)),
 );
 
+const ACTION_COLOR: Record<string, "emerald" | "blue" | "red" | "amber" | "slate"> = {
+  created: "emerald",
+  updated: "blue",
+  deleted: "red",
+  sold: "amber",
+};
+
 /**
  * Business Activity rows show the entity under one name whichever writer produced them,
  * so a trigger-written "vehicles" row and an app-written "vehicle" row read identically.
@@ -255,6 +262,7 @@ function BusinessActivityTab() {
                         ) : (
                           <span className="w-3.5 shrink-0" />
                         )}
+                        <Badge color={ACTION_COLOR[row.action] ?? "slate"}>{t(`auditPage.actions.${row.action}`, { defaultValue: row.action })}</Badge>
                         <span className="text-sm font-medium text-slate-900">{entityLabel(row.entity_type, t)}</span>
                         <span className="text-xs text-slate-500 ml-auto">{row.performed_by ?? "—"}</span>
                         <span className="text-xs text-slate-400">{formatDate(row.performed_at, { withTime: true })}</span>

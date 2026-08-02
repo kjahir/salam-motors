@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { useAuth } from "@/lib/useAuth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AssistantTurnView, FailedMessageActions } from "./AssistantBlocks";
 import {
   streamAssistantSpeech,
@@ -608,6 +609,32 @@ export function AssistantShell() {
       )}
 
       {isOpen && (
+        // Backstop behind the per-result boundary above: a throw anywhere else in the panel
+        // (composer, voice, header) closes the assistant rather than the whole app.
+        <ErrorBoundary
+          label="assistant-panel"
+          fallback={(_error, reset) => (
+            <div
+              role="alert"
+              className={`fixed z-50 flex flex-col items-start gap-3 bg-white p-5 shadow-2xl ${
+                isMobile ? "inset-0" : "bottom-3 right-3 w-[min(470px,calc(100vw-24px))] rounded-2xl border border-slate-200"
+              }`}
+            >
+              <p className="text-sm font-semibold text-slate-950">{t("assistant.errors.panelFailedTitle")}</p>
+              <p className="text-xs leading-relaxed text-slate-600">{t("assistant.errors.panelFailedDescription")}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  reset();
+                  close();
+                }}
+                className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-medium text-white hover:bg-brand-700"
+              >
+                {t("assistant.header.close")}
+              </button>
+            </div>
+          )}
+        >
         <div
           ref={panelRef}
           role="dialog"
@@ -719,7 +746,30 @@ export function AssistantShell() {
                           {message.text}
                         </div>
                       ) : message.turn ? (
-                        <AssistantTurnView turn={message.turn} />
+                        // Per result, not per panel: one block the renderer cannot handle
+                        // degrades to a notice in that one bubble, leaving the rest of the
+                        // conversation (and the page behind the panel) intact.
+                        <ErrorBoundary
+                          label="assistant-turn"
+                          resetKeys={[message.id]}
+                          fallback={
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+                              <p className="text-sm font-medium text-amber-900">
+                                {t("assistant.errors.renderFailedTitle")}
+                              </p>
+                              <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                                {t("assistant.errors.renderFailedDescription")}
+                              </p>
+                              {message.text && (
+                                <p className="mt-2 border-t border-amber-200 pt-2 text-xs leading-relaxed text-amber-900">
+                                  {message.text}
+                                </p>
+                              )}
+                            </div>
+                          }
+                        >
+                          <AssistantTurnView turn={message.turn} />
+                        </ErrorBoundary>
                       ) : (
                         <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-relaxed text-slate-700">
                           {message.text || (
@@ -914,6 +964,7 @@ export function AssistantShell() {
             </p>
           </div>
         </div>
+        </ErrorBoundary>
       )}
     </>
   );

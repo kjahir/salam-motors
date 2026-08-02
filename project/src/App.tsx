@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Layout, type PageKey, type NavigateParams } from "@/components/Layout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
@@ -234,12 +235,35 @@ function AppContent() {
   );
 }
 
+/**
+ * Last line of defence. The assistant has its own, narrower boundaries (AssistantShell), so
+ * this one catches a throw in the page tree itself - where the alternative is React
+ * unmounting everything and leaving a blank white screen with no way forward.
+ */
+function AppCrashFallback({ reset }: { reset: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div role="alert" className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-card">
+        <h1 className="text-base font-semibold text-slate-950">{t("appError.title")}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">{t("appError.description")}</p>
+        <div className="mt-5 flex gap-2">
+          <button onClick={reset} className="btn-primary">{t("appError.tryAgain")}</button>
+          <button onClick={() => window.location.reload()} className="btn-secondary">{t("appError.reload")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ToastProvider>
       <AuthProvider>
         <AssistantProvider>
-          <AppContent />
+          <ErrorBoundary label="app-root" fallback={(_error, reset) => <AppCrashFallback reset={reset} />}>
+            <AppContent />
+          </ErrorBoundary>
           <AssistantShell />
         </AssistantProvider>
       </AuthProvider>

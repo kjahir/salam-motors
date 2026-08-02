@@ -25,13 +25,14 @@ import type {
   ProfitDistribution,
   Partner,
 } from "@/lib/types";
+import type { MobileNavigate } from "./MobileApp";
 
 type ReportTab = "investments" | "purchases" | "expenses" | "inventory" | "sales" | "settlements";
 type SortDir = "desc" | "asc";
 
 const PAGE_SIZE = 10;
 
-export function MobileReports() {
+export function MobileReports({ onNavigate }: { onNavigate: MobileNavigate }) {
   const [tab, setTab] = useState<ReportTab>("inventory");
   const [purchases, setPurchases] = useState<(Purchase & { vehicle: Vehicle | null; seller: Party | null })[]>([]);
   const [sales, setSales] = useState<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]>([]);
@@ -208,8 +209,11 @@ export function MobileReports() {
                 const s = summaryMap.get(v.id);
                 const days = daysSince(v.onboarded_at);
                 return (
-                  <Card key={v.id} className="p-3.5">
-                    <div className="flex items-center justify-between">
+                  // The only route into a vehicle's own screens from this tab - the mobile
+                  // shell has no Inventory tab, so this list is where a dealer picks a
+                  // vehicle out of the whole book of stock.
+                  <Card key={v.id} className="p-3.5" onClick={() => onNavigate("vehicle", { vehicleId: v.id })}>
+                    <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-mobile-text truncate">{v.manufacturer} {v.model}</p>
                         <p className="text-xs text-mobile-text-muted font-mono">{vehicleRef(v)}</p>

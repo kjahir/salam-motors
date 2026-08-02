@@ -3,6 +3,12 @@
     "brand": "VahanExchange Dealer",
     "tagline": "Dealer Operating System"
   },
+  "appError": {
+    "title": "Something went wrong",
+    "description": "This screen hit an unexpected error. Trying again usually clears it; if it keeps happening, reload the page.",
+    "tryAgain": "Try again",
+    "reload": "Reload page"
+  },
   "auth": {
     "signedIn": "Signed in",
     "signOut": "Sign Out",
@@ -26,7 +32,7 @@
     "addVehicle": "Add Vehicle",
     "inventory": "Inventory",
     "reports": "Reports",
-    "setup": "Setup",
+    "more": "More",
     "parties": "Parties",
     "partners": "Partners",
     "alerts": "Alerts",
@@ -573,8 +579,8 @@
     "loadMore": "Load more ({{count}} remaining)",
     "totalWithCount": "Total ({{count}})"
   },
-  "mobileSetup": {
-    "title": "Setup",
+  "mobileMore": {
+    "title": "More",
     "description": "Records, people and settings"
   },
   "financeModals": {
@@ -1167,7 +1173,11 @@
       "rateLimited": "The assistant is busy right now. Please try again shortly.",
       "timeout": "This request took too long. Please try again.",
       "actionFailed": "The action could not be completed.",
-      "voiceFailed": "Voice input could not be completed."
+      "voiceFailed": "Voice input could not be completed.",
+      "renderFailedTitle": "This result couldn't be displayed",
+      "renderFailedDescription": "Salam answered, but part of the result could not be drawn on screen. The answer text is below; ask again for the full breakdown.",
+      "panelFailedTitle": "Ask Salam ran into a problem",
+      "panelFailedDescription": "The assistant panel hit an unexpected error. Close it and open it again - your dealership data is unaffected."
     },
     "confirmation": {
       "title": "Confirm this action",

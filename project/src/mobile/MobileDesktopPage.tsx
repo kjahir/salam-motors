@@ -5,7 +5,7 @@ import { TopBar } from "./ui/primitives";
  * Hosts an unmodified desktop page (src/pages/*) inside the mobile shell, behind a mobile
  * TopBar for the back affordance.
  *
- * These are the Setup screens - Parties, Partners, Team, Alerts, History, Policies, Audit.
+ * These are the More screens - Parties, Partners, Team, Alerts, History, Policies, Audit.
  * They are reference/admin surfaces a dealer visits occasionally, not the daily
  * inventory-and-sales path the hand-built mobile screens cover, so they reuse the desktop
  * component rather than getting a second implementation that would drift from it. The

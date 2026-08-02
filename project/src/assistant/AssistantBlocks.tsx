@@ -210,7 +210,10 @@ function VehicleCard({ vehicle }: { vehicle: VehicleResult }) {
         )}
       </div>
 
-      {(vehicle.alertCount || vehicle.complianceCount) && (
+      {/* Boolean(), not a bare `a || b`: the server normalizes both counts to a number
+          (finiteNumber(...) ?? 0), so the truthiness guard evaluated to 0 and React printed
+          a literal "0" under every vehicle card that had no alerts. */}
+      {Boolean(vehicle.alertCount || vehicle.complianceCount) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {Boolean(vehicle.alertCount) && <Badge color="amber">{t("assistant.display.alerts", { count: vehicle.alertCount })}</Badge>}
           {Boolean(vehicle.complianceCount) && (
