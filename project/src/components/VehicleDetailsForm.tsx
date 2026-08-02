@@ -54,7 +54,7 @@ export function VehicleDetailsForm({
         <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleForm.purchase")}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("vehicleForm.purchasePrice")} required>
-            <input className="input" type="number" value={form.purchase_price} onChange={(e) => update("purchase_price", e.target.value)} placeholder="62000" />
+            <input className="input" type="number" value={form.purchase_price} onChange={(e) => update("purchase_price", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.brokerCommission")}>
             <input className="input" type="number" value={form.broker_commission} onChange={(e) => update("broker_commission", e.target.value)} />
@@ -95,7 +95,7 @@ export function VehicleDetailsForm({
                 />
               </div>
               <Field label={t("vehicleForm.handoverLocation")}>
-                <input className="input" value={form.handover_location} onChange={(e) => update("handover_location", e.target.value)} placeholder="Chennai" />
+                <input className="input" value={form.handover_location} onChange={(e) => update("handover_location", e.target.value)} placeholder="" />
               </Field>
               <Field label={t("vehicleForm.odometerAtPurchase")}>
                 <input className="input" type="number" value={form.odometer_at_purchase} onChange={(e) => update("odometer_at_purchase", e.target.value)} />

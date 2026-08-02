@@ -273,7 +273,7 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
                       className="flex-1 min-w-0"
                       value={row.amount}
                       onChange={(e) => editRow(row.key, { amount: e.target.value })}
-                      placeholder="3500"
+                      placeholder=""
                     />
                     <AttachButton
                       bucket={BUCKET}

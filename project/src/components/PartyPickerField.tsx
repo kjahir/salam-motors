@@ -156,13 +156,13 @@ export function PartyPickerField({ partyType, value, onChange, label }: PartyPic
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={t("partyPicker.fullName")} required>
-              <input className="input" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} placeholder="Ramesh Kumar" />
+              <input className="input" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} placeholder="" />
             </Field>
             <Field label={t("partyPicker.mobileNumber")} required>
-              <input className="input" value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} placeholder="9988776655" />
+              <input className="input" value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} placeholder="" />
             </Field>
             <Field label={t("partyPicker.city")}>
-              <input className="input" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="Chennai" />
+              <input className="input" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="" />
             </Field>
             {partyType === "seller" && (
               <>

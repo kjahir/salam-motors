@@ -190,7 +190,7 @@ export function MobileExpensesTab({ vehicle, onChanged, highlightIds, onNavigate
             <Select value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v }))} options={EXPENSE_CATEGORIES.map((category) => ({ value: category, label: trStatus(category) }))} />
           </Field>
           <Field label={t("mobileExpenses.amount")} required>
-            <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="3500" />
+            <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="" />
           </Field>
           <Field label={t("mobileExpenses.vendor")}>
             <Input value={form.vendor} onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Sai Spares" />

@@ -702,20 +702,7 @@ function ExpensesTab({ vehicle, cost, partners, onChanged, highlightIds }: {
       onChanged();
     } catch (e) {
       console.error("Delete expense error:", e);
-      const errorMsg = e instanceof Error ? e.message : "Failed to delete";
-      toast(errorMsg, "error");
-      supabase
-        .from("alerts")
-        .insert({
-          vehicle_id: vehicle.id,
-          alert_type: "error",
-          title: "Expense Deletion Failed",
-          description: errorMsg,
-          severity: "high",
-        })
-        .then(({ error: alertErr }) => {
-          if (alertErr) console.error("Failed to log alert", alertErr);
-        });
+      toast(e instanceof Error ? e.message : "Failed to delete", "error");
     }
   };
 
@@ -785,10 +772,10 @@ function ExpensesTab({ vehicle, cost, partners, onChanged, highlightIds }: {
                   <Select value={row.category} onChange={(v) => updateRow(idx, { category: v })} options={EXPENSE_CATEGORIES} />
                 </Field>
                 <Field label="Amount (₹)" required className="sm:col-span-2">
-                  <input className="input" type="number" value={row.amount} onChange={(e) => updateRow(idx, { amount: e.target.value })} placeholder="3500" />
+                  <input className="input" type="number" value={row.amount} onChange={(e) => updateRow(idx, { amount: e.target.value })} placeholder="" />
                 </Field>
                 <Field label="Vendor" className="sm:col-span-2">
-                  <input className="input" value={row.vendor} onChange={(e) => updateRow(idx, { vendor: e.target.value })} placeholder="Sai Spares" />
+                  <input className="input" value={row.vendor} onChange={(e) => updateRow(idx, { vendor: e.target.value })} placeholder="" />
                 </Field>
                 <Field label="Description" className="sm:col-span-3">
                   <input className="input" value={row.description} onChange={(e) => updateRow(idx, { description: e.target.value })} placeholder="Brake pads + air filter" />
@@ -1104,13 +1091,13 @@ function InspectionTab({ vehicle, overallScore, onChanged }: { vehicle: VehicleW
                     />
                   </Field>
                   <Field label="Score (0-100)" required className="sm:col-span-2">
-                    <input className="input" type="number" min={0} max={100} value={row.score} onChange={(e) => updateItemRow(idx, { score: e.target.value })} placeholder="85" />
+                    <input className="input" type="number" min={0} max={100} value={row.score} onChange={(e) => updateItemRow(idx, { score: e.target.value })} placeholder="" />
                   </Field>
                   <Field label="Condition" className="sm:col-span-2">
                     <Select value={row.condition_level} onChange={(v) => updateItemRow(idx, { condition_level: v })} options={[...CONDITION_LEVELS]} />
                   </Field>
                   <Field label="Recommended Action" className="sm:col-span-3">
-                    <input className="input" value={row.recommended_action} onChange={(e) => updateItemRow(idx, { recommended_action: e.target.value })} placeholder="Optional" />
+                    <input className="input" value={row.recommended_action} onChange={(e) => updateItemRow(idx, { recommended_action: e.target.value })} placeholder="" />
                   </Field>
                   <Field label="Est. Cost (₹)" className="sm:col-span-1">
                     <input className="input" type="number" value={row.estimated_cost} onChange={(e) => updateItemRow(idx, { estimated_cost: e.target.value })} placeholder="0" />
@@ -1567,7 +1554,7 @@ function DocumentsTab({ vehicle, onChanged, highlightIds }: { vehicle: VehicleWi
             />
 
             <Field label="Document Number">
-              <input className="input" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} placeholder="TN22AB1234" />
+              <input className="input" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} placeholder="" />
             </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Issue Date"><input className="input" type="date" value={form.issue_date} onChange={(e) => setForm((f) => ({ ...f, issue_date: e.target.value }))} /></Field>
@@ -1927,13 +1914,13 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
             )}
             <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
             <div className="grid grid-cols-3 gap-4">
-              <Field label="Sale Price (₹)" required><input className="input" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" /></Field>
+              <Field label="Sale Price (₹)" required><input className="input" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="" /></Field>
               <Field label="Discount (₹)"><input className="input" type="number" value={form.discount} onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))} /></Field>
               <Field label="Buyer Charges (₹)"><input className="input" type="number" value={form.buyer_charges} onChange={(e) => setForm((f) => ({ ...f, buyer_charges: e.target.value }))} /></Field>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Payment Method"><Select value={form.payment_method} onChange={(v) => setForm((f) => ({ ...f, payment_method: v }))} options={PAYMENT_METHODS} /></Field>
-              <Field label="Delivery Location"><input className="input" value={form.delivery_location} onChange={(e) => setForm((f) => ({ ...f, delivery_location: e.target.value }))} placeholder="Chennai" /></Field>
+              <Field label="Delivery Location"><input className="input" value={form.delivery_location} onChange={(e) => setForm((f) => ({ ...f, delivery_location: e.target.value }))} placeholder="" /></Field>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Payment Status" required>

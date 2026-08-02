@@ -282,7 +282,7 @@ export function QuickAddExpense({ onNavigate }: { onNavigate: (page: PageKey, pa
                         min={0}
                         value={row.amount}
                         onChange={(e) => editRow(row.key, { amount: e.target.value })}
-                        placeholder="3500"
+                        placeholder=""
                       />
                     </div>
                     <AttachButton
@@ -321,14 +321,14 @@ export function QuickAddExpense({ onNavigate }: { onNavigate: (page: PageKey, pa
                           <input className="input" type="date" value={row.expense_date} onChange={(e) => editRow(row.key, { expense_date: e.target.value })} />
                         </Field>
                       </div>
-                      <FileUploadGrid
+                   {/*    <FileUploadGrid
                         bucket={BUCKET}
                         pathPrefix={`${vehicleId}/${row.key}`}
                         value={row.files}
                         onChange={(files) => editRow(row.key, { files })}
                         label={t("quickEntry.bill")}
                         hint={t("mobileExpenses.hint")}
-                      />
+                      /> */}
                     </div>
                   )}
                 </div>

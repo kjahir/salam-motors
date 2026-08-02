@@ -351,10 +351,10 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("vehicleForm.manufacturer")} required>
-              <Input value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="Honda" />
+              <Input value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="" />
             </Field>
             <Field label={t("vehicleForm.model")} required>
-              <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="Activa 6G" />
+              <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="" />
             </Field>
           </div>
           <Field label={t("vehicleForm.registrationNumber")} required hint={regAvailable === false ? undefined : t("vehicleForm.mustBeUnique")}>
@@ -364,7 +364,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
                 onChange={(e) => update("registration_number", normalizeRegistration(e.target.value))}
                 autoCapitalize="characters"
                 spellCheck={false}
-                placeholder="TN 22 AB 1234"
+                placeholder=""
                 className={regAvailable === false ? "border-mobile-error" : regAvailable === true ? "border-mobile-success" : ""}
               />
               <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
@@ -382,14 +382,14 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
             </Field>
           </div>
           <Field label={t("vehicleForm.odometer")}>
-            <Input type="number" value={form.odometer} onChange={(e) => update("odometer", e.target.value)} placeholder="18500" />
+            <Input type="number" value={form.odometer} onChange={(e) => update("odometer", e.target.value)} placeholder="" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("vehicleForm.askingPrice")}>
-              <Input type="number" value={form.asking_price} onChange={(e) => update("asking_price", e.target.value)} placeholder="79000" />
+              <Input type="number" value={form.asking_price} onChange={(e) => update("asking_price", e.target.value)} placeholder="" />
             </Field>
             <Field label={t("vehicleForm.minimumPrice")}>
-              <Input type="number" value={form.minimum_price} onChange={(e) => update("minimum_price", e.target.value)} placeholder="70000" />
+              <Input type="number" value={form.minimum_price} onChange={(e) => update("minimum_price", e.target.value)} placeholder="" />
             </Field>
           </div>
         </Card>
@@ -403,7 +403,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
             <Card className="p-4">
               <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">{t("vehicleForm.purchase")}</h3>
               <Field label={t("vehicleForm.purchasePrice")} required>
-                <Input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} placeholder="62000" />
+                <Input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} placeholder="" />
               </Field>
             </Card>
           </>
@@ -436,7 +436,7 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label={t("vehicleForm.handoverLocation")}>
-                  <Input value={purchaseForm.handover_location} onChange={(e) => updatePurchase("handover_location", e.target.value)} placeholder="Chennai" />
+                  <Input value={purchaseForm.handover_location} onChange={(e) => updatePurchase("handover_location", e.target.value)} placeholder="" />
                 </Field>
                 <Field label={t("vehicleForm.odometerAtPurchase")}>
                   <Input type="number" value={purchaseForm.odometer_at_purchase} onChange={(e) => updatePurchase("odometer_at_purchase", e.target.value)} />

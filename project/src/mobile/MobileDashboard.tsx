@@ -159,7 +159,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
                 {formatINR(Math.abs(remaining))}
               </p>
               <div className="flex items-baseline justify-between gap-2 mt-1">
-                <p className="text-xs text-mobile-text-muted">{t("mobileDashboard.totalPurchaseExpenses")}</p>
+                <p className="text-xs text-mobile-text-muted">{t("financePage.totalPurchaseExpenses")}</p>
                 <p className="text-xs font-semibold text-mobile-text-secondary shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
               </div>
             </div>

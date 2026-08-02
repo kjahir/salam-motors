@@ -113,7 +113,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("financeModals.amount")} required>
-            <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50000" />
+            <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="" />
           </Field>
           <Field label={t("financeModals.date")} required>
             <input className="input" type="date" value={investmentDate} onChange={(e) => setInvestmentDate(e.target.value)} />

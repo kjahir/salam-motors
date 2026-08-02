@@ -49,10 +49,10 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
           <Select value={form.fuel_type} onChange={(v) => update("fuel_type", v)} options={FUEL_TYPES} />
         </Field>
         <Field label={t("vehicleForm.manufacturer")} required>
-          <input className="input" value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="e.g. Honda" />
+          <input className="input" value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="" />
         </Field>
         <Field label={t("vehicleForm.model")} required>
-          <input className="input" value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="e.g. Activa 6G" />
+          <input className="input" value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="" />
         </Field>
         <Field label={t("vehicleForm.registrationNumber")} required hint={t("vehicleForm.registrationHint")} className="sm:col-span-2">
           <div className="relative">
@@ -62,7 +62,7 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
               onChange={(e) => update("registration_number", normalizeRegistration(e.target.value))}
               autoCapitalize="characters"
               spellCheck={false}
-              placeholder="TN 22 AB 1234"
+              placeholder=""
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
               {regChecking ? (
@@ -78,7 +78,7 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
           {regAvailable === true && <p className="text-xs text-emerald-600 mt-1">{t("vehicleForm.registrationAvailable")}</p>}
         </Field>
         <Field label={t("vehicleForm.colour")}>
-          <input className="input" value={form.colour} onChange={(e) => update("colour", e.target.value)} placeholder="Black" />
+          <input className="input" value={form.colour} onChange={(e) => update("colour", e.target.value)} placeholder="" />
         </Field>
         <Field label={t("vehicleForm.yearOfManufacture")} required>
           <input className="input" type="number" value={form.manufacture_year} onChange={(e) => update("manufacture_year", e.target.value)} />
@@ -93,7 +93,7 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("vehicleForm.variant")}>
-            <input className="input" value={form.variant} onChange={(e) => update("variant", e.target.value)} placeholder="e.g. Std" />
+            <input className="input" value={form.variant} onChange={(e) => update("variant", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.brand")}>
             <input className="input" value={form.brand} onChange={(e) => update("brand", e.target.value)} placeholder="Same as manufacturer usually" />
@@ -102,31 +102,31 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
             <input className="input" type="date" value={form.registration_date} onChange={(e) => update("registration_date", e.target.value)} />
           </Field>
           <Field label={t("vehicleForm.chassisNumber")}>
-            <input className="input" value={form.chassis_number} onChange={(e) => update("chassis_number", e.target.value)} placeholder="MBLJEA60GNDJ01234" />
+            <input className="input" value={form.chassis_number} onChange={(e) => update("chassis_number", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.engineNumber")}>
             <input className="input" value={form.engine_number} onChange={(e) => update("engine_number", e.target.value)} />
           </Field>
           <Field label={t("vehicleForm.odometer")}>
-            <input className="input" type="number" value={form.odometer} onChange={(e) => update("odometer", e.target.value)} placeholder="18500" />
+            <input className="input" type="number" value={form.odometer} onChange={(e) => update("odometer", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.previousOwners")}>
             <input className="input" type="number" value={form.owner_count} onChange={(e) => update("owner_count", e.target.value)} />
           </Field>
           <Field label={t("vehicleForm.registrationCity")}>
-            <input className="input" value={form.registration_city} onChange={(e) => update("registration_city", e.target.value)} placeholder="Chennai" />
+            <input className="input" value={form.registration_city} onChange={(e) => update("registration_city", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.registrationState")}>
-            <input className="input" value={form.registration_state} onChange={(e) => update("registration_state", e.target.value)} placeholder="Tamil Nadu" />
+            <input className="input" value={form.registration_state} onChange={(e) => update("registration_state", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.currentLocation")}>
-            <input className="input" value={form.current_location} onChange={(e) => update("current_location", e.target.value)} placeholder="Central Yard" />
+            <input className="input" value={form.current_location} onChange={(e) => update("current_location", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.askingPrice")}>
-            <input className="input" type="number" value={form.asking_price} onChange={(e) => update("asking_price", e.target.value)} placeholder="79000" />
+            <input className="input" type="number" value={form.asking_price} onChange={(e) => update("asking_price", e.target.value)} placeholder="" />
           </Field>
           <Field label={t("vehicleForm.minimumPrice")}>
-            <input className="input" type="number" value={form.minimum_price} onChange={(e) => update("minimum_price", e.target.value)} placeholder="70000" />
+            <input className="input" type="number" value={form.minimum_price} onChange={(e) => update("minimum_price", e.target.value)} placeholder="" />
           </Field>
         </div>
       </CollapsibleSection>

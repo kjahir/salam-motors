@@ -413,7 +413,7 @@ export function Team() {
               type="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              placeholder="teammate@example.com"
+              placeholder=""
             />
           </Field>
           <Field label={t("teamPage.name")}>
