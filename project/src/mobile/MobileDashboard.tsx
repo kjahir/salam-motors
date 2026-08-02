@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BarChart3, Bike, CalendarDays, CheckCircle2, HandCoins, Minus, Plus, PlusCircle, LogOut, ShieldAlert, Wallet } from "lucide-react";
+import { AlertTriangle, BarChart3, Bike, CalendarDays, CheckCircle2, HandCoins, Minus, Plus, PlusCircle, LogOut, ShieldAlert, Wallet,Warehouse } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Spinner, Card, EmptyState, Sheet } from "./ui/primitives";
 import { formatINR, formatINRRange, daysSince } from "@/lib/format";
@@ -163,18 +163,18 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
                 <p className="text-xs font-semibold text-mobile-text-secondary shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
               </div>
             </div>
-            <button
+            {/* <button
               onClick={() => setPanel("finance")}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mobile-secondary text-mobile-navy active:opacity-80 self-center"
               aria-label={t("dashboard.financialOverview")}
             >
               <Wallet size={18} />
-            </button>
+            </button> */}
           </div>
         </Card>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+     {/*  <div className="grid grid-cols-2 gap-3 px-4 pt-4">
         <IconTile
           label={t("dashboard.stockTile")}
           value={String(stats.inStockCount)}
@@ -189,7 +189,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
           tone="success"
           onClick={() => setPanel("month")}
         />
-      </div>
+      </div> */}
 
       <div className="px-4 pt-5">
         <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2"> {t("mobileDashboard.quickActions")}</p>
@@ -197,6 +197,10 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
           <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
           <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
           <QuickAction icon={<BarChart3 size={22} />} tone="secondary" label={t("mobileDashboard.viewReports")} onClick={() => onNavigate("reports")} />
+
+          <QuickAction icon={<Warehouse size={22} />} tone="none" label={t("dashboard.stockTile")} onClick={() => onNavigate("inventory")} />
+          <QuickAction icon={<CalendarDays size={22} />} tone="none" label={t("dashboard.thisMonth")} onClick={() => setPanel("month")} />
+          <QuickAction icon={<Wallet size={22} />} tone="none" label={t("dashboard.financialOverview")} onClick={() =>setPanel("finance")} />
         </div>
       </div>
 
@@ -278,7 +282,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
 function QuickAction({ icon, label, tone, onClick }: {
   icon: ReactNode;
   label: string;
-  tone: "primary" | "success" | "secondary";
+  tone: "primary" | "success" | "secondary" | "none";
   onClick: () => void;
 }) {
   const tones = {
