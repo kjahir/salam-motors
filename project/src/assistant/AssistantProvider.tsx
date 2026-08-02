@@ -11,20 +11,30 @@ import {
 import { useTranslation } from "react-i18next";
 import { getAppLocale } from "@/i18n";
 import { useAuth } from "@/lib/useAuth";
-import { requestAssistantTurn, type SpokenAssistantLocale } from "./api";
+import {
+  requestAssistantTurn,
+  type AssistantTurnMeta,
+  type SpokenAssistantLocale,
+} from "./api";
 import { assistantErrorTranslationKey } from "./errors";
 import {
   createFallbackTurn,
   type AssistantAction,
   type AssistantChatMessage,
   type AssistantRequestContext,
+  type AssistantVoiceContext,
 } from "./schema";
 
 type NavigationHandler = (page: string, params?: Extract<AssistantAction, { kind: "navigate" }>["params"]) => boolean;
 
 export interface AssistantSendOptions {
   locale?: SpokenAssistantLocale;
-  onAnswerStart?: (text: string) => void;
+  /** Present when the message came from speech. Forwarded to the backend purely so the
+   *  run's execution trace can record step 2 ("optionally transcribe speech") — the
+   *  transcribe function runs before the run exists and cannot trace itself. */
+  voice?: AssistantVoiceContext;
+  /** `meta` identifies the run, so a spoken reply can be traced against it. */
+  onAnswerStart?: (text: string, meta: AssistantTurnMeta) => void;
 }
 
 interface AssistantContextValue {
@@ -195,10 +205,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       abortRef.current = controller;
       let streamed = "";
       let answerStarted = false;
+      // Filled by the SSE `meta` event, which the server sends before the first delta so
+      // this is already known by the time playback starts.
+      let turnMeta: AssistantTurnMeta = { runId: null };
       const notifyAnswerStart = (text: string) => {
         if (answerStarted || !text.trim()) return;
         answerStarted = true;
-        options?.onAnswerStart?.(text);
+        options?.onAnswerStart?.(text, turnMeta);
       };
 
       try {
@@ -207,12 +220,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             conversationId,
             message,
             locale: requestLocale,
-            context: appContext,
+            context: options?.voice ? { ...appContext, voice: options.voice } : appContext,
             stream: true,
           },
           {
             onStatus: (text) => {
               if (abortRef.current === controller) setStatusText(localizeStatus(text));
+            },
+            onMeta: (meta) => {
+              if (abortRef.current === controller) turnMeta = meta;
             },
             onDelta: (text) => {
               if (abortRef.current !== controller) return;

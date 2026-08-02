@@ -123,7 +123,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   const plPositive = stats.overallProfit >= 0;
   // Headline figure: capital put in, less what has been spent on the vehicles. Positive means
   // there is still unspent investment; negative means spending has outrun what was invested.
-  const remaining = stats.totalInvested - stats.totalExpenses;
+  const remaining = stats.totalInvested - (stats.purchaseAndExpenses);
   const remainingPositive = remaining >= 0;
   const estRange = computeEstimatedProfitRange(
     stats.inStockValue,
@@ -159,13 +159,13 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
                 {formatINR(Math.abs(remaining))}
               </p>
               <div className="flex items-baseline justify-between gap-2 mt-1">
-                <p className="text-xs text-mobile-text-muted">{t("mobileDashboard.totalExpenses")}</p>
-                <p className="text-xs font-medium text-mobile-text-secondary shrink-0">{formatINR(stats.totalExpenses)}</p>
+                <p className="text-xs text-mobile-text-muted">{t("mobileDashboard.totalPurchaseExpenses")}</p>
+                <p className="text-xs font-semibold text-mobile-text-secondary shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
               </div>
             </div>
             <button
               onClick={() => setPanel("finance")}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mobile-secondary text-mobile-navy active:opacity-80"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mobile-secondary text-mobile-navy active:opacity-80 self-center"
               aria-label={t("dashboard.financialOverview")}
             >
               <Wallet size={18} />

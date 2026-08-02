@@ -478,6 +478,9 @@ export interface ToolEntitySummary {
 export interface AssistantTraceEvent {
   id: number;
   run_id: string;
+  /** Which of the 8 Ask Salam workflow steps produced this event. See lib/assistantWorkflow.ts.
+   *  Null only for rows written before the column existed — `stepOf()` falls back to event_key. */
+  workflow_step: number | null;
   category: "request" | "context" | "model" | "tool" | "validation" | "persistence" | "response" | "error";
   event_key: string;
   status: "started" | "completed" | "failed" | "skipped" | "info" | "flagged";

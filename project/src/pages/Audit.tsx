@@ -6,6 +6,7 @@ import { PageHeader, Tabs, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { elapsedMilliseconds, formatDate, formatDurationSeconds } from "@/lib/format";
+import { groupTraceByWorkflowStep, type WorkflowStepGroup } from "@/lib/assistantWorkflow";
 import { useAuth } from "@/lib/useAuth";
 import {
   fetchAuditLogs,
@@ -433,12 +434,11 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
                       {loadingRunId === turn.run_id ? (
                         <Spinner size={18} />
                       ) : trace && trace.length > 0 ? (
-                        <div className="border-l border-slate-200 pl-3">
-                          {trace.map((event, index) => (
-                            <TraceEventRow
-                              key={event.id}
-                              event={event}
-                              isLast={index === trace.length - 1}
+                        <div className="space-y-1.5">
+                          {groupTraceByWorkflowStep(trace).map((group) => (
+                            <WorkflowStepSection
+                              key={group.step}
+                              group={group}
                               runStartedAt={turn.started_at ?? turn.created_at}
                             />
                           ))}
@@ -518,6 +518,89 @@ function AssistantActivityTab({ orgId }: { orgId: string | null }) {
           {t("auditPage.pagination.next")} <ChevronRight size={14} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One of the assistant's eight workflow steps, collapsed to a single line until opened.
+ *
+ * The trace is read to answer "what did the assistant do, and where did it go wrong" — a
+ * question about the workflow, not about the implementation. So the step is the unit on
+ * screen and the individual events (which still carry their engineering `event_key` and
+ * `category`) sit one level down. A step with no events is still listed: "this run never
+ * reached confirmation" is an answer, and hiding empty steps would mean inferring the
+ * shape of the run from whatever happened to be recorded.
+ */
+function WorkflowStepSection({
+  group,
+  runStartedAt,
+}: {
+  group: WorkflowStepGroup;
+  runStartedAt: string;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const empty = group.events.length === 0;
+
+  const tone = {
+    failed: { badge: "red" as const, dot: "bg-red-500", label: "failed" },
+    flagged: { badge: "amber" as const, dot: "bg-amber-500", label: "flagged" },
+    completed: { badge: "emerald" as const, dot: "bg-emerald-500", label: "completed" },
+    skipped: { badge: "slate" as const, dot: "bg-slate-300", label: "skipped" },
+    pending: { badge: "slate" as const, dot: "bg-slate-200", label: "pending" },
+  }[group.status];
+
+  return (
+    <div className={`rounded-lg border ${group.status === "failed" ? "border-red-200 bg-red-50/40" : "border-slate-200 bg-white"}`}>
+      <button
+        type="button"
+        onClick={() => !empty && setOpen((visible) => !visible)}
+        disabled={empty}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left disabled:cursor-default"
+      >
+        {empty ? (
+          <span className="w-3.5" />
+        ) : open ? (
+          <ChevronDown size={14} className="shrink-0 text-slate-400" />
+        ) : (
+          <ChevronRight size={14} className="shrink-0 text-slate-400" />
+        )}
+        <span className={`h-2 w-2 shrink-0 rounded-full ${tone.dot}`} />
+        <span className="font-mono text-[10px] text-slate-400">{group.step}</span>
+        <span className={`text-xs font-medium ${empty ? "text-slate-400" : "text-slate-800"}`}>
+          {t(`auditPage.assistantTurn.workflowStep.${group.key}`)}
+        </span>
+        <Badge color={tone.badge}>
+          {t(`auditPage.assistantTurn.stepStatus.${group.status}`, { defaultValue: tone.label })}
+        </Badge>
+        {group.events.length > 0 && (
+          <span className="font-mono text-[10px] text-slate-400">
+            {t("auditPage.assistantTurn.stepEventCount", { count: group.events.length })}
+          </span>
+        )}
+        {group.durationMs !== null && group.durationMs > 0 && (
+          <span className="ml-auto font-mono text-[10px] text-slate-400">
+            {formatDurationSeconds(group.durationMs)}
+          </span>
+        )}
+      </button>
+
+      {open && !empty && (
+        <div className="border-t border-slate-100 px-3 py-2">
+          <div className="border-l border-slate-200 pl-3">
+            {group.events.map((event, index) => (
+              <TraceEventRow
+                key={event.id}
+                event={event}
+                isLast={index === group.events.length - 1}
+                runStartedAt={runStartedAt}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

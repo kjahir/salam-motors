@@ -1408,7 +1408,26 @@
         "completed": "పూర్తయింది",
         "failed": "విఫలమైంది",
         "cancelled": "రద్దు చేయబడింది"
-      }
+      },
+      "workflowStep": {
+        "authenticate": "ప్రమాణీకరణ మరియు పాత్ర సందర్భం లోడ్ చేయండి",
+        "transcribe": "మాటను వచనంగా మార్చండి",
+        "classifyAndTools": "ఉద్దేశాన్ని గుర్తించి ఆమోదిత టూల్స్ నడపండి",
+        "groundAnswer": "సమాధానం మరియు UI బ్లాక్‌లను సిద్ధం చేయండి",
+        "confirm": "సున్నితమైన చర్యలను నిర్ధారించండి",
+        "execute": "ఒకేసారి అమలు చేయండి",
+        "record": "ట్రేస్ మరియు టూల్ కాల్‌లను నమోదు చేయండి",
+        "synthesizeSpeech": "సమాధానాన్ని గొంతుతో చదవండి"
+      },
+      "stepStatus": {
+        "completed": "పూర్తయింది",
+        "failed": "విఫలమైంది",
+        "flagged": "గమనించండి",
+        "skipped": "అవసరం లేదు",
+        "pending": "ఇక్కడికి చేరలేదు"
+      },
+      "stepEventCount_one": "{{count}} ఈవెంట్",
+      "stepEventCount_other": "{{count}} ఈవెంట్‌లు"
     }
   },
   "combobox": {

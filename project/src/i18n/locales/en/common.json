@@ -1408,7 +1408,26 @@
         "completed": "Completed",
         "failed": "Failed",
         "cancelled": "Cancelled"
-      }
+      },
+      "workflowStep": {
+        "authenticate": "Authenticate and load role context",
+        "transcribe": "Transcribe speech",
+        "classifyAndTools": "Classify intent and call approved tools",
+        "groundAnswer": "Ground answer and UI blocks",
+        "confirm": "Confirm sensitive actions",
+        "execute": "Execute idempotently",
+        "record": "Record trace and tool calls",
+        "synthesizeSpeech": "Synthesize speech"
+      },
+      "stepStatus": {
+        "completed": "Done",
+        "failed": "Failed",
+        "flagged": "Flagged",
+        "skipped": "Not needed",
+        "pending": "Not reached"
+      },
+      "stepEventCount_one": "{{count}} event",
+      "stepEventCount_other": "{{count}} events"
     }
   },
   "combobox": {

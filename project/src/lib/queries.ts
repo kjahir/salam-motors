@@ -460,7 +460,7 @@ export async function fetchAssistantTraceForRun(
 ): Promise<AssistantTraceEvent[]> {
   const { data, error } = await supabase
     .from("assistant_trace_events")
-    .select("id, run_id, category, event_key, status, summary, details_redacted, duration_ms, occurred_at")
+    .select("id, run_id, workflow_step, category, event_key, status, summary, details_redacted, duration_ms, occurred_at")
     .eq("run_id", runId)
     .order("occurred_at", { ascending: true })
     .order("id", { ascending: true });

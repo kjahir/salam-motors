@@ -45,6 +45,40 @@ describe("assistant API client", () => {
     });
   });
 
+  it("surfaces the run id from the SSE meta frame before the first delta", async () => {
+    // The server sends `meta` ahead of the deltas precisely so that spoken playback —
+    // which starts on the first delta — can name the run it belongs to for the step-8
+    // trace entry. If this ordering regresses, speech synthesis silently stops being
+    // traceable, so the assertion is on the ordering, not just the value.
+    const seen: string[] = [];
+    const payload = [
+      'event: status\ndata: {"message":"Searching inventory…"}',
+      `event: meta\ndata: ${JSON.stringify({ conversationId: "conversation-1", runId: "run-9" })}`,
+      'event: delta\ndata: {"text":"Three vehicles"}',
+      `event: turn\ndata: ${JSON.stringify({ conversationId: "conversation-1", turn })}`,
+      "event: done\ndata: {}",
+      "",
+    ].join("\n\n");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(payload, {
+          status: 200,
+          headers: { "content-type": "text/event-stream; charset=utf-8" },
+        }),
+      ),
+    );
+
+    const response = await requestAssistantTurn(request, {
+      onMeta: (meta) => seen.push(`meta:${meta.runId}`),
+      onDelta: () => seen.push("delta"),
+    });
+
+    expect(seen).toEqual(["meta:run-9", "delta"]);
+    expect(response.runId).toBe("run-9");
+  });
+
   it("parses named SSE status, delta, turn, and done events", async () => {
     const payload = [
       'event: status\ndata: {"message":"Searching inventory…"}',
@@ -70,7 +104,8 @@ describe("assistant API client", () => {
 
     expect(onStatus).toHaveBeenCalledWith("Searching inventory…");
     expect(onDelta).toHaveBeenCalledWith("Three vehicles");
-    expect(response).toEqual({ conversationId: "conversation-1", turn });
+    // No `meta` frame in this stream, so there is no run to attribute a spoken reply to.
+    expect(response).toEqual({ conversationId: "conversation-1", turn, runId: null });
     expect(fetch).toHaveBeenCalledWith(
       "https://example.supabase.co/functions/v1/assistant-turn",
       expect.objectContaining({

@@ -11,6 +11,7 @@ import {
   authenticatePrincipal,
   bearerToken,
 } from "../_shared/assistant/auth.ts";
+import { capabilitiesFor } from "../_shared/assistant/capabilities.ts";
 import {
   type AssistantConfig,
   loadAssistantConfig,
@@ -35,6 +36,7 @@ import {
   parseAssistantTurnRequest,
   RequestValidationError,
 } from "../_shared/assistant/validation.ts";
+import { WORKFLOW_STEP } from "../_shared/assistant/workflow.ts";
 
 interface TurnContext {
   client: SupabaseClientLike;
@@ -68,6 +70,7 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
 
   const started = Date.now();
   await persistence.logTrace(runId, conversationId, {
+    workflowStep: WORKFLOW_STEP.AUTHENTICATE,
     category: "request",
     eventKey: "turn.request.accepted",
     status: "completed",
@@ -81,6 +84,70 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
       model: config.model,
       stream: request.stream,
     },
+  });
+
+  // The single most useful thing in the whole trace when answering "why did the
+  // assistant refuse / why did it not do X": the role it resolved the caller to, and
+  // the exact set of tools that role unlocked. Everything the model is allowed to do
+  // downstream is decided here, so it belongs on the timeline explicitly rather than
+  // being inferred from which tools happened to be called.
+  const capabilities = capabilitiesFor(principal);
+  await persistence.logTrace(runId, conversationId, {
+    workflowStep: WORKFLOW_STEP.AUTHENTICATE,
+    category: "context",
+    eventKey: "context.role.resolved",
+    status: "completed",
+    summary:
+      `Caller resolved as ${principal.role}; ${capabilities.length} capabilities unlocked.`,
+    details: {
+      role: principal.role,
+      capability_count: capabilities.length,
+      tools_available: capabilities.map((capability) => capability.toolName),
+      confirmation_required_tools: capabilities
+        .filter((capability) => capability.risk === "confirmation_required")
+        .map((capability) => capability.toolName),
+      write_tools: capabilities
+        .filter((capability) => capability.risk === "low_risk_write")
+        .map((capability) => capability.toolName),
+    },
+  });
+
+  await persistence.logTrace(runId, conversationId, {
+    workflowStep: WORKFLOW_STEP.AUTHENTICATE,
+    category: "context",
+    eventKey: "context.history.loaded",
+    status: history.length > 0 ? "completed" : "skipped",
+    summary: history.length > 0
+      ? `Loaded ${history.length} earlier message(s) as conversation context.`
+      : "No earlier messages; this is the first turn of the conversation.",
+    details: {
+      history_message_count: history.length,
+      conversation_continued: request.conversationId !== null,
+    },
+  });
+
+  // Step 2 is reported by the client rather than traced inside assistant-transcribe:
+  // transcription runs as its own function before this run exists, so it has no run to
+  // attach to. Recording it here also lets the timeline state plainly that the step was
+  // skipped for typed input, instead of the step silently having no evidence either way.
+  const voice = request.context.voice;
+  await persistence.logTrace(runId, conversationId, {
+    workflowStep: WORKFLOW_STEP.TRANSCRIBE,
+    category: "context",
+    eventKey: "voice.transcription.completed",
+    status: voice ? "completed" : "skipped",
+    summary: voice
+      ? `Spoken input transcribed by ${voice.provider ?? "the speech service"}.`
+      : "Input was typed; speech transcription not used.",
+    details: voice
+      ? {
+        transcribed: true,
+        provider: voice.provider ?? null,
+        detected_locale: voice.detectedLocale ?? null,
+        audio_duration_ms: voice.audioDurationMs ?? null,
+        transcript_character_count: request.message.length,
+      }
+      : { transcribed: false },
   });
   try {
     const result = await runOpenAITurn({
@@ -96,6 +163,7 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
     });
     const turn = { ...result.turn, conversationId };
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
       category: "response",
       eventKey: "turn.response.generated",
       status: "completed",
@@ -116,6 +184,7 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
       config.model,
     );
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.RECORD,
       category: "persistence",
       eventKey: "turn.response.persisted",
       status: outputMessageId ? "completed" : "skipped",
@@ -125,6 +194,7 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
       details: { output_message_persisted: outputMessageId !== null },
     });
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.RECORD,
       category: "response",
       eventKey: "turn.completed",
       status: "completed",
@@ -144,9 +214,10 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
       errorCode: null,
       errorMessage: null,
     });
-    return { conversationId, turn };
+    return { conversationId, turn, runId };
   } catch (error) {
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.RECORD,
       category: "error",
       eventKey: "turn.failed",
       status: "failed",

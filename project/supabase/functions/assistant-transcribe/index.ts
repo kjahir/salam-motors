@@ -76,6 +76,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Reported back so the turn that follows can record which service actually did the
+    // transcription in its step-2 trace entry — the fallback below means it is not
+    // predictable from configuration alone.
+    let provider = geminiApiKey ? "gemini" : "openai";
     let result;
     try {
       result = geminiApiKey
@@ -101,6 +105,7 @@ Deno.serve(async (req) => {
         console.warn("Gemini transcription failed; using OpenAI fallback", {
           status: error.status,
         });
+        provider = "openai";
         result = await transcribeWithOpenAI({
           audio,
           apiKey: config.openAiApiKey,
@@ -112,7 +117,7 @@ Deno.serve(async (req) => {
         throw error;
       }
     }
-    return jsonResponse(result);
+    return jsonResponse({ ...result, provider });
   } catch (error) {
     if (error instanceof TranscriptionProviderError) {
       console.error("assistant transcription failed", {

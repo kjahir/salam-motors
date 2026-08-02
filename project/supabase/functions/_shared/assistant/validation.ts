@@ -9,6 +9,7 @@ import type {
   AssistantTone,
   AssistantTurn,
   AssistantTurnRequest,
+  AssistantVoiceContext,
 } from "./types.ts";
 import { normalizeNavigationAction } from "./navigation.ts";
 import { ASSISTANT_LOCALES } from "./locales.ts";
@@ -94,6 +95,40 @@ export function parseAssistantTurnRequest(
   if (vehicleId && !isUuid(vehicleId)) {
     throw new RequestValidationError("context.vehicleId must be a UUID");
   }
+  // Client-reported and therefore untrusted: bounded, allow-listed, and never used for
+  // anything but the step-2 trace entry.
+  let voice: AssistantVoiceContext | undefined;
+  if (value.context.voice !== undefined) {
+    if (!isRecord(value.context.voice)) {
+      throw new RequestValidationError("context.voice must be an object");
+    }
+    const audioDurationMs = value.context.voice.audioDurationMs;
+    if (
+      audioDurationMs !== undefined &&
+      (typeof audioDurationMs !== "number" ||
+        !Number.isFinite(audioDurationMs) || audioDurationMs < 0 ||
+        audioDurationMs > 3_600_000)
+    ) {
+      throw new RequestValidationError(
+        "context.voice.audioDurationMs must be a duration in milliseconds",
+      );
+    }
+    voice = {
+      provider: optionalShortString(
+        value.context.voice.provider,
+        "context.voice.provider",
+        40,
+      ),
+      detectedLocale: optionalShortString(
+        value.context.voice.detectedLocale,
+        "context.voice.detectedLocale",
+        20,
+      ),
+      audioDurationMs: audioDurationMs === undefined
+        ? undefined
+        : Math.round(audioDurationMs),
+    };
+  }
   let conversationId: string | undefined;
   if (value.conversationId !== undefined) {
     if (!isUuid(value.conversationId)) {
@@ -127,6 +162,7 @@ export function parseAssistantTurnRequest(
         "context.vehicleTab",
         80,
       ),
+      voice,
     },
     stream: typeof value.stream === "boolean"
       ? value.stream

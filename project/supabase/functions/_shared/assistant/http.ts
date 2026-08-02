@@ -101,6 +101,13 @@ function answerChunks(text: string, targetLength = 96): string[] {
 export interface SseTurnResult {
   conversationId: string;
   turn: AssistantTurn;
+  /**
+   * The run this turn was recorded under. Returned so that a follow-up speech
+   * synthesis call can attach its trace event to the same run — step 8 happens
+   * after the turn has already returned, so the client is the only thing that can
+   * correlate the two. Null when persistence was unavailable.
+   */
+  runId: string | null;
 }
 
 /**
@@ -132,6 +139,13 @@ export function sseTurnResponse(
         try {
           emitStatus("assistant.status.starting");
           const result = await run(emitStatus);
+          // Ahead of the deltas on purpose. The client starts speaking the answer as soon
+          // as the first delta lands, and the speech call has to name the run it belongs
+          // to for the step-8 trace — so the run id has to reach the client first.
+          write("meta", {
+            conversationId: result.conversationId,
+            runId: result.runId,
+          });
           emitStatus("assistant.status.finalizing");
           for (const text of answerChunks(result.turn.answer.text)) {
             write("delta", { text });

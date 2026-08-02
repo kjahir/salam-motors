@@ -10,6 +10,7 @@ import type {
   SupabaseErrorLike,
   ToolResult,
 } from "./types.ts";
+import type { AssistantWorkflowStep } from "./workflow.ts";
 
 function isOptionalSchemaError(error: SupabaseErrorLike | null): boolean {
   const code = error?.code ?? "";
@@ -323,6 +324,11 @@ export class AssistantPersistence {
     runId: string | null,
     conversationId: string,
     event: {
+      /**
+       * Which of the eight workflow steps this event belongs to. Required, so a
+       * new trace event cannot end up outside the timeline the Audit page draws.
+       */
+      workflowStep: AssistantWorkflowStep;
       category:
         | "request"
         | "context"
@@ -353,6 +359,7 @@ export class AssistantPersistence {
         conversation_id: conversationId,
         run_id: runId,
         actor_user_id: this.principal.userId,
+        workflow_step: event.workflowStep,
         category: event.category,
         event_key: event.eventKey,
         status: event.status,

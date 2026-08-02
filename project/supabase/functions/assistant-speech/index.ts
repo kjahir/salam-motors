@@ -10,6 +10,15 @@ import {
   jsonResponse,
   toPublicError,
 } from "../_shared/assistant/http.ts";
+import { AssistantPersistence } from "../_shared/assistant/persistence.ts";
+import { WORKFLOW_STEP } from "../_shared/assistant/workflow.ts";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function uuidOrNull(value: unknown): string | null {
+  return typeof value === "string" && UUID_PATTERN.test(value) ? value : null;
+}
 
 const MAX_SPEECH_CHARACTERS = 4_096;
 const SPOKEN_LOCALES = ["en-IN", "ta-IN", "hi-IN"] as const;
@@ -54,9 +63,14 @@ Deno.serve(async (req) => {
       config.supabaseAnonKey,
       { global: { headers: { Authorization: `Bearer ${token}` } } },
     );
-    await authenticatePrincipal(callerClient);
+    const principal = await authenticatePrincipal(callerClient);
 
-    const body = await req.json() as { text?: unknown; locale?: unknown };
+    const body = await req.json() as {
+      text?: unknown;
+      locale?: unknown;
+      conversationId?: unknown;
+      runId?: unknown;
+    };
     const text = typeof body.text === "string" ? body.text.trim() : "";
     const locale = SPOKEN_LOCALES.includes(body.locale as SpokenLocale)
       ? body.locale as SpokenLocale
@@ -83,6 +97,21 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Step 8 of the workflow. Synthesis happens after the turn has already returned, so
+    // this function is a separate call and the client hands back the run it belongs to;
+    // without both ids there is no run to attach to and the trace is simply skipped
+    // rather than invented. Best-effort throughout: a trace failure must never cost the
+    // user their spoken answer.
+    const conversationId = uuidOrNull(body.conversationId);
+    const runId = uuidOrNull(body.runId);
+    const serverClient = config.supabaseServiceRoleKey
+      ? createClient(config.supabaseUrl, config.supabaseServiceRoleKey)
+      : null;
+    const trace = conversationId && runId && serverClient
+      ? new AssistantPersistence(callerClient, serverClient, principal)
+      : null;
+    const startedAt = Date.now();
+
     const response = await fetch(`${config.openAiBaseUrl}/audio/speech`, {
       method: "POST",
       headers: {
@@ -99,6 +128,19 @@ Deno.serve(async (req) => {
     });
     if (!response.ok) {
       console.error("assistant speech generation failed", response.status);
+      await trace?.logTrace(runId, conversationId!, {
+        workflowStep: WORKFLOW_STEP.SYNTHESIZE_SPEECH,
+        category: "error",
+        eventKey: "voice.speech.synthesized",
+        status: "failed",
+        summary: "The assistant answer could not be read aloud.",
+        details: {
+          provider_status: response.status,
+          locale,
+          character_count: text.length,
+        },
+        durationMs: Date.now() - startedAt,
+      }).catch(() => {});
       throw new AssistantHttpError(
         response.status === 429 ? 429 : 502,
         response.status === 429 ? "SPEECH_BUSY" : "SPEECH_FAILED",
@@ -116,6 +158,22 @@ Deno.serve(async (req) => {
         true,
       );
     }
+    await trace?.logTrace(runId, conversationId!, {
+      workflowStep: WORKFLOW_STEP.SYNTHESIZE_SPEECH,
+      category: "response",
+      eventKey: "voice.speech.synthesized",
+      status: "completed",
+      summary: `Assistant answer synthesized as ${locale} speech.`,
+      details: {
+        locale,
+        character_count: text.length,
+        model: Deno.env.get("OPENAI_TTS_MODEL") ?? "gpt-4o-mini-tts",
+        // Time to first byte: the response body is a stream that has not finished yet.
+        time_to_first_byte_ms: Date.now() - startedAt,
+      },
+      durationMs: Date.now() - startedAt,
+    }).catch(() => {});
+
     return new Response(response.body, {
       status: 200,
       headers: {

@@ -19,7 +19,7 @@ export const defaultLanguage: AppLanguage = "en";
 // Latin can still find their language: "த" reads as Tamil to a Tamil speaker, "TA" does not.
 // Each one is the first letter of that language's own name (தமிழ் → த, ಕನ್ನಡ → ಕ, …).
 export const languageOptions: { code: AppLanguage; locale: AppLocale; nativeName: string; shortLabel: string; translationKey: string }[] = [
-  { code: "en", locale: "en-IN", nativeName: "English", shortLabel: "A", translationKey: "language.english" },
+  { code: "en", locale: "en-IN", nativeName: "English", shortLabel: "EN", translationKey: "language.english" },
   { code: "hi", locale: "hi-IN", nativeName: "हिन्दी", shortLabel: "ह", translationKey: "language.hindi" },
   { code: "ta", locale: "ta-IN", nativeName: "தமிழ்", shortLabel: "த", translationKey: "language.tamil" },
   { code: "ml", locale: "ml-IN", nativeName: "മലയാളം", shortLabel: "മ", translationKey: "language.malayalam" },

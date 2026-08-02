@@ -28,6 +28,7 @@ import {
   streamAssistantSpeech,
   transcribeAssistantAudio,
   type AssistantTranscription,
+  type AssistantTurnMeta,
   type SpokenAssistantLocale,
 } from "./api";
 import {
@@ -70,6 +71,8 @@ function useVoiceDraft(
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  /** Wall-clock start of the current recording, so the trace can report its length. */
+  const recordingStartedAtRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const liveTranscriptTimerRef = useRef<number | null>(null);
   const liveTranscriptAbortRef = useRef<AbortController | null>(null);
@@ -232,8 +235,11 @@ function useVoiceDraft(
         const controller = new AbortController();
         abortRef.current = controller;
         setIsTranscribing(true);
+        const audioDurationMs = recordingStartedAtRef.current
+          ? Date.now() - recordingStartedAtRef.current
+          : undefined;
         void transcribeAssistantAudio(audio, controller.signal)
-          .then((transcription) => onTranscript(transcription))
+          .then((transcription) => onTranscript({ ...transcription, audioDurationMs }))
           .catch((error: unknown) => {
             if (!(error instanceof DOMException && error.name === "AbortError"))
               onError();
@@ -244,6 +250,7 @@ function useVoiceDraft(
           });
       };
 
+      recordingStartedAtRef.current = Date.now();
       recorder.start(250);
       setIsListening(true);
       browserPreviewRef.current = startBrowserSpeechPreview(
@@ -314,14 +321,18 @@ function useSpokenReply(onError: () => void) {
     setIsSpeaking(false);
   };
 
-  const speak = async (text: string, locale: SpokenAssistantLocale) => {
+  const speak = async (
+    text: string,
+    locale: SpokenAssistantLocale,
+    meta?: AssistantTurnMeta,
+  ) => {
     stopSpeaking();
     const controller = new AbortController();
     abortRef.current = controller;
     setIsPreparingSpeech(true);
     try {
       await unlockSpeech();
-      const stream = await streamAssistantSpeech(text, locale, controller.signal);
+      const stream = await streamAssistantSpeech(text, locale, meta, controller.signal);
       if (abortRef.current !== controller || !contextRef.current) return;
 
       const reader = stream.getReader();
@@ -456,13 +467,14 @@ export function AssistantShell() {
     isTranscribing,
     toggle: toggleVoice,
   } = useVoiceDraft(
-    async ({ text, locale }) => {
+    async ({ text, locale, provider, audioDurationMs }) => {
       setDraft("");
       setVoiceError("");
       await sendMessage(text, {
         locale,
-        onAnswerStart: (answer) => {
-          void speak(answer, locale);
+        voice: { provider, detectedLocale: locale, audioDurationMs },
+        onAnswerStart: (answer, meta) => {
+          void speak(answer, locale, meta);
         },
       });
     },

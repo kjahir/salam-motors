@@ -1408,7 +1408,26 @@
         "completed": "पूर्ण",
         "failed": "विफल",
         "cancelled": "रद्द"
-      }
+      },
+      "workflowStep": {
+        "authenticate": "प्रमाणीकरण और भूमिका संदर्भ लोड करें",
+        "transcribe": "आवाज़ को टेक्स्ट में बदलें",
+        "classifyAndTools": "मंशा पहचानें और स्वीकृत टूल चलाएँ",
+        "groundAnswer": "उत्तर और UI ब्लॉक तैयार करें",
+        "confirm": "संवेदनशील कार्रवाई की पुष्टि करें",
+        "execute": "एक ही बार निष्पादित करें",
+        "record": "ट्रेस और टूल कॉल दर्ज करें",
+        "synthesizeSpeech": "उत्तर बोलकर सुनाएँ"
+      },
+      "stepStatus": {
+        "completed": "पूर्ण",
+        "failed": "विफल",
+        "flagged": "चिह्नित",
+        "skipped": "आवश्यक नहीं",
+        "pending": "यहाँ तक नहीं पहुँचा"
+      },
+      "stepEventCount_one": "{{count}} घटना",
+      "stepEventCount_other": "{{count}} घटनाएँ"
     }
   },
   "combobox": {

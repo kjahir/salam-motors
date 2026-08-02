@@ -18,6 +18,7 @@ import type {
   SupabaseErrorLike,
 } from "./types.ts";
 import { isRecord } from "./validation.ts";
+import { WORKFLOW_STEP } from "./workflow.ts";
 
 export interface ConfirmedActionInput {
   client: SupabaseClientLike;
@@ -412,6 +413,7 @@ export async function runConfirmedAction(
 
   const started = Date.now();
   await persistence.logTrace(runId, conversationId, {
+    workflowStep: WORKFLOW_STEP.CONFIRM,
     category: "request",
     eventKey: "confirmation.request.accepted",
     status: "completed",
@@ -428,6 +430,7 @@ export async function runConfirmedAction(
     const proposal = await persistence.loadActionProposal(payload.proposalId);
     const proposalState = assertProposal(proposal, payload);
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.CONFIRM,
       category: "validation",
       eventKey: "confirmation.proposal.revalidated",
       status: "completed",
@@ -477,6 +480,7 @@ export async function runConfirmedAction(
 
       onStatus?.("assistant.status.executing");
       await persistence.logTrace(runId, conversationId, {
+        workflowStep: WORKFLOW_STEP.EXECUTE,
         category: "tool",
         eventKey: "confirmation.transaction.started",
         status: "started",
@@ -513,6 +517,7 @@ export async function runConfirmedAction(
       if (response.error) throw rpcError(response.error);
       data = response.data;
       await persistence.logTrace(runId, conversationId, {
+        workflowStep: WORKFLOW_STEP.EXECUTE,
         category: "tool",
         eventKey: "confirmation.transaction.completed",
         status: "completed",
@@ -535,6 +540,7 @@ export async function runConfirmedAction(
       "confirmation-executor",
     );
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.EXECUTE,
       category: "response",
       eventKey: "confirmation.receipt.generated",
       status: "completed",
@@ -547,6 +553,7 @@ export async function runConfirmedAction(
       durationMs: Date.now() - started,
     });
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.EXECUTE,
       category: "response",
       eventKey: "confirmation.completed",
       status: "completed",
@@ -562,9 +569,10 @@ export async function runConfirmedAction(
       errorCode: null,
       errorMessage: null,
     });
-    return { conversationId, turn };
+    return { conversationId, turn, runId };
   } catch (error) {
     await persistence.logTrace(runId, conversationId, {
+      workflowStep: WORKFLOW_STEP.EXECUTE,
       category: "error",
       eventKey: "confirmation.failed",
       status: "failed",

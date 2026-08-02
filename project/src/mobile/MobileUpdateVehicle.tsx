@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, ShoppingCart } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Card, Button, EmptyState } from "./ui/primitives";
 import { VehicleSelectField } from "./ui/VehicleSelectField";
@@ -26,9 +26,13 @@ export function MobileUpdateVehicle({ vehicleId: initialVehicleId, onNavigate, o
           <div className="flex-1 min-w-0">
             <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
           </div>
-          <Button variant="secondary" onClick={() => onNavigate("add-vehicle")} className="shrink-0">
+          <Button variant="secondary" onClick={() => onNavigate("add-vehicle")} className="shrink-0" disabled={!!vehicleId}>
             <Plus size={16} /> {t("manageVehicles.addNew")}
           </Button>
+          <Button variant="secondary" onClick={() => onNavigate("add-sale")} className="shrink-0" disabled={!vehicleId}>
+            <ShoppingCart size={16}  /> {t("manageVehicles.addSale")}
+          </Button>
+          
         </div>
 
         {!vehicleId && (

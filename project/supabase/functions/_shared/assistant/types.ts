@@ -19,11 +19,25 @@ export interface AssistantPrincipal {
   partnerId: string | null;
 }
 
+/**
+ * How the spoken input that produced `message` was transcribed. Reported by the client
+ * because assistant-transcribe runs as its own function before the run exists and so has
+ * no run to attach a trace event to. Diagnostic only — nothing downstream branches on it,
+ * and the transcript itself arrives as `message` like any typed input.
+ */
+export interface AssistantVoiceContext {
+  provider?: string;
+  detectedLocale?: string;
+  audioDurationMs?: number;
+}
+
 export interface AssistantSurfaceContext {
   surface: "desktop" | "mobile" | "partner";
   page?: string;
   vehicleId?: string;
   vehicleTab?: string;
+  /** Absent when the user typed. */
+  voice?: AssistantVoiceContext;
 }
 
 export interface AssistantTurnRequest {

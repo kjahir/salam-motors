@@ -1408,7 +1408,26 @@
         "completed": "ಪೂರ್ಣಗೊಂಡಿದೆ",
         "failed": "ವಿಫಲವಾಗಿದೆ",
         "cancelled": "ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ"
-      }
+      },
+      "workflowStep": {
+        "authenticate": "ದೃಢೀಕರಣ ಮತ್ತು ಪಾತ್ರ ಸಂದರ್ಭ ಲೋಡ್ ಮಾಡಿ",
+        "transcribe": "ಮಾತನ್ನು ಪಠ್ಯವಾಗಿ ಪರಿವರ್ತಿಸಿ",
+        "classifyAndTools": "ಉದ್ದೇಶ ಗುರುತಿಸಿ ಅನುಮೋದಿತ ಟೂಲ್‌ಗಳನ್ನು ಚಲಾಯಿಸಿ",
+        "groundAnswer": "ಉತ್ತರ ಮತ್ತು UI ಬ್ಲಾಕ್‌ಗಳನ್ನು ಸಿದ್ಧಪಡಿಸಿ",
+        "confirm": "ಸೂಕ್ಷ್ಮ ಕ್ರಮಗಳನ್ನು ದೃಢಪಡಿಸಿ",
+        "execute": "ಒಮ್ಮೆ ಮಾತ್ರ ಕಾರ್ಯಗತಗೊಳಿಸಿ",
+        "record": "ಟ್ರೇಸ್ ಮತ್ತು ಟೂಲ್ ಕರೆಗಳನ್ನು ದಾಖಲಿಸಿ",
+        "synthesizeSpeech": "ಉತ್ತರವನ್ನು ಧ್ವನಿಯಲ್ಲಿ ಓದಿ"
+      },
+      "stepStatus": {
+        "completed": "ಪೂರ್ಣಗೊಂಡಿದೆ",
+        "failed": "ವಿಫಲವಾಗಿದೆ",
+        "flagged": "ಗಮನಿಸಿ",
+        "skipped": "ಅಗತ್ಯವಿಲ್ಲ",
+        "pending": "ಇಲ್ಲಿಗೆ ತಲುಪಿಲ್ಲ"
+      },
+      "stepEventCount_one": "{{count}} ಘಟನೆ",
+      "stepEventCount_other": "{{count}} ಘಟನೆಗಳು"
     }
   },
   "combobox": {

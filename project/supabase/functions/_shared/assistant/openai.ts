@@ -32,6 +32,7 @@ import type {
   ToolResult,
 } from "./types.ts";
 import { asRecord, isRecord, normalizeModelTurn } from "./validation.ts";
+import { WORKFLOW_STEP } from "./workflow.ts";
 
 interface FunctionCall {
   type: "function_call";
@@ -475,6 +476,7 @@ export async function runOpenAITurn(
     let result: ToolResult;
     const started = Date.now();
     await input.persistence.logTrace(input.runId, input.conversationId, {
+      workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
       category: "tool",
       eventKey: "tool.execution.started",
       status: "started",
@@ -501,6 +503,7 @@ export async function runOpenAITurn(
     }
     anyTruncated ||= result.truncated === true;
     await input.persistence.logTrace(input.runId, input.conversationId, {
+      workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
       category: "tool",
       eventKey: "tool.execution.completed",
       status: result.ok ? "completed" : "failed",
@@ -552,6 +555,7 @@ export async function runOpenAITurn(
     );
     const roundTools = toolsForPrincipal(input.principal);
     await input.persistence.logTrace(input.runId, input.conversationId, {
+      workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
       category: "model",
       eventKey: "model.round.started",
       status: "started",
@@ -610,6 +614,7 @@ export async function runOpenAITurn(
     // real (if partial) answer instead of ever re-entering tool execution.
     const calls = roundPlan.forceFinal ? [] : functionCalls(output);
     await input.persistence.logTrace(input.runId, input.conversationId, {
+      workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
       category: "model",
       eventKey: "model.round.completed",
       status: "completed",
@@ -661,6 +666,7 @@ export async function runOpenAITurn(
         );
       }
       await input.persistence.logTrace(input.runId, input.conversationId, {
+        workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
         category: "validation",
         eventKey: "response.structured_json.parsed",
         status: "completed",
@@ -680,6 +686,7 @@ export async function runOpenAITurn(
         input.request.context,
       );
       await input.persistence.logTrace(input.runId, input.conversationId, {
+        workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
         category: "validation",
         eventKey: "response.schema.normalized",
         status: "completed",
@@ -696,6 +703,7 @@ export async function runOpenAITurn(
         turn.answer.text,
       );
       await input.persistence.logTrace(input.runId, input.conversationId, {
+        workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
         category: "validation",
         eventKey: "response.language.checked",
         status: conformance.mismatch ? "flagged" : "completed",
@@ -726,6 +734,7 @@ export async function runOpenAITurn(
         );
         if (remainingForCorrection > 1_000) {
           await input.persistence.logTrace(input.runId, input.conversationId, {
+            workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
             category: "model",
             eventKey: "response.language_correction.started",
             status: "started",
@@ -755,6 +764,7 @@ export async function runOpenAITurn(
             turn.answer.text,
           );
           await input.persistence.logTrace(input.runId, input.conversationId, {
+            workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
             category: "validation",
             eventKey: "response.language_correction.completed",
             status: conformance.mismatch ? "failed" : "completed",
@@ -783,6 +793,7 @@ export async function runOpenAITurn(
       turn = canonicalizeConfirmationBlocks(turn, issuedProposals);
       turn = groundProvenance(turn, evidence, anyTruncated);
       await input.persistence.logTrace(input.runId, input.conversationId, {
+        workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
         category: "validation",
         eventKey: "response.grounding.completed",
         status: "completed",
@@ -816,6 +827,7 @@ export async function runOpenAITurn(
     const reads = calls.filter((call) => READ_ONLY_TOOLS.has(call.name));
     const writes = calls.filter((call) => !READ_ONLY_TOOLS.has(call.name));
     await input.persistence.logTrace(input.runId, input.conversationId, {
+      workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
       category: "tool",
       eventKey: "tool.batch.planned",
       status: "completed",

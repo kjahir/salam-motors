@@ -275,11 +275,22 @@ export interface AssistantTurn {
   provenance: AssistantProvenance;
 }
 
+/** How spoken input reached the assistant. Diagnostic only — it feeds the step-2 entry of
+ *  the run's execution trace, because assistant-transcribe runs before the run exists and
+ *  so cannot record itself. */
+export interface AssistantVoiceContext {
+  provider?: string;
+  detectedLocale?: string;
+  audioDurationMs?: number;
+}
+
 export interface AssistantRequestContext {
   surface: "desktop" | "mobile" | "partner";
   page?: string;
   vehicleId?: string | null;
   vehicleTab?: string | null;
+  /** Absent when the user typed. */
+  voice?: AssistantVoiceContext;
 }
 
 export interface AssistantTurnRequest {
@@ -296,6 +307,9 @@ export interface AssistantTurnRequest {
 export interface AssistantTurnResponse {
   conversationId?: string;
   turn: AssistantTurn;
+  /** The run this turn was recorded under, so a follow-up speech call can attach its
+   *  trace event to the same run. Null when persistence was unavailable. */
+  runId?: string | null;
 }
 
 export interface AssistantChatMessage {

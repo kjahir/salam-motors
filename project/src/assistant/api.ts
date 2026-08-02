@@ -7,10 +7,19 @@ import {
 } from "./schema";
 import { AssistantApiError } from "./errors";
 
+/** Identifies the run a turn was recorded under, so a follow-up speech synthesis call can
+ *  be traced against the same run. Delivered by the SSE `meta` event ahead of the deltas,
+ *  because playback starts on the first delta. */
+export interface AssistantTurnMeta {
+  conversationId?: string;
+  runId: string | null;
+}
+
 export interface AssistantStreamCallbacks {
   onStatus?: (text: string) => void;
   onDelta?: (text: string) => void;
   onTurn?: (turn: AssistantTurn) => void;
+  onMeta?: (meta: AssistantTurnMeta) => void;
 }
 
 interface SseEvent {
@@ -177,7 +186,11 @@ export async function requestAssistantTurn(
       );
     }
     const turn = validatedTurn(body.turn);
-    return { conversationId: body.conversationId ?? turn.conversationId, turn };
+    return {
+      conversationId: body.conversationId ?? turn.conversationId,
+      turn,
+      runId: typeof body.runId === "string" ? body.runId : null,
+    };
   }
 
   if (!response.body) {
@@ -193,6 +206,7 @@ export async function requestAssistantTurn(
   let buffer = "";
   let finalTurn: AssistantTurn | null = null;
   let conversationId: string | undefined;
+  let runId: string | null = null;
 
   const handleEvent = (item: SseEvent) => {
     if (item.event === "done") return;
@@ -216,6 +230,17 @@ export async function requestAssistantTurn(
         typeof (payload as { text?: unknown }).text === "string"
       ) {
         callbacks.onDelta?.((payload as { text: string }).text);
+      }
+      return;
+    }
+    if (item.event === "meta") {
+      const record = recordFromUnknown(payload);
+      if (record) {
+        if (typeof record.conversationId === "string") {
+          conversationId = record.conversationId;
+        }
+        runId = typeof record.runId === "string" ? record.runId : null;
+        callbacks.onMeta?.({ conversationId, runId });
       }
       return;
     }
@@ -271,6 +296,7 @@ export async function requestAssistantTurn(
   return {
     conversationId: conversationId ?? completedTurn.conversationId,
     turn: completedTurn,
+    runId,
   };
 }
 
@@ -279,6 +305,10 @@ export type SpokenAssistantLocale = "en-IN" | "ta-IN" | "hi-IN";
 export interface AssistantTranscription {
   text: string;
   locale: SpokenAssistantLocale;
+  /** Which service transcribed it (gemini/openai). Recorded in the run's step-2 trace. */
+  provider?: string;
+  /** Length of the recording, measured by the recorder rather than the service. */
+  audioDurationMs?: number;
 }
 
 export async function transcribeAssistantAudio(
@@ -303,6 +333,7 @@ export async function transcribeAssistantAudio(
   const body = (await response.json().catch(() => null)) as {
     text?: unknown;
     locale?: unknown;
+    provider?: unknown;
   } | null;
   if (!body || typeof body.text !== "string" || !body.text.trim()) {
     throw new AssistantApiError("No speech was detected.", {
@@ -313,12 +344,17 @@ export async function transcribeAssistantAudio(
   const locale = body.locale === "ta-IN" || body.locale === "hi-IN"
     ? body.locale
     : "en-IN";
-  return { text: body.text.trim(), locale };
+  return {
+    text: body.text.trim(),
+    locale,
+    provider: typeof body.provider === "string" ? body.provider : undefined,
+  };
 }
 
 export async function synthesizeAssistantSpeech(
   text: string,
   locale: SpokenAssistantLocale,
+  meta?: AssistantTurnMeta,
   signal?: AbortSignal,
 ): Promise<Blob> {
   const authHeaders = await assistantAuthHeaders();
@@ -329,7 +365,12 @@ export async function synthesizeAssistantSpeech(
       "Content-Type": "application/json",
       Accept: "audio/mpeg",
     },
-    body: JSON.stringify({ text, locale }),
+    body: JSON.stringify({
+      text,
+      locale,
+      conversationId: meta?.conversationId,
+      runId: meta?.runId,
+    }),
     signal,
   });
   if (!response.ok) throw await responseError(response);
@@ -347,6 +388,7 @@ export async function synthesizeAssistantSpeech(
 export async function streamAssistantSpeech(
   text: string,
   locale: SpokenAssistantLocale,
+  meta?: AssistantTurnMeta,
   signal?: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
   const authHeaders = await assistantAuthHeaders();
@@ -357,7 +399,12 @@ export async function streamAssistantSpeech(
       "Content-Type": "application/json",
       Accept: "audio/pcm",
     },
-    body: JSON.stringify({ text, locale }),
+    body: JSON.stringify({
+      text,
+      locale,
+      conversationId: meta?.conversationId,
+      runId: meta?.runId,
+    }),
     signal,
   });
   if (!response.ok) throw await responseError(response);

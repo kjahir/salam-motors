@@ -701,7 +701,21 @@ function ExpensesTab({ vehicle, cost, partners, onChanged, highlightIds }: {
       syncVehicleAlerts(vehicle.id).catch(() => {});
       onChanged();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to delete", "error");
+      console.error("Delete expense error:", e);
+      const errorMsg = e instanceof Error ? e.message : "Failed to delete";
+      toast(errorMsg, "error");
+      supabase
+        .from("alerts")
+        .insert({
+          vehicle_id: vehicle.id,
+          alert_type: "error",
+          title: "Expense Deletion Failed",
+          description: errorMsg,
+          severity: "high",
+        })
+        .then(({ error: alertErr }) => {
+          if (alertErr) console.error("Failed to log alert", alertErr);
+        });
     }
   };
 
