@@ -19,6 +19,7 @@ import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
 import { hydrateBlocks } from "./hydrate.ts";
+import { planPrefetch } from "./prefetch.ts";
 import { withheldColumnNames, withholdIdentifiers } from "./redact-rows.ts";
 import { AnswerTextScanner, readSseData } from "./streaming.ts";
 import {
@@ -688,6 +689,67 @@ export async function runOpenAITurn(
     );
     return { call, result };
   };
+
+  /*
+  Start the turn with evidence instead of spending a round being told which tool to call.
+
+  Seeded as a completed call rather than as prose so it enters the model's context through
+  the same path a real tool result does — it stays untrusted data, and the existing replay
+  handling, hydration and identifier-withholding all apply unchanged.
+
+  This is a guess, and it is allowed to be wrong: the model sees the result and, if it
+  wanted something else, calls what it wanted exactly as before. A miss costs one read and
+  some input tokens; it cannot change the answer.
+  */
+  const prefetch = planPrefetch(
+    input.request.message,
+    new Set(
+      toolsForPrincipal(input.principal)
+        .map((tool) => tool.name)
+        .filter((name) => READ_ONLY_TOOLS.has(name)),
+    ),
+  );
+  if (prefetch) {
+    const started = Date.now();
+    const call: FunctionCall = {
+      type: "function_call",
+      call_id: `prefetch_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+      name: prefetch.tool,
+      arguments: JSON.stringify(prefetch.arguments),
+    };
+    const { result } = await executeCall(call);
+    // Only seed a result worth having. A failed prefetch is discarded silently so the turn
+    // proceeds exactly as it would have without one.
+    if (result.ok) {
+      totalCalls += 1;
+      sensitiveToolsSeen ||= roundTouchesSensitiveData([prefetch.tool]);
+      const sent = JSON.stringify(withholdIdentifiers(result));
+      sentCharacters += sent.length;
+      replay.push(call, {
+        type: "function_call_output",
+        call_id: call.call_id,
+        output: sent,
+      });
+    }
+    await input.persistence.logTrace(input.runId, input.conversationId, {
+      workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
+      category: "tool",
+      eventKey: "tool.prefetch.seeded",
+      status: result.ok ? "completed" : "skipped",
+      summary: result.ok
+        ? `Seeded ${prefetch.tool} for intent "${prefetch.intent}" before the first model round.`
+        : `Prefetch of ${prefetch.tool} failed and was discarded; the model will choose its own tools.`,
+      details: {
+        intent: prefetch.intent,
+        tool_name: prefetch.tool,
+        arguments: prefetch.arguments,
+        ok: result.ok,
+        entity_count: result.entities?.length ?? 0,
+        error_code: result.error?.code ?? null,
+      },
+      durationMs: Date.now() - started,
+    });
+  }
 
   for (let round = 0; round < input.config.maxToolRounds; round += 1) {
     input.onStatus?.("assistant.status.thinking");
