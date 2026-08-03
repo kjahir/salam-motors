@@ -62,6 +62,12 @@ interface ResponsesEnvelope {
   incomplete_details?: unknown;
   usage?: {
     input_tokens?: number;
+    /**
+     * How much of the input was served from the prompt cache rather than re-prefilled.
+     * The only direct evidence that ordering the instructions for a stable prefix is
+     * actually paying off — without it, cache behaviour can only be guessed at.
+     */
+    input_tokens_details?: { cached_tokens?: number };
     /** Reasoning tokens included. See output_tokens_details for the split. */
     output_tokens?: number;
     output_tokens_details?: { reasoning_tokens?: number };
@@ -1047,6 +1053,15 @@ export async function runOpenAITurn(
           // a turn can exhaust the cap without the answer ever getting long. Without the
           // split, "output_tokens: 3200" cannot tell you whether to raise the cap or spend
           // less on reasoning — opposite fixes.
+          // Instructions + tool definitions are ~4,900 tokens of identical prefix on every
+          // round of every turn. If cached_tokens stays at 0 the prefix is not being
+          // reused, and prefill — not generation — is what the user is waiting through.
+          cached_input_tokens: response.usage?.input_tokens_details
+            ?.cached_tokens ?? null,
+          uncached_input_tokens: response.usage?.input_tokens != null
+            ? response.usage.input_tokens -
+              (response.usage.input_tokens_details?.cached_tokens ?? 0)
+            : null,
           reasoning_tokens: response.usage?.output_tokens_details
             ?.reasoning_tokens ?? null,
           visible_output_tokens: response.usage?.output_tokens != null
