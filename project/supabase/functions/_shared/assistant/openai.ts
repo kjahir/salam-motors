@@ -19,6 +19,7 @@ import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
 import { hydrateBlocks } from "./hydrate.ts";
+import { withheldColumnNames, withholdIdentifiers } from "./redact-rows.ts";
 import { AnswerTextScanner, readSseData } from "./streaming.ts";
 import {
   executeTool,
@@ -579,6 +580,9 @@ export async function runOpenAITurn(
   const evidence = new Map<string, ToolEntity>();
   /** Full tool rows, server-only, used to hydrate blocks the model referenced by id. */
   const toolRows = new Map<string, Record<string, unknown>>();
+  /** How much tool payload reached OpenAI, and how much was withheld. Trace only. */
+  let sentCharacters = 0;
+  let withheldCharacters = 0;
   const issuedProposals: IssuedProposal[] = [];
   const context: ToolExecutionContext = {
     client: input.client,
@@ -1220,6 +1224,11 @@ export async function runOpenAITurn(
         })),
         total_tool_calls_so_far: totalCalls,
         sensitive_data_path: sensitiveToolsSeen,
+        // What actually left for OpenAI on this turn, so exposure is auditable from the
+        // timeline rather than inferred from each tool's select clause.
+        payload_characters_sent: sentCharacters,
+        payload_characters_withheld: withheldCharacters,
+        withheld_columns: withheldColumnNames(),
       },
     });
     const completed = new Map<
@@ -1233,12 +1242,21 @@ export async function runOpenAITurn(
       const item = await executeCall(call);
       completed.set(call.call_id, item);
     }
+    // The single point where dealership rows leave for OpenAI. Identifiers are stripped
+    // here rather than at each tool's select, so a new tool cannot forget to do it — and
+    // the server keeps its untrimmed copy in toolRows, so the user still sees every field
+    // in the rendered block.
     for (const call of calls) {
       const item = completed.get(call.call_id)!;
+      const sent = withholdIdentifiers(item.result);
+      const full = JSON.stringify(item.result);
+      const trimmed = JSON.stringify(sent);
+      sentCharacters += trimmed.length;
+      withheldCharacters += Math.max(0, full.length - trimmed.length);
       replay.push({
         type: "function_call_output",
         call_id: call.call_id,
-        output: JSON.stringify(item.result),
+        output: trimmed,
       });
     }
   }
