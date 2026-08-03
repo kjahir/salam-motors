@@ -301,17 +301,23 @@ async function consumeResponseStream(
     }
   }
 
-  if (!envelope) {
-    // The stream ended without a terminal event: treat as an upstream failure rather than
-    // silently returning an empty turn.
-    throw new AssistantHttpError(
-      502,
-      "MODEL_UPSTREAM_FAILED",
-      "The AI service ended the response stream unexpectedly.",
-      true,
-    );
-  }
+  if (!envelope) throw new UnusableStreamError();
   return { envelope, firstTokenMs, streamed: true };
+}
+
+/**
+ * The stream carried no terminal event we recognized, so no envelope could be built.
+ *
+ * Distinct from a model error because it means *our* reading of the event shape is wrong,
+ * not that the request failed — and the correct response to that is to fall back to the
+ * buffered request, which needs no assumptions about event names at all. Without this
+ * distinction a change in the upstream event vocabulary would take every streamed turn
+ * down; with it, turns get slower and keep working.
+ */
+class UnusableStreamError extends Error {
+  constructor() {
+    super("Responses stream contained no recognizable terminal event");
+  }
 }
 
 /**
@@ -353,11 +359,32 @@ async function requestResponses(
       signal: controller.signal,
     });
     if (streaming && response.ok && response.body) {
-      return await consumeResponseStream(
-        response.body,
-        startedAt,
-        onAnswerDelta!,
-      );
+      try {
+        return await consumeResponseStream(
+          response.body,
+          startedAt,
+          onAnswerDelta!,
+        );
+      } catch (error) {
+        if (!(error instanceof UnusableStreamError)) throw error;
+        // Our event-shape assumption is wrong, not the request. Retry buffered, which
+        // depends on no event names at all, so the turn degrades to its old latency
+        // instead of failing. Logged loudly: this should never happen quietly.
+        console.error(
+          "Responses stream shape unrecognized; falling back to a buffered request",
+        );
+        const remainingMs = timeoutMs - (Date.now() - startedAt);
+        if (remainingMs <= 0) {
+          throw new AssistantHttpError(
+            504,
+            "MODEL_TIMEOUT",
+            "The AI service took too long to respond.",
+            true,
+          );
+        }
+        clearTimeout(timeout);
+        return await requestResponses(config, body, remainingMs);
+      }
     }
     const payload = await response.json().catch(
       () => ({}),
