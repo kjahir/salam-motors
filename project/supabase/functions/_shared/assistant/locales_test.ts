@@ -4,6 +4,7 @@ import {
   assistantStrings,
   checkScriptConformance,
   formatMoney,
+  hasScriptRule,
   interpolate,
   LOCALE_LANGUAGES,
   normalizeAssistantLocale,
@@ -96,4 +97,30 @@ Deno.test("assistantStrings falls back to en-IN for unsupported locales", () => 
     assistantStrings("fr-FR").confirmLabel === ASSISTANT_STRINGS["en-IN"].confirmLabel,
     "unsupported locale should fall back to en-IN strings",
   );
+});
+
+Deno.test("script rules exist only for the locales that need correcting", () => {
+  // The streaming gate holds answer text back until the script can be judged. For a locale
+  // with no rule that verdict never arrives, so the gate must know to open immediately
+  // rather than suppressing the answer forever.
+  for (const locale of ["hi-IN", "ta-IN", "ml-IN", "kn-IN", "te-IN"]) {
+    assert(hasScriptRule(locale), `${locale} should be script-checked`);
+  }
+  assert(!hasScriptRule("en-IN"), "English has no script rule to check against");
+});
+
+Deno.test("twenty letters is enough to judge the script", () => {
+  // The gate buffers until checkScriptConformance returns a verdict, so this bound is the
+  // latency it costs a conformant answer.
+  const tamil = "இந்த மாதத்தின் லாபம் விவரம் கீழே உள்ளது";
+  const english = "This month's profit performance is summarised below";
+
+  const good = checkScriptConformance("ta-IN", tamil);
+  assert(good.checked && !good.mismatch, "correct Tamil was judged a mismatch");
+
+  const bad = checkScriptConformance("ta-IN", english);
+  assert(bad.checked && bad.mismatch, "an English answer passed a Tamil script check");
+
+  const tooShort = checkScriptConformance("ta-IN", "லாபம்");
+  assert(!tooShort.checked, "a verdict was reached before enough letters arrived");
 });

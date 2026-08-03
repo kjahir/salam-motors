@@ -68,6 +68,15 @@ export interface ScriptConformanceResult {
  * Latin/ASCII even in a correctly localized answer, so this only flags a
  * mismatch when the match ratio is negligible, not merely "not 100%".
  */
+/**
+ * Whether this locale has a script rule at all — i.e. whether checkScriptConformance can
+ * ever return a verdict for it. English has none, so a caller waiting for one would wait
+ * forever. Used by the streaming gate to decide whether holding text back can pay off.
+ */
+export function hasScriptRule(locale: string): boolean {
+  return SCRIPT_PATTERNS[normalizeAssistantLocale(locale)] !== undefined;
+}
+
 export function checkScriptConformance(
   locale: string,
   text: string,

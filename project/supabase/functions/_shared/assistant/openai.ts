@@ -12,6 +12,7 @@ import { modelToolNames, traceModelItems } from "./model-trace.ts";
 import {
   assistantStrings,
   checkScriptConformance,
+  hasScriptRule,
   LOCALE_LANGUAGES,
   normalizeAssistantLocale,
 } from "./locales.ts";
@@ -646,6 +647,53 @@ export async function runOpenAITurn(
   let totalCalls = 0;
   let anyTruncated = false;
   let sensitiveToolsSeen = false;
+  /*
+  Streaming gate for the mandated response language.
+
+  When the model replies in the wrong script the server runs a full corrective pass over
+  the whole turn, and that pass is not streamed. Emitting the original text as it arrived
+  meant a Tamil user watched English stream in, waited through the correction, then saw it
+  replaced — visibly worse than before streaming existed, and worst for exactly the locales
+  that hit this most.
+
+  So the first few deltas are held back until there are enough letters to judge the script
+  (checkScriptConformance needs 20). Conformant: flush and stream the rest freely, costing
+  only those few characters of latency. Wrong script: emit nothing at all, and the finished
+  corrected answer reaches the client through the buffered fallback in sseTurnResponse,
+  which triggers precisely because no delta was ever sent.
+  */
+  let pendingAnswer = "";
+  let answerGateOpen: boolean | null = null;
+  const answerDeltaSink = input.onAnswerDelta
+    ? (text: string) => {
+      if (answerGateOpen === false) return;
+      if (answerGateOpen === true) {
+        input.onAnswerDelta!(text);
+        return;
+      }
+      pendingAnswer += text;
+      const verdict = checkScriptConformance(
+        input.request.locale,
+        pendingAnswer,
+      );
+      // `checked: false` means not enough letters yet, or a locale with no script rule —
+      // for the latter the gate opens immediately once there is anything to show.
+      if (!verdict.checked) {
+        if (!hasScriptRule(input.request.locale)) {
+          answerGateOpen = true;
+          input.onAnswerDelta!(pendingAnswer);
+          pendingAnswer = "";
+        }
+        return;
+      }
+      answerGateOpen = !verdict.mismatch;
+      if (answerGateOpen) {
+        input.onAnswerDelta!(pendingAnswer);
+        pendingAnswer = "";
+      }
+    }
+    : undefined;
+
   const startedAt = Date.now();
   const deadlineAt = startedAt + input.config.maxTurnMs;
   /**
@@ -913,7 +961,7 @@ export async function runOpenAITurn(
         ),
         include: ["reasoning.encrypted_content"],
         store: false,
-      }, roundPlan.timeoutMs, input.onAnswerDelta);
+      }, roundPlan.timeoutMs, answerDeltaSink);
       response = call.envelope;
       firstTokenMs = call.firstTokenMs;
       streamed = call.streamed;
