@@ -952,45 +952,125 @@ async function getFinanceOverview(
       "created_at",
     ).order("created_at", { ascending: false }),
   ]);
-  const group = (result: any, operation: string) => {
+  /*
+  Aggregate server-side and send a bounded sample, not the whole ledger.
+
+  This used to return every row and let the model add them up: a plain overview shipped 44
+  rows across five tables, ~9,000 input tokens of UUIDs and columns, purely so the model
+  could compute three subtotals. Postgres does that arithmetic exactly, instantly, and for
+  free — and an LLM summing 44 numbers is a wrong answer waiting to happen, with nothing
+  downstream able to check it.
+
+  The sample is kept so the model can still cite individual records and describe outliers;
+  `total` and `returned` already told it when there was more, and the breakdowns cover the
+  usual follow-ups ("by category", "by status") without shipping rows to support them.
+  */
+  // Five, not ten: the observed overview turn cited three aggregate figures and zero row
+  // details, and `breakdown` now answers the "by category"/"by status" follow-ups that
+  // rows used to be needed for. Enough to name an example, not a ledger.
+  const SAMPLE_SIZE = 5;
+  const group = (
+    result: any,
+    operation: string,
+    amountFields: readonly string[],
+    breakdownField?: string,
+  ) => {
     const records = rows(result, operation);
+    const totals: Record<string, number> = {};
+    for (const field of amountFields) {
+      totals[field] = records.reduce(
+        (sum: number, row: any) => sum + (Number(row[field]) || 0),
+        0,
+      );
+    }
+    const breakdown: Record<string, { count: number; amount: number }> = {};
+    if (breakdownField) {
+      const [primary] = amountFields;
+      for (const row of records) {
+        const key = String(row[breakdownField] ?? "unknown");
+        const bucket = breakdown[key] ?? { count: 0, amount: 0 };
+        bucket.count += 1;
+        bucket.amount += Number(row[primary]) || 0;
+        breakdown[key] = bucket;
+      }
+    }
     return {
-      total: result.count ?? records.length,
-      returned: records.length,
-      records,
+      /*
+      `all` never reaches the model — it is stripped before the summary goes into `data`.
+      It exists because entities drive provenance grounding, and groundProvenance clamps a
+      cited count to the number of entities it holds. Building entities from the sample
+      instead would silently report "10 purchases" for eleven.
+      */
+      all: records,
+      summary: {
+        total: result.count ?? records.length,
+        returned: records.length,
+        // Sums over `returned` rows. When returned < total the tool reports truncated, and
+        // the model is told not to present a partial sum as the organization's figure.
+        totals,
+        ...(breakdownField ? { breakdown } : {}),
+        sample_size: Math.min(SAMPLE_SIZE, records.length),
+        records: records.slice(0, SAMPLE_SIZE),
+      },
     };
   };
-  const purchases = group(purchasesResult, "finance purchases");
-  const sales = group(salesResult, "finance sales");
-  const expenses = group(expensesResult, "finance expenses");
-  const investments = group(investmentsResult, "finance investments");
-  const distributions = group(distributionsResult, "finance distributions");
-  const all = [purchases, sales, expenses, investments, distributions];
+  const purchases = group(
+    purchasesResult,
+    "finance purchases",
+    ["agreed_price", "broker_commission", "other_fee"],
+    "payment_status",
+  );
+  const sales = group(
+    salesResult,
+    "finance sales",
+    ["sale_price", "discount", "buyer_charges"],
+    "payment_status",
+  );
+  const expenses = group(
+    expensesResult,
+    "finance expenses",
+    ["amount"],
+    "category",
+  );
+  const investments = group(
+    investmentsResult,
+    "finance investments",
+    ["amount"],
+    "status",
+  );
+  const distributions = group(
+    distributionsResult,
+    "finance distributions",
+    ["principal_return", "profit_share", "amount_paid", "balance_payable"],
+    "status",
+  );
+  const groups = [purchases, sales, expenses, investments, distributions];
   return {
     ok: true,
     data: {
       filters: { vehicle_id: vehicleId, date_from: dateFrom, date_to: dateTo },
-      purchases,
-      sales,
-      expenses,
-      investments,
-      distributions,
+      purchases: purchases.summary,
+      sales: sales.summary,
+      expenses: expenses.summary,
+      investments: investments.summary,
+      distributions: distributions.summary,
     },
+    // Built from every row, not the sample, so a cited count is the real count.
     entities: [
-      ...purchases.records.map((item: any) =>
+      ...purchases.all.map((item: any) =>
         entity("purchase", item.id, `Purchase ${item.id}`)!
       ),
-      ...sales.records.map((item: any) =>
-        entity("sale", item.id, `Sale ${item.id}`)!
-      ),
-      ...expenses.records.map((item: any) =>
+      ...sales.all.map((item: any) => entity("sale", item.id, `Sale ${item.id}`)!),
+      ...expenses.all.map((item: any) =>
         entity("expense", item.id, `${item.category} expense`)!
       ),
-      ...investments.records.map((item: any) =>
+      ...investments.all.map((item: any) =>
         entity("investment", item.id, `Investment ${item.id}`)!
       ),
     ],
-    truncated: all.some((item) => Number(item.total) > item.returned),
+    truncated: groups.some((item) =>
+      Number(item.summary.total) > item.summary.returned
+    ),
   };
 }
 

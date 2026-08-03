@@ -829,7 +829,14 @@ export async function runOpenAITurn(
       : totalCalls === 0
       ? input.config.routingEffort
       : reasoningEffortForRound(input.config, sensitiveToolsSeen);
-    const roundTools = toolsForPrincipal(input.principal);
+    /*
+    A forced-final round is sent tool_choice:"none", so it cannot call anything — shipping
+    the definitions anyway cost ~3,450 input tokens per round for a capability the round
+    does not have. That is prefill the user waits through before the first word appears.
+    */
+    const roundTools = roundPlan.forceFinal
+      ? []
+      : toolsForPrincipal(input.principal);
     const roundFormat = modelChoseOwnTools
       ? MODEL_TURN_FORMATS.full
       : turnFormatForIntent(prefetch?.intent ?? null);
