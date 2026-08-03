@@ -436,6 +436,83 @@ than from assumption. Do that first.
   turn — including the English ones that regex already handles for free. Worth keeping regex
   as a fast path ahead of it rather than replacing it outright.
 
+## Phase 8 — The first turn, and the turn after it
+
+**Proposal. Not built.** Shaped by one fact about real usage: users ask a few questions and
+close the window.
+
+### What that fact changes
+
+**Most turns are first turns.** The measured 2,049ms time-to-first-token came from the third
+of three consecutive queries — the warmest possible cache. Real usage is a burst of two or
+three questions, then hours of nothing. If the gap between bursts exceeds the prompt cache
+TTL, most real first-questions pay the cold path (~5,705ms measured), and the improvement
+recorded above is close to a best case that rarely occurs.
+
+**Follow-ups are likely, not rare.** Two to four questions is exactly the range where "tell
+me more about the third one" happens. Long-conversation handling does not matter; the
+*second* turn does.
+
+### Rejected: bounding the session
+
+The original idea was to cap a session at ~10 messages and ask the user to close and reopen.
+Recorded here so it is not re-proposed:
+
+`loadHistory` already takes a sliding window of the most recent 12 messages, each capped at
+4,000 characters, so context cannot grow without bound — on message 30 the model sees 19-30.
+With few-question sessions the window is never reached at all. Close-and-reopen would build
+machinery for a case that does not occur, and would export an engineering constraint to the
+user as a chore. A user-initiated "New chat" affordance gives the same capability without
+the interruption.
+
+Making the session stateful *on OpenAI's side* (`store: true` + `previous_response_id`) is a
+different proposal and a worse one: it would hand OpenAI the whole thread to retain, directly
+reversing Phase 5.
+
+### 8a — Warm the prefix while the user types
+
+Between the window opening and the question being sent there are 5-15 seconds of the user
+typing. That is dead time in which the ~4,900-token static prefix could be warmed, so the
+first question — which is most questions — arrives to a warm cache instead of paying prefill.
+
+The latency hides behind the user's own typing, which is the appealing part: it costs the
+user nothing.
+
+**Gated on measurement.** Read `cached_input_tokens` on the first question after an overnight
+gap. If it comes back warm, sparse traffic is not defeating the cache and this whole item
+disappears. If it is near zero, this is the single biggest remaining latency win, because it
+applies to the majority of turns.
+
+Cost if built: one cheap request per window open, wasted on opens that never lead to a
+question. Worth knowing what fraction of opens those are before committing.
+
+### 8b — Carry entity references into history
+
+After a vehicle list, "tell me more about the third one" reaches a model holding the prose
+and nothing else. `saveAssistantMessage` stores `text`, `tone`, `block_types` and
+`source_count` — deliberately not raw blocks, because a confirmation block can carry an
+action token. That caution is right and should stand.
+
+But `provenance.sources` is already `{entity, id, label, count}`, canonicalised by
+`groundProvenance` against real tool evidence and free of tokens. Persisting *that* and
+surfacing it in `loadHistory` is a small change that makes follow-ups resolvable: the model
+would see that the previous turn cited vehicles `v_1, v_2, v_3` with their labels, and could
+act on "the third one" or "the Swift" without asking again.
+
+Two consequences worth stating:
+
+- It composes with hydration. The model references an id; the server fills the row. A
+  follow-up about a previously shown vehicle needs no new tool call at all if the id is
+  already known — though it will usually want fresh data, so this is about *resolution*,
+  not caching.
+- It grows the history payload slightly. Bounded by the existing 12-message window and the
+  24-source cap per turn, so the worst case is small and already limited.
+
+### Sequencing
+
+8a and 8b are independent. 8b is the smaller change and does not need a measurement first;
+8a should not be built until the cold-cache number exists.
+
 ## Projected
 
 | | first word | complete |
@@ -465,10 +542,16 @@ selects the schema variant.
 Phase 7 replaces Phase 3's classifier, so it depends on Phase 3 existing — and on locale
 numbers from real traffic, which is the actual gate.
 
+Phase 8 depends on nothing structurally. 8a is gated on a measurement rather than on code;
+8b can be built at any time.
+
 ```
-Phase 1 (streaming) ─┬─> Phase 2 (hydration) ──> Phase 5 (send less)
+Phase 1 (streaming) ─┬─> Phase 2 (hydration) ─┬─> Phase 5 (send less)
+                     │                        └─> Phase 8b (entity refs in history)
                      └─> Phase 3 (routing)   ─┬─> Phase 6 (narrow schema)
-                                              └─> Phase 7 (embed intent)   [proposal]
+                                              └─> Phase 7 (embed intent)
+
+Phase 8a (warm on open)  — independent, gated on the cold-cache measurement
 ```
 
 Phases 4, 5 and 6 are all optimisations of a working system. Phases 1-3 are where the
@@ -499,3 +582,10 @@ latency actually is.
    model at ~10-50ms and an OpenAI call at ~100-300ms lead to different designs — the second
    puts a network hop on the critical path of every turn, including English ones that regex
    already answers for free.
+9. **Phase 8a, and the most consequential open number here: is the prompt cache warm in real
+   use?** Every latency figure recorded above came from consecutive queries. Users ask a few
+   questions and close, so if sparse traffic lets the cache expire between bursts, most real
+   turns pay the cold path and the measured gains are a best case. Read
+   `cached_input_tokens` on the first question after an overnight gap.
+10. Phase 8a: what fraction of window opens lead to a question at all? Warming costs a
+    request per open, and that trade only pays if opens usually become questions.
