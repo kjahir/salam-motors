@@ -19,18 +19,43 @@ function isOptionalSchemaError(error: SupabaseErrorLike | null): boolean {
     /does not exist|schema cache|could not find/i.test(message);
 }
 
+/*
+Keys whose values never reach the trace. Credentials and action tokens are absolute:
+possessing one is enough to replay a confirmed write. Hidden reasoning stays out because
+`reasoning.encrypted_content` is opaque to us anyway and storing it would only be storing
+noise we cannot read.
+
+Prompt and response *content* is no longer blocked. It used to be — `raw_prompt`,
+`raw_response` and `system_prompt` were on this list — which is why step 3 of the Audit
+page could show that a tool batch was planned but never what was asked or what came back.
+`assistant_trace_events` is gated to owner/manager by RLS, and that gate is what protects
+this content now.
+*/
 const TRACE_BLOCKED_KEY =
-  /(api[_-]?key|secret|password|authorization|bearer|confirmation[_-]?token|action[_-]?token|access[_-]?token|refresh[_-]?token|hidden[_-]?reasoning|chain[_-]?of[_-]?thought|raw[_-]?(payload|prompt|response)|system[_-]?prompt)/i;
+  /(api[_-]?key|secret|password|authorization|bearer|confirmation[_-]?token|action[_-]?token|access[_-]?token|refresh[_-]?token|hidden[_-]?reasoning|chain[_-]?of[_-]?thought)/i;
+
+/**
+ * Room for a full system prompt (~4KB) and a full model answer, while still bounding what
+ * one runaway string can do to the row. Truncation is marked rather than silent: a prompt
+ * that was cut looks different from a prompt that ended.
+ */
+const TRACE_MAX_STRING = 20_000;
 
 export function sanitizeTraceDetails(
   value: Record<string, unknown>,
 ): Record<string, unknown> {
   const sanitize = (input: unknown, depth: number): unknown => {
-    if (depth > 4) return "[depth-limited]";
+    // Tool argument values sit at depth 5 (request → input_items → item → arguments →
+    // value), so the old limit of 4 stubbed out exactly the thing the trace exists to show.
+    if (depth > 8) return "[depth-limited]";
     if (
       input === null || typeof input === "boolean" || typeof input === "number"
     ) return input;
-    if (typeof input === "string") return input.slice(0, 500);
+    if (typeof input === "string") {
+      return input.length > TRACE_MAX_STRING
+        ? `${input.slice(0, TRACE_MAX_STRING)}…[truncated]`
+        : input;
+    }
     if (Array.isArray(input)) {
       return input.slice(0, 40).map((item) => sanitize(item, depth + 1));
     }
@@ -320,6 +345,18 @@ export class AssistantPersistence {
       .eq("requested_by_user_id", this.principal.userId);
   }
 
+  /**
+   * The step of the most recent trace event, i.e. the step the run is currently in.
+   * Terminal failure events are raised from a catch block that has no idea where the
+   * failure came from, so they use this to attribute themselves to the step that was
+   * actually running rather than to whatever step the catch happens to sit in.
+   */
+  get currentWorkflowStep(): AssistantWorkflowStep | null {
+    return this.lastWorkflowStep;
+  }
+
+  private lastWorkflowStep: AssistantWorkflowStep | null = null;
+
   async logTrace(
     runId: string | null,
     conversationId: string,
@@ -351,6 +388,9 @@ export class AssistantPersistence {
       durationMs?: number;
     },
   ): Promise<void> {
+    // Tracked even when there is nothing to write to, so a failure attributes itself to
+    // the right step regardless of whether persistence is available.
+    this.lastWorkflowStep = event.workflowStep;
     if (!runId || !this.serverClient) return;
     const { error } = await this.serverClient
       .from("assistant_trace_events")

@@ -5,7 +5,6 @@ import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Combobox } from "@/components/ui/Combobox";
 import { VehicleSelectField } from "@/components/VehicleSelectField";
-import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { AttachButton, MoreDetailsButton, RowCommitButton, RowDeleteButton, ROW_ACTIONS_WIDTH, type QuickRowState } from "@/components/QuickEntryControls";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";

@@ -7,6 +7,25 @@ const scalar: JsonSchema = {
   type: ["string", "number", "boolean", "null"],
 };
 
+/*
+Item ceilings for the collection blocks, sized against ASSISTANT_MAX_OUTPUT_TOKENS.
+
+These used to be 100 (200 for timeline events), set independently of the token cap, and the
+two never agreed: a vehicle_collection item is a ~15-field object, so at the ~2.8 chars per
+token this schema actually produces, 100 of them plus provenance needs well over 8,000
+tokens. The schema was advertising a shape no turn could physically emit. The model would
+start filling it, hit max_output_tokens mid-object, and the truncated JSON failed to parse —
+surfacing as "the AI service returned an invalid structured response" for what was really
+our own ceiling.
+
+20 keeps a full collection comfortably inside the cap and is the better answer anyway: a
+question spanning 53 vehicles wants a count and the ones that matter, not 53 cards. The
+prompt tells the model to lead with totals and render only the most relevant items when
+there are more, so the cap shapes the answer rather than silently clipping it.
+*/
+const COLLECTION_MAX_ITEMS = 20;
+const DETAIL_MAX_ITEMS = 24;
+
 function strictObject(
   properties: Record<string, JsonSchema>,
 ): JsonSchema {
@@ -77,7 +96,7 @@ const vehicleBlock = strictObject({
   view: { type: "string", enum: ["cards", "table"] },
   items: {
     type: "array",
-    maxItems: 100,
+    maxItems: COLLECTION_MAX_ITEMS,
     items: strictObject({
       id: { type: "string", minLength: 1, maxLength: 80 },
       stockNumber: { type: "string", minLength: 1, maxLength: 100 },
@@ -115,7 +134,7 @@ const alertBlock = strictObject({
   title: { type: "string", maxLength: 200 },
   items: {
     type: "array",
-    maxItems: 100,
+    maxItems: COLLECTION_MAX_ITEMS,
     items: strictObject({
       id: { type: "string", minLength: 1, maxLength: 80 },
       vehicleId: nullableString,
@@ -134,7 +153,7 @@ const timelineBlock = strictObject({
   entityId: nullableString,
   events: {
     type: "array",
-    maxItems: 200,
+    maxItems: DETAIL_MAX_ITEMS,
     items: strictObject({
       id: nullableString,
       at: { type: "string", minLength: 1, maxLength: 80 },
@@ -181,7 +200,7 @@ const receiptBlock = strictObject({
   message: nullableString,
   details: {
     type: "array",
-    maxItems: 100,
+    maxItems: DETAIL_MAX_ITEMS,
     items: strictObject({
       label: { type: "string", minLength: 1, maxLength: 160 },
       value: scalar,
@@ -209,7 +228,11 @@ export const MODEL_TURN_SCHEMA: JsonSchema = strictObject({
   conversationId: { type: "string", minLength: 1, maxLength: 100 },
   locale: { type: "string", minLength: 2, maxLength: 40 },
   answer: strictObject({
-    text: { type: "string", minLength: 1, maxLength: 20_000 },
+    // 20_000 chars is ~7_000 tokens — more than twice the entire output cap, so this
+    // bound never bound anything. 6_000 leaves room for a collection and provenance
+    // alongside it, and a schema-clipped string still yields valid JSON, unlike a
+    // response cut off at max_output_tokens.
+    text: { type: "string", minLength: 1, maxLength: 6_000 },
     tone: {
       type: "string",
       enum: ["neutral", "info", "success", "warning", "danger"],
@@ -237,7 +260,7 @@ export const MODEL_TURN_SCHEMA: JsonSchema = strictObject({
   },
   provenance: strictObject({
     asOf: { type: "string", minLength: 1, maxLength: 80 },
-    sources: { type: "array", maxItems: 100, items: source },
+    sources: { type: "array", maxItems: DETAIL_MAX_ITEMS, items: source },
     truncated: { type: "boolean" },
   }),
 });

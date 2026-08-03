@@ -8,8 +8,13 @@ import {
   type ReasoningEffort,
 } from "./config.ts";
 import { AssistantHttpError } from "./http.ts";
-import { modelToolNames, summarizeModelItems } from "./model-trace.ts";
-import { assistantStrings, checkScriptConformance } from "./locales.ts";
+import { modelToolNames, traceModelItems } from "./model-trace.ts";
+import {
+  assistantStrings,
+  checkScriptConformance,
+  LOCALE_LANGUAGES,
+  normalizeAssistantLocale,
+} from "./locales.ts";
 import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
@@ -49,7 +54,9 @@ interface ResponsesEnvelope {
   incomplete_details?: unknown;
   usage?: {
     input_tokens?: number;
+    /** Reasoning tokens included. See output_tokens_details for the split. */
     output_tokens?: number;
+    output_tokens_details?: { reasoning_tokens?: number };
   };
   error?: { code?: string; message?: string };
 }
@@ -123,9 +130,26 @@ function reasoningEffortForRound(
 // Keep enough of the wall-clock budget for a final, text-only response after
 // tool execution. Model requests use the remaining per-round budget instead
 // of the (potentially larger) global OpenAI timeout.
-const FINAL_RESPONSE_RESERVE_MS = 10_000;
+const MIN_FINAL_RESPONSE_RESERVE_MS = 10_000;
 const MIN_TOOL_DECISION_MS = 5_000;
 const DEADLINE_CLOCK_SKEW_MS = 250;
+
+/**
+ * How much of the turn budget is held back for the final answer.
+ *
+ * This used to be a flat 10s, which made the final response un-tunable: raising
+ * ASSISTANT_MAX_TURN_MS bought the *tool* rounds more time while the answer itself stayed
+ * pinned to ten seconds. Summarizing half a dozen tool results into the structured turn
+ * format takes a reasoning model longer than that, so the turn reliably spent its whole
+ * budget gathering evidence and then timed out writing it up — the more work a question
+ * needed, the more certain it was to produce nothing.
+ *
+ * Writing the answer is the expensive half, not an afterthought, so the reserve scales with
+ * the budget and the floor is the old constant.
+ */
+export function finalResponseReserveMs(maxTurnMs: number): number {
+  return Math.max(MIN_FINAL_RESPONSE_RESERVE_MS, Math.round(maxTurnMs * 0.45));
+}
 
 export interface ModelRoundPlan {
   forceFinal: boolean;
@@ -137,15 +161,16 @@ export function planModelRound(input: {
   configuredTimeoutMs: number;
   round: number;
   maxRounds: number;
+  /** Held back for the final answer. See finalResponseReserveMs(). */
+  reserveMs: number;
 }): ModelRoundPlan {
   const usableMs = Math.max(1, input.remainingMs - DEADLINE_CLOCK_SKEW_MS);
   const isLastRound = input.round === input.maxRounds - 1;
-  const canAffordToolRound =
-    usableMs >= FINAL_RESPONSE_RESERVE_MS + MIN_TOOL_DECISION_MS;
+  const canAffordToolRound = usableMs >= input.reserveMs + MIN_TOOL_DECISION_MS;
   const forceFinal = isLastRound || !canAffordToolRound;
   const roundBudgetMs = forceFinal
     ? usableMs
-    : usableMs - FINAL_RESPONSE_RESERVE_MS;
+    : usableMs - input.reserveMs;
 
   return {
     forceFinal,
@@ -194,6 +219,18 @@ function parseArguments(value: string): Record<string, unknown> {
     return asRecord(JSON.parse(value));
   } catch {
     throw new Error("Tool arguments were not valid JSON");
+  }
+}
+
+/**
+ * Tracing variant of parseArguments: unparseable arguments are themselves worth seeing in
+ * the trace, so they are returned rather than thrown. Never use this to drive execution.
+ */
+function safeArguments(value: string): Record<string, unknown> {
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return { unparsed: value };
   }
 }
 
@@ -467,7 +504,21 @@ export async function runOpenAITurn(
   let totalCalls = 0;
   let anyTruncated = false;
   let sensitiveToolsSeen = false;
-  const deadlineAt = Date.now() + input.config.maxTurnMs;
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + input.config.maxTurnMs;
+  /**
+   * Wall-clock fenced off for writing the final answer. A tool round is therefore given
+   * *less* time than the turn has left, which is why a degraded round can report more time
+   * remaining than the budget it just blew — the difference is this reserve, untouched.
+   */
+  const reserveMs = finalResponseReserveMs(input.config.maxTurnMs);
+  /**
+   * Set when a tool-selection round has already burned its budget and we have fallen back
+   * to spending FINAL_RESPONSE_RESERVE_MS on a text-only answer. Only ever set once: if the
+   * reserved final round times out too, there is genuinely nothing left to say and the
+   * MODEL_TIMEOUT propagates.
+   */
+  let degradedToFinal = false;
 
   const executeCall = async (
     call: FunctionCall,
@@ -483,6 +534,7 @@ export async function runOpenAITurn(
       summary: `Tool ${call.name} started.`,
       details: {
         tool_name: call.name,
+        call_id: call.call_id,
         risk_level: toolRisk(call.name),
         read_only: READ_ONLY_TOOLS.has(call.name),
       },
@@ -512,7 +564,10 @@ export async function runOpenAITurn(
         : `Tool ${call.name} failed.`,
       details: {
         tool_name: call.name,
+        call_id: call.call_id,
+        arguments: argumentsValue,
         error_code: result.error?.code ?? null,
+        error_message: result.error?.message ?? null,
         entity_count: result.entities?.length ?? 0,
         truncated: result.truncated === true,
       },
@@ -542,18 +597,39 @@ export async function runOpenAITurn(
         true,
       );
     }
-    const roundPlan = planModelRound({
-      remainingMs,
-      configuredTimeoutMs: input.config.openAiTimeoutMs,
-      round,
-      maxRounds: input.config.maxToolRounds,
-    });
+    // After a degrade there is exactly one thing left worth doing: spend what remains on a
+    // text-only answer. planModelRound would otherwise hand this round another tool budget
+    // and re-reserve a final response that can never be reached.
+    const roundPlan = degradedToFinal
+      ? {
+        forceFinal: true,
+        timeoutMs: Math.max(1, remainingMs - DEADLINE_CLOCK_SKEW_MS),
+      }
+      : planModelRound({
+        remainingMs,
+        configuredTimeoutMs: input.config.openAiTimeoutMs,
+        round,
+        maxRounds: input.config.maxToolRounds,
+        reserveMs,
+      });
 
-    const roundEffort = reasoningEffortForRound(
-      input.config,
-      sensitiveToolsSeen,
-    );
+    // The degraded round writes up evidence already gathered, with tool_choice:"none" — it
+    // cannot call a tool, propose an action, or reach sensitive data it has not already
+    // read. The sensitive-data effort bump exists to make *tool decisions* more careful, so
+    // applying it here buys nothing and spends the reserve that this round is racing. That
+    // overspend is what turns "answering from evidence already gathered" into a timeout.
+    const roundEffort = degradedToFinal
+      ? input.config.reasoningEffort
+      : reasoningEffortForRound(input.config, sensitiveToolsSeen);
     const roundTools = toolsForPrincipal(input.principal);
+    // Built once so the trace records the exact instructions this round was sent, rather
+    // than a reconstruction that could drift from what the model actually saw.
+    const roundInstructions = assistantInstructions({
+      principal: input.principal,
+      locale: input.request.locale,
+      context: input.request.context,
+      conversationId: input.conversationId,
+    });
     await input.persistence.logTrace(input.runId, input.conversationId, {
       workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
       category: "model",
@@ -568,9 +644,16 @@ export async function runOpenAITurn(
         force_final_response: roundPlan.forceFinal,
         timeout_ms: roundPlan.timeoutMs,
         replay_item_count: replay.length,
+        // Promoted out of the instructions string: the mandated response language is a
+        // first-order cost driver — Indic scripts cost several times the tokens of English
+        // for the same answer — and reading it required scanning a 4KB prompt.
+        response_locale: input.request.locale,
+        response_language:
+          LOCALE_LANGUAGES[normalizeAssistantLocale(input.request.locale)],
         request: {
           endpoint: "responses",
-          input_items: summarizeModelItems(replay),
+          instructions: roundInstructions,
+          input_items: traceModelItems(replay),
           tool_names: modelToolNames(roundTools),
           tool_choice: roundPlan.forceFinal ? "none" : "auto",
           parallel_tool_calls: true,
@@ -581,30 +664,123 @@ export async function runOpenAITurn(
       },
     });
     const modelStarted = Date.now();
-    const response = await requestResponses(input.config, {
-      model: input.config.model,
-      reasoning: {
-        effort: roundEffort,
-      },
-      instructions: assistantInstructions({
-        principal: input.principal,
-        locale: input.request.locale,
-        context: input.request.context,
-        conversationId: input.conversationId,
-      }),
-      input: replay,
-      tools: roundTools,
-      tool_choice: roundPlan.forceFinal ? "none" : "auto",
-      parallel_tool_calls: true,
-      text: { format: MODEL_TURN_FORMAT },
-      max_output_tokens: input.config.maxOutputTokens,
-      safety_identifier: await safetyIdentifier(
-        input.principal.userId,
-        input.config.safetySalt,
-      ),
-      include: ["reasoning.encrypted_content"],
-      store: false,
-    }, roundPlan.timeoutMs);
+    let response: ResponsesEnvelope;
+    try {
+      response = await requestResponses(input.config, {
+        model: input.config.model,
+        reasoning: {
+          effort: roundEffort,
+        },
+        instructions: roundInstructions,
+        input: replay,
+        tools: roundTools,
+        tool_choice: roundPlan.forceFinal ? "none" : "auto",
+        parallel_tool_calls: true,
+        text: { format: MODEL_TURN_FORMAT },
+        max_output_tokens: input.config.maxOutputTokens,
+        safety_identifier: await safetyIdentifier(
+          input.principal.userId,
+          input.config.safetySalt,
+        ),
+        include: ["reasoning.encrypted_content"],
+        store: false,
+      }, roundPlan.timeoutMs);
+    } catch (error) {
+      // A tool-selection round that runs out of budget is what FINAL_RESPONSE_RESERVE_MS
+      // was reserved for: stop asking the model which tools to call, and spend the reserve
+      // answering from the tool results already gathered. Without this the reserve was
+      // unreachable — the round budget always expires at (deadline - reserve), so every
+      // turn whose tool phase ran long died on MODEL_TIMEOUT at a fixed ~19.75s instead of
+      // degrading, no matter how much useful evidence had already been collected.
+      const timedOut = error instanceof AssistantHttpError &&
+        error.code === "MODEL_TIMEOUT";
+      if (!timedOut || roundPlan.forceFinal || degradedToFinal) {
+        // Without this the round simply stops: `model.round.started` is the last thing in
+        // the step and the reader is left to infer that no response ever arrived. Said
+        // explicitly, a dead round is distinguishable from one still in flight.
+        // A forced-final round that dies after a degrade is the case where the run already
+        // promised "answering from evidence already gathered" and then did not. Say that
+        // plainly rather than reporting a bare timeout that reads as unrelated.
+        const brokeThePromise = degradedToFinal && timedOut;
+        await input.persistence.logTrace(input.runId, input.conversationId, {
+          workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
+          category: "model",
+          eventKey: "model.round.failed",
+          status: "failed",
+          summary: brokeThePromise
+            ? `Round ${
+              round + 1
+            } gathered ${totalCalls} tool result(s) but exceeded its ${
+              Math.round(roundPlan.timeoutMs / 1000)
+            }s final-answer reserve while writing them up. The turn produced no answer.`
+            : `Round ${round + 1} failed before returning a response.`,
+          details: {
+            round: round + 1,
+            budget_exceeded: timedOut
+              ? (roundPlan.forceFinal ? "final_answer_reserve" : "turn")
+              : null,
+            error_code: error instanceof AssistantHttpError
+              ? error.code
+              : "MODEL_REQUEST_FAILED",
+            error_message: error instanceof Error
+              ? error.message
+              : String(error),
+            round_budget_ms: roundPlan.timeoutMs,
+            round_elapsed_ms: Date.now() - modelStarted,
+            final_answer_reserve_ms: reserveMs,
+            turn_budget_ms: input.config.maxTurnMs,
+            turn_elapsed_ms: Date.now() - startedAt,
+            turn_remaining_ms: Math.max(0, deadlineAt - Date.now()),
+            reasoning_effort: roundEffort,
+            force_final_response: roundPlan.forceFinal,
+            followed_degrade: degradedToFinal,
+            tool_calls_so_far: totalCalls,
+          },
+          durationMs: Date.now() - modelStarted,
+        });
+        if (brokeThePromise) {
+          throw new AssistantHttpError(
+            504,
+            "ANSWER_TIMEOUT",
+            "The assistant gathered the information but ran out of time writing the answer. Please ask again, or narrow the question.",
+            true,
+          );
+        }
+        throw error;
+      }
+
+      degradedToFinal = true;
+      const remainingMsNow = Math.max(0, deadlineAt - Date.now());
+      await input.persistence.logTrace(input.runId, input.conversationId, {
+        workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
+        category: "model",
+        eventKey: "model.round.degraded",
+        status: "flagged",
+        summary: `Round ${round + 1} exceeded its ${
+          Math.round(roundPlan.timeoutMs / 1000)
+        }s tool-selection budget without answering. Stopping tool selection and spending the ${
+          Math.round(remainingMsNow / 1000)
+        }s reserve on an answer from evidence already gathered.`,
+        details: {
+          round: round + 1,
+          // Which of the three clocks ran out. Naming it matters: the round budget is
+          // deliberately smaller than the turn budget, so "exceeded" without a subject
+          // reads as a contradiction when remaining_ms is larger than the budget blown.
+          budget_exceeded: "tool_selection_round",
+          tool_selection_budget_ms: roundPlan.timeoutMs,
+          tool_selection_elapsed_ms: Date.now() - modelStarted,
+          // The gap between the two numbers above and turn_remaining_ms below.
+          final_answer_reserve_ms: reserveMs,
+          turn_budget_ms: input.config.maxTurnMs,
+          turn_elapsed_ms: Date.now() - startedAt,
+          turn_remaining_ms: remainingMsNow,
+          reserve_intact: remainingMsNow >= reserveMs - DEADLINE_CLOCK_SKEW_MS,
+          tool_calls_so_far: totalCalls,
+        },
+        durationMs: Date.now() - modelStarted,
+      });
+      continue;
+    }
     usage.inputTokens += response.usage?.input_tokens ?? 0;
     usage.outputTokens += response.usage?.output_tokens ?? 0;
     const output = Array.isArray(response.output) ? response.output : [];
@@ -635,7 +811,27 @@ export async function runOpenAITurn(
         response: {
           id: response.id ?? null,
           status: response.status ?? null,
-          output_items: summarizeModelItems(output),
+          output_text: outputText(response),
+          // output_tokens counts reasoning *and* visible text against max_output_tokens, so
+          // a turn can exhaust the cap without the answer ever getting long. Without the
+          // split, "output_tokens: 3200" cannot tell you whether to raise the cap or spend
+          // less on reasoning — opposite fixes.
+          reasoning_tokens: response.usage?.output_tokens_details
+            ?.reasoning_tokens ?? null,
+          visible_output_tokens: response.usage?.output_tokens != null
+            ? response.usage.output_tokens -
+              (response.usage.output_tokens_details?.reasoning_tokens ?? 0)
+            : null,
+          max_output_tokens: input.config.maxOutputTokens,
+          hit_output_cap: (response.usage?.output_tokens ?? 0) >=
+            input.config.maxOutputTokens,
+          incomplete_details: response.incomplete_details ?? null,
+          output_items: traceModelItems(output),
+          tool_calls: calls.map((call) => ({
+            call_id: call.call_id,
+            name: call.name,
+            arguments: safeArguments(call.arguments),
+          })),
           incomplete: response.incomplete_details != null,
           input_tokens: response.usage?.input_tokens ?? 0,
           output_tokens: response.usage?.output_tokens ?? 0,
@@ -646,7 +842,43 @@ export async function runOpenAITurn(
 
     if (!calls.length) {
       const rawText = outputText(response);
+      /*
+      Our own ceiling, not a misbehaving model. When max_output_tokens stops generation
+      mid-JSON the parse below fails, and reporting that as "the AI service returned an
+      invalid structured response" sends the reader looking at OpenAI for a limit we set
+      here. Raised as a distinct failure so the trace names the real constraint.
+      */
+      const hitOutputCap = (response.usage?.output_tokens ?? 0) >=
+        input.config.maxOutputTokens;
+      const truncate = async (): Promise<never> => {
+        await input.persistence.logTrace(input.runId, input.conversationId, {
+          workflowStep: WORKFLOW_STEP.CLASSIFY_AND_TOOLS,
+          category: "model",
+          eventKey: "model.output.truncated",
+          status: "failed",
+          summary:
+            `The answer was cut off at the ${input.config.maxOutputTokens}-token output cap, leaving incomplete JSON. Reasoning and visible text share this cap.`,
+          details: {
+            round: round + 1,
+            max_output_tokens: input.config.maxOutputTokens,
+            output_tokens: response.usage?.output_tokens ?? 0,
+            reasoning_tokens: response.usage?.output_tokens_details
+              ?.reasoning_tokens ?? null,
+            incomplete_details: response.incomplete_details ?? null,
+            recovered_characters: rawText.length,
+            evidence_entity_count: evidence.size,
+          },
+        });
+        throw new AssistantHttpError(
+          502,
+          "ANSWER_TOO_LONG",
+          "The assistant's answer was longer than it can return in one turn. Please narrow the question.",
+          true,
+        );
+      };
+
       if (!rawText) {
+        if (hitOutputCap) await truncate();
         throw new AssistantHttpError(
           502,
           "MODEL_OUTPUT_INVALID",
@@ -658,6 +890,7 @@ export async function runOpenAITurn(
       try {
         parsed = JSON.parse(rawText);
       } catch {
+        if (hitOutputCap) await truncate();
         throw new AssistantHttpError(
           502,
           "MODEL_OUTPUT_INVALID",
@@ -837,6 +1070,16 @@ export async function runOpenAITurn(
         round: round + 1,
         read_tool_names: reads.map((call) => call.name),
         write_tool_names: writes.map((call) => call.name),
+        // The names alone never explained the batch. The call_id ties each planned call to
+        // the tool.execution.* events that follow it and to the model output item that
+        // requested it, so the chain from prompt to result is followable end to end.
+        planned_calls: calls.map((call) => ({
+          call_id: call.call_id,
+          name: call.name,
+          read_only: READ_ONLY_TOOLS.has(call.name),
+          risk_level: toolRisk(call.name),
+          arguments: safeArguments(call.arguments),
+        })),
         total_tool_calls_so_far: totalCalls,
         sensitive_data_path: sensitiveToolsSeen,
       },

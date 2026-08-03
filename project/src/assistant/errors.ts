@@ -26,6 +26,8 @@ export type AssistantErrorTranslationKey =
   | "assistant.errors.notAuthorized"
   | "assistant.errors.rateLimited"
   | "assistant.errors.timeout"
+  | "assistant.errors.answerTimeout"
+  | "assistant.errors.answerTooLong"
   | "assistant.errors.actionFailed";
 
 const SESSION_CODES = new Set(["AUTH_REQUIRED", "INVALID_SESSION", "JWT_EXPIRED"]);
@@ -65,8 +67,20 @@ export function assistantErrorTranslationKey(
   if (error.code === "ASSISTANT_BUSY" || error.status === 429) {
     return "assistant.errors.rateLimited";
   }
+  // Checked before the general timeout: ANSWER_TIMEOUT is also a 504, but the assistant
+  // had already gathered the evidence and only ran out of time writing it up. "Took too
+  // long, try again" reads as nothing happened, which sends people back to a question the
+  // assistant was seconds from answering.
+  if (error.code === "ANSWER_TIMEOUT") {
+    return "assistant.errors.answerTimeout";
+  }
   if (error.code === "MODEL_TIMEOUT" || error.status === 408 || error.status === 504) {
     return "assistant.errors.timeout";
+  }
+  // Distinct from invalidResponse: the answer was well-formed, just longer than one turn
+  // can return. "The assistant returned an invalid response" blames the model for our cap.
+  if (error.code === "ANSWER_TOO_LONG") {
+    return "assistant.errors.answerTooLong";
   }
   if (INVALID_RESPONSE_CODES.has(error.code)) {
     return "assistant.errors.invalidResponse";

@@ -572,7 +572,10 @@ export async function runConfirmedAction(
     return { conversationId, turn, runId };
   } catch (error) {
     await persistence.logTrace(runId, conversationId, {
-      workflowStep: WORKFLOW_STEP.EXECUTE,
+      // Same reasoning as turn.failed: a confirmed action can fail while revalidating the
+      // proposal (step 5) just as easily as while executing it (step 6), and the trace
+      // should say which.
+      workflowStep: persistence.currentWorkflowStep ?? WORKFLOW_STEP.EXECUTE,
       category: "error",
       eventKey: "confirmation.failed",
       status: "failed",

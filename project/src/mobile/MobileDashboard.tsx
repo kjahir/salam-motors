@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BarChart3, Bike, CalendarDays, CheckCircle2, HandCoins, Minus, Plus, PlusCircle, LogOut, ShieldAlert, Wallet,Warehouse } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, CheckCircle2, HandCoins, Minus, Plus, PlusCircle, LogOut, ShieldAlert, Wallet, Warehouse } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Spinner, Card, EmptyState, Sheet } from "./ui/primitives";
 import { formatINR, formatINRRange, daysSince } from "@/lib/format";
@@ -285,41 +285,19 @@ function QuickAction({ icon, label, tone, onClick }: {
   tone: "primary" | "success" | "secondary" | "none";
   onClick: () => void;
 }) {
+  // "none" is the unfilled variant: no colour block and no shadow, so the secondary row of
+  // shortcuts stays visibly subordinate to the three coloured primary actions above it.
   const tones = {
-    primary: "bg-mobile-primary text-white",
-    success: "bg-mobile-success text-white",
-    secondary: "bg-mobile-secondary text-mobile-navy",
+    primary: "bg-mobile-primary text-white shadow-mobile-sm",
+    success: "bg-mobile-success text-white shadow-mobile-sm",
+    secondary: "bg-mobile-secondary text-mobile-navy shadow-mobile-sm",
+    none: "border border-mobile-border bg-mobile-card text-mobile-text-secondary",
   };
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-2 py-2 active:opacity-60">
-      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-mobile-sm ${tones[tone]}`}>{icon}</span>
+      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tones[tone]}`}>{icon}</span>
       <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
     </button>
-  );
-}
-
-/** A colour-led tile whose figures live in a sheet, so the dashboard stays scannable. */
-function IconTile({ label, value, icon, tone, onClick }: {
-  label: string;
-  value: string;
-  icon: ReactNode;
-  tone: "primary" | "success";
-  onClick: () => void;
-}) {
-  const tones = {
-    primary: "bg-mobile-primary text-white",
-    success: "bg-mobile-success text-white",
-  };
-  return (
-    <Card className="p-3.5" onClick={onClick}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[10px] text-mobile-text-muted uppercase truncate">{label}</p>
-          <p className="font-poppins text-xl font-bold text-mobile-text mt-0.5">{value}</p>
-        </div>
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}>{icon}</span>
-      </div>
-    </Card>
   );
 }
 

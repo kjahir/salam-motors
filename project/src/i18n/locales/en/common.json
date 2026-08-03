@@ -1179,6 +1179,8 @@
       "notAuthorized": "You do not have permission to perform this action.",
       "rateLimited": "The assistant is busy right now. Please try again shortly.",
       "timeout": "This request took too long. Please try again.",
+      "answerTimeout": "The assistant found the information but ran out of time writing the answer. Please ask again, or narrow the question.",
+      "answerTooLong": "The answer was longer than the assistant can return at once. Please narrow the question.",
       "actionFailed": "The action could not be completed.",
       "voiceFailed": "Voice input could not be completed.",
       "renderFailedTitle": "This result couldn't be displayed",
@@ -1424,7 +1426,8 @@
         "failed": "Failed",
         "flagged": "Flagged",
         "skipped": "Not needed",
-        "pending": "Not reached"
+        "pending": "Not reached",
+        "interrupted": "Interrupted"
       },
       "stepEventCount_one": "{{count}} event",
       "stepEventCount_other": "{{count}} events"

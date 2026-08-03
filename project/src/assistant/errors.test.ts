@@ -23,11 +23,29 @@ describe("assistant error localization", () => {
         new AssistantApiError("slow", { code: "MODEL_TIMEOUT" }),
       ),
     ).toBe("assistant.errors.timeout");
+    // ANSWER_TIMEOUT is also a 504, but the evidence was gathered and only the write-up
+    // ran out of time. It must not collapse into the generic "took too long" copy, which
+    // tells the user nothing happened.
+    expect(
+      assistantErrorTranslationKey(
+        new AssistantApiError("no time to write", {
+          code: "ANSWER_TIMEOUT",
+          status: 504,
+        }),
+      ),
+    ).toBe("assistant.errors.answerTimeout");
     expect(
       assistantErrorTranslationKey(
         new AssistantApiError("bad model output", { code: "MODEL_OUTPUT_INVALID" }),
       ),
     ).toBe("assistant.errors.invalidResponse");
+    // Truncation at our own output cap is not the model misbehaving, and must not be
+    // reported as an invalid response.
+    expect(
+      assistantErrorTranslationKey(
+        new AssistantApiError("cut off", { code: "ANSWER_TOO_LONG", status: 502 }),
+      ),
+    ).toBe("assistant.errors.answerTooLong");
   });
 
   it("uses offline and action-specific fallbacks", () => {

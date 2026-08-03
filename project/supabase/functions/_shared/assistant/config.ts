@@ -96,7 +96,18 @@ export function loadAssistantConfig(): AssistantConfig {
       .replace(/\/+$/, ""),
     model: env("OPENAI_MODEL") ?? "gpt-5.6-terra",
     reasoningEffort: configuredEffort(),
-    maxToolRounds: boundedInteger("ASSISTANT_MAX_TOOL_ROUNDS", 5, 1, 8),
+    /*
+    Rounds are not the lever they look like. The last round always runs with
+    tool_choice:"none", so N rounds buy at most N-1 that can call a tool, and
+    planModelRound forces the text-only answer long before the count runs out anyway: on
+    the default turn budget, a tool round costing 6s leaves room for exactly two. The old
+    default of 5 advertised a depth the wall clock has never permitted, which made it the
+    first thing people reached for when a turn ran out of time — and it never helped.
+
+    3 is the honest ceiling: two tool rounds plus the guaranteed final answer. To actually
+    buy depth, raise ASSISTANT_MAX_TURN_MS. See openai_test.ts, which pins both properties.
+    */
+    maxToolRounds: boundedInteger("ASSISTANT_MAX_TOOL_ROUNDS", 3, 1, 8),
     maxToolCalls: boundedInteger("ASSISTANT_MAX_TOOL_CALLS", 10, 1, 16),
     maxOutputTokens: boundedInteger(
       "ASSISTANT_MAX_OUTPUT_TOKENS",

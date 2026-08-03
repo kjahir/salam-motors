@@ -545,6 +545,7 @@ function WorkflowStepSection({
 
   const tone = {
     failed: { badge: "red" as const, dot: "bg-red-500", label: "failed" },
+    interrupted: { badge: "red" as const, dot: "bg-red-400", label: "interrupted" },
     flagged: { badge: "amber" as const, dot: "bg-amber-500", label: "flagged" },
     completed: { badge: "emerald" as const, dot: "bg-emerald-500", label: "completed" },
     skipped: { badge: "slate" as const, dot: "bg-slate-300", label: "skipped" },
@@ -552,7 +553,7 @@ function WorkflowStepSection({
   }[group.status];
 
   return (
-    <div className={`rounded-lg border ${group.status === "failed" ? "border-red-200 bg-red-50/40" : "border-slate-200 bg-white"}`}>
+    <div className={`rounded-lg border ${group.status === "failed" || group.status === "interrupted" ? "border-red-200 bg-red-50/40" : "border-slate-200 bg-white"}`}>
       <button
         type="button"
         onClick={() => !empty && setOpen((visible) => !visible)}
@@ -674,7 +675,9 @@ function TraceEventRow({
           </details>
         )}
         {details && event.category === "model" && showDetails && (
-          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all border-t border-slate-100 bg-slate-50 p-2 font-mono text-[10px] leading-relaxed text-slate-600">
+          // break-words, not break-all: these details now carry the system prompt and the
+          // model's answer as prose, and breaking mid-word made them unreadable.
+          <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words border-t border-slate-100 bg-slate-50 p-2 font-mono text-[10px] leading-relaxed text-slate-600">
             {JSON.stringify(details, null, 2)}
           </pre>
         )}

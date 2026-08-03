@@ -34,6 +34,26 @@ describe("groupTraceByWorkflowStep", () => {
     expect(groups[2].status).toBe("pending");
   });
 
+  it("reports a step whose last action never completed as interrupted, not done", () => {
+    // The real shape of a timed-out run: tool selection opened a round and the run died
+    // inside it. Reporting step 3 as "Done" here is how a MODEL_TIMEOUT in tool selection
+    // ended up looking like a failure in step 7.
+    const groups = groupTraceByWorkflowStep([
+      event({ id: 1, workflow_step: 3, event_key: "model.round.started", status: "started" }),
+      event({ id: 2, workflow_step: 3, event_key: "model.round.completed", duration_ms: 1876 }),
+      event({ id: 3, workflow_step: 3, event_key: "model.round.started", status: "started" }),
+    ]);
+    expect(groups[2].status).toBe("interrupted");
+  });
+
+  it("does not call a step interrupted when its started events all closed", () => {
+    const groups = groupTraceByWorkflowStep([
+      event({ id: 1, workflow_step: 3, event_key: "tool.execution.started", status: "started" }),
+      event({ id: 2, workflow_step: 3, event_key: "tool.execution.completed" }),
+    ]);
+    expect(groups[2].status).toBe("completed");
+  });
+
   it("rolls a step up to its worst event status", () => {
     const groups = groupTraceByWorkflowStep([
       event({ id: 1, workflow_step: 3, status: "completed" }),

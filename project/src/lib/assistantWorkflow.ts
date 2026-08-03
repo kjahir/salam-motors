@@ -36,6 +36,9 @@ const STEP_BY_EVENT_KEY: Record<string, AssistantWorkflowStep> = {
   "voice.transcription.completed": 2,
   "model.round.started": 3,
   "model.round.completed": 3,
+  "model.round.degraded": 3,
+  "model.round.failed": 3,
+  "model.output.truncated": 3,
   "tool.batch.planned": 3,
   "tool.execution.started": 3,
   "tool.execution.completed": 3,
@@ -64,7 +67,13 @@ export function stepOf(event: AssistantTraceEvent): AssistantWorkflowStep | null
   return STEP_BY_EVENT_KEY[event.event_key] ?? null;
 }
 
-export type StepStatus = "failed" | "flagged" | "completed" | "skipped" | "pending";
+export type StepStatus =
+  | "failed"
+  | "interrupted"
+  | "flagged"
+  | "completed"
+  | "skipped"
+  | "pending";
 
 export interface WorkflowStepGroup {
   step: AssistantWorkflowStep;
@@ -107,6 +116,12 @@ export function groupTraceByWorkflowStep(
 function rollUpStatus(events: AssistantTraceEvent[]): StepStatus {
   if (events.length === 0) return "pending";
   if (events.some((e) => e.status === "failed")) return "failed";
+  // An event is logged `started` before its work and `completed` after, so a step whose
+  // last recorded event is still `started` never finished — the run died inside it without
+  // getting far enough to say so. Reporting that as "Done" is exactly the kind of lie this
+  // view exists to stop; it happens for real when the edge function is killed mid-run and
+  // no terminal failure event is ever written.
+  if (events[events.length - 1].status === "started") return "interrupted";
   if (events.some((e) => e.status === "flagged")) return "flagged";
   if (events.every((e) => e.status === "skipped")) return "skipped";
   return "completed";

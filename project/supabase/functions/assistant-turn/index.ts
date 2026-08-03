@@ -217,7 +217,11 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
     return { conversationId, turn, runId };
   } catch (error) {
     await persistence.logTrace(runId, conversationId, {
-      workflowStep: WORKFLOW_STEP.RECORD,
+      // Attributed to the step that was in flight, not to this catch block. Hard-coding
+      // RECORD here made every failure read as "failed while recording the trace", which
+      // is never where the problem is — a turn that dies mid tool-selection was showing
+      // step 3 as complete and step 7 as the culprit.
+      workflowStep: persistence.currentWorkflowStep ?? WORKFLOW_STEP.RECORD,
       category: "error",
       eventKey: "turn.failed",
       status: "failed",
