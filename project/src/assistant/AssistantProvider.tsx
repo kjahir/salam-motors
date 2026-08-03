@@ -205,9 +205,20 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       abortRef.current = controller;
       let streamed = "";
       let answerStarted = false;
-      // Filled by the SSE `meta` event, which the server sends before the first delta so
-      // this is already known by the time playback starts.
+      // Filled by the SSE `meta` event, which the server sends before the first delta.
       let turnMeta: AssistantTurnMeta = { runId: null };
+      /*
+      Fires once, with the complete answer.
+
+      It used to fire on the first delta, which meant speech synthesis was handed only
+      whatever had arrived by then — the first ~96-character presentation chunk — and the
+      `answerStarted` guard stopped the finished text from ever reaching it. Real token
+      streaming turned that into the first few characters, which is what surfaced it.
+
+      Waiting for the turn also fixes the language-correction case: when the model answers
+      in the wrong language the server rewrites answer.text afterwards, and speaking the
+      pre-correction text would read the wrong language aloud.
+      */
       const notifyAnswerStart = (text: string) => {
         if (answerStarted || !text.trim()) return;
         answerStarted = true;
@@ -234,7 +245,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               if (abortRef.current !== controller) return;
               streamed += text;
               setStreamingText(streamed);
-              notifyAnswerStart(streamed);
               setMessages((current) =>
                 current.map((item) =>
                   item.id === assistantMessageId ? { ...item, text: streamed, status: "streaming" } : item,

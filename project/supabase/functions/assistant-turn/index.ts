@@ -23,6 +23,7 @@ import {
   jsonResponse,
   sseTurnResponse,
   type SseTurnResult,
+  type SseTurnSink,
   toPublicError,
 } from "../_shared/assistant/http.ts";
 import { runOpenAITurn } from "../_shared/assistant/openai.ts";
@@ -45,10 +46,27 @@ interface TurnContext {
   config: AssistantConfig;
   request: AssistantTurnRequest;
   onStatus?: (messageKey: string) => void;
+  /** Answer text as the model writes it. SSE path only. */
+  onAnswerDelta?: (text: string) => void;
+  /**
+   * Fired as soon as the run exists, before any answer text can be streamed. The client
+   * needs the run id ahead of the first delta because speech playback starts there and
+   * has to attribute its step-8 trace to this run.
+   */
+  onRunStarted?: (runId: string | null, conversationId: string) => void;
 }
 
 async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
-  const { client, persistence, principal, config, request, onStatus } = context;
+  const {
+    client,
+    persistence,
+    principal,
+    config,
+    request,
+    onStatus,
+    onAnswerDelta,
+    onRunStarted,
+  } = context;
   const conversationId = await persistence.ensureConversation(
     request.conversationId,
     request.locale,
@@ -67,6 +85,7 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
     inputMessageId,
     { surface: request.context.surface, page: request.context.page ?? null },
   );
+  onRunStarted?.(runId, conversationId);
 
   const started = Date.now();
   await persistence.logTrace(runId, conversationId, {
@@ -160,6 +179,7 @@ async function runChatTurn(context: TurnContext): Promise<SseTurnResult> {
       history,
       runId,
       onStatus,
+      onAnswerDelta,
     });
     const turn = { ...result.turn, conversationId };
     await persistence.logTrace(runId, conversationId, {
@@ -296,7 +316,7 @@ Deno.serve(async (req) => {
     );
 
     const run = (
-      onStatus?: (messageKey: string) => void,
+      sink?: SseTurnSink,
     ): Promise<SseTurnResult> =>
       request.action
         ? runConfirmedAction({
@@ -305,7 +325,7 @@ Deno.serve(async (req) => {
           principal,
           config,
           request,
-          onStatus,
+          onStatus: sink?.status,
         })
         : runChatTurn({
           client: callerClient,
@@ -313,11 +333,17 @@ Deno.serve(async (req) => {
           principal,
           config,
           request,
-          onStatus,
+          onStatus: sink?.status,
+          // Only present on the SSE path, so the JSON endpoint keeps buffering exactly as
+          // it did before streaming existed.
+          onAnswerDelta: sink?.delta,
+          onRunStarted: sink
+            ? (runId, conversationId) => sink.meta({ conversationId, runId })
+            : undefined,
         });
 
     if (request.stream) {
-      return sseTurnResponse((emitStatus) => run(emitStatus));
+      return sseTurnResponse((sink) => run(sink));
     }
     return jsonResponse(await run());
   } catch (error) {

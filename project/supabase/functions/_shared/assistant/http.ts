@@ -110,45 +110,71 @@ export interface SseTurnResult {
   runId: string | null;
 }
 
+/** What a run may emit while it works. */
+export interface SseTurnSink {
+  status: (messageKey: string) => void;
+  /**
+   * Announces the run before any answer text. The client starts speaking on the first
+   * delta and the speech call must name the run for the step-8 trace, so the run id has
+   * to arrive first. Safe to call more than once; only the first call is sent.
+   */
+  meta: (value: { conversationId: string; runId: string | null }) => void;
+  /** Answer text as the model writes it. */
+  delta: (text: string) => void;
+}
+
 /**
- * Streams live status events while work runs. `delta` events are deliberately
- * emitted only after the final structured turn passes validation, so they are
- * buffered presentation chunks rather than upstream model-token streaming.
+ * Streams a turn as it is produced.
+ *
+ * Deltas are forwarded live from the model. If a run finishes without having emitted any —
+ * a non-streaming model path, or a stream that failed over to the buffered request — the
+ * finished answer is chunked and sent here instead, so the client sees the same event
+ * sequence either way and there is no regression path.
  */
 export function sseTurnResponse(
-  run: (
-    emitStatus: (messageKey: string) => void,
-  ) => Promise<SseTurnResult>,
+  run: (sink: SseTurnSink) => Promise<SseTurnResult>,
 ): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      let deltaSent = false;
+      let metaSent = false;
       const write = (name: string, value: unknown): void => {
         if (!closed) controller.enqueue(encoder.encode(event(name, value)));
       };
-      const emitStatus = (messageKey: string): void => {
-        write("status", {
-          key: messageKey,
-          message: messageKey,
-          text: messageKey,
-        });
+      const sink: SseTurnSink = {
+        status: (messageKey) =>
+          write("status", {
+            key: messageKey,
+            message: messageKey,
+            text: messageKey,
+          }),
+        meta: (value) => {
+          if (metaSent) return;
+          metaSent = true;
+          write("meta", value);
+        },
+        delta: (text) => {
+          if (!text) return;
+          deltaSent = true;
+          write("delta", { text });
+        },
       };
 
       void (async () => {
         try {
-          emitStatus("assistant.status.starting");
-          const result = await run(emitStatus);
-          // Ahead of the deltas on purpose. The client starts speaking the answer as soon
-          // as the first delta lands, and the speech call has to name the run it belongs
-          // to for the step-8 trace — so the run id has to reach the client first.
-          write("meta", {
+          sink.status("assistant.status.starting");
+          const result = await run(sink);
+          sink.meta({
             conversationId: result.conversationId,
             runId: result.runId,
           });
-          emitStatus("assistant.status.finalizing");
-          for (const text of answerChunks(result.turn.answer.text)) {
-            write("delta", { text });
+          if (!deltaSent) {
+            sink.status("assistant.status.finalizing");
+            for (const text of answerChunks(result.turn.answer.text)) {
+              write("delta", { text });
+            }
           }
           write("turn", result);
           write("done", {

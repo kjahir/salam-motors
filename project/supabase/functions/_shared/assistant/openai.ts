@@ -18,6 +18,7 @@ import {
 import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
+import { AnswerTextScanner, readSseData } from "./streaming.ts";
 import {
   executeTool,
   type ToolExecutionContext,
@@ -71,6 +72,12 @@ export interface OpenAIRunInput {
   history: ConversationHistoryItem[];
   runId: string | null;
   onStatus?: (messageKey: string) => void;
+  /**
+   * Receives answer text as the model writes it. Present only on streaming (SSE) requests;
+   * when absent the model call is buffered exactly as before, so the non-streaming JSON
+   * endpoint is unaffected.
+   */
+  onAnswerDelta?: (text: string) => void;
 }
 
 export interface OpenAIRunResult {
@@ -234,11 +241,89 @@ function safeArguments(value: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Reduces the Responses event stream into the same envelope the buffered path returns,
+ * forwarding answer text to the caller as it decodes.
+ *
+ * `response.completed` and `response.incomplete` both carry the entire response object, so
+ * the final envelope is taken wholesale from whichever arrives rather than rebuilt from
+ * deltas. That keeps every downstream reader — usage totals, truncation detection, function
+ * calls, the trace — working on exactly the shape it did before streaming existed.
+ */
+async function consumeResponseStream(
+  body: ReadableStream<Uint8Array>,
+  startedAt: number,
+  onAnswerDelta: (text: string) => void,
+): Promise<ModelCallResult> {
+  const scanner = new AnswerTextScanner();
+  let envelope: ResponsesEnvelope | null = null;
+  let firstTokenMs: number | null = null;
+
+  for await (const item of readSseData(body)) {
+    const type = typeof item.type === "string" ? item.type : "";
+    if (type === "response.output_text.delta") {
+      if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt;
+      const delta = typeof item.delta === "string" ? item.delta : "";
+      if (!delta) continue;
+      const text = scanner.feed(delta);
+      // A tool-selection round never produces the turn document, so the scanner stays
+      // silent and nothing is emitted — no need to know in advance which kind of round
+      // this is.
+      if (text) onAnswerDelta(text);
+      continue;
+    }
+    if (type === "response.completed" || type === "response.incomplete") {
+      const value = item.response;
+      if (typeof value === "object" && value !== null) {
+        envelope = value as ResponsesEnvelope;
+      }
+      continue;
+    }
+    if (type === "response.failed" || type === "error") {
+      const value = item.response ?? item;
+      const record = typeof value === "object" && value !== null
+        ? value as ResponsesEnvelope
+        : {};
+      throw new AssistantHttpError(
+        502,
+        "MODEL_UPSTREAM_FAILED",
+        record.error?.message ??
+          "The AI service could not complete this request.",
+        true,
+      );
+    }
+  }
+
+  if (!envelope) {
+    // The stream ended without a terminal event: treat as an upstream failure rather than
+    // silently returning an empty turn.
+    throw new AssistantHttpError(
+      502,
+      "MODEL_UPSTREAM_FAILED",
+      "The AI service ended the response stream unexpectedly.",
+      true,
+    );
+  }
+  return { envelope, firstTokenMs, streamed: true };
+}
+
+/**
+ * Result of one model call, plus the streaming facts the trace needs. `firstTokenMs` is the
+ * whole point of Phase 1 — without it a fast answer and a slow answer that started early
+ * look identical.
+ */
+interface ModelCallResult {
+  envelope: ResponsesEnvelope;
+  firstTokenMs: number | null;
+  streamed: boolean;
+}
+
 async function requestResponses(
   config: AssistantConfig,
   body: Record<string, unknown>,
   timeoutMs: number,
-): Promise<ResponsesEnvelope> {
+  onAnswerDelta?: (text: string) => void,
+): Promise<ModelCallResult> {
   if (!config.openAiApiKey) {
     throw new AssistantHttpError(
       503,
@@ -248,6 +333,8 @@ async function requestResponses(
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const streaming = typeof onAnswerDelta === "function";
+  const startedAt = Date.now();
   try {
     const response = await fetch(`${config.openAiBaseUrl}/responses`, {
       method: "POST",
@@ -255,9 +342,16 @@ async function requestResponses(
         "Authorization": `Bearer ${config.openAiApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(streaming ? { ...body, stream: true } : body),
       signal: controller.signal,
     });
+    if (streaming && response.ok && response.body) {
+      return await consumeResponseStream(
+        response.body,
+        startedAt,
+        onAnswerDelta!,
+      );
+    }
     const payload = await response.json().catch(
       () => ({}),
     ) as ResponsesEnvelope;
@@ -282,7 +376,7 @@ async function requestResponses(
         response.status >= 500,
       );
     }
-    return payload;
+    return { envelope: payload, firstTokenMs: null, streamed: false };
   } catch (error) {
     if (error instanceof AssistantHttpError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -413,7 +507,9 @@ async function correctTurnLanguage(input: {
     : input.locale === "hi-IN"
     ? "Hindi"
     : input.locale;
-  const response = await requestResponses(input.config, {
+  // Not streamed: this is a repair pass over an already-delivered answer, so there is no
+  // first-token latency worth chasing and the client has long since seen the text.
+  const { envelope: response } = await requestResponses(input.config, {
     model: input.config.model,
     reasoning: { effort: "low" },
     instructions: `Rewrite the supplied AssistantTurn in ${languageName}.
@@ -665,8 +761,10 @@ export async function runOpenAITurn(
     });
     const modelStarted = Date.now();
     let response: ResponsesEnvelope;
+    let firstTokenMs: number | null = null;
+    let streamed = false;
     try {
-      response = await requestResponses(input.config, {
+      const call = await requestResponses(input.config, {
         model: input.config.model,
         reasoning: {
           effort: roundEffort,
@@ -684,7 +782,10 @@ export async function runOpenAITurn(
         ),
         include: ["reasoning.encrypted_content"],
         store: false,
-      }, roundPlan.timeoutMs);
+      }, roundPlan.timeoutMs, input.onAnswerDelta);
+      response = call.envelope;
+      firstTokenMs = call.firstTokenMs;
+      streamed = call.streamed;
     } catch (error) {
       // A tool-selection round that runs out of budget is what FINAL_RESPONSE_RESERVE_MS
       // was reserved for: stop asking the model which tools to call, and spend the reserve
@@ -803,6 +904,11 @@ export async function runOpenAITurn(
         round: round + 1,
         response_id: response.id ?? null,
         response_status: response.status ?? null,
+        streamed,
+        // Time to the model's first token, not to the finished turn. This is the number
+        // Phase 1 exists to move; total duration_ms cannot distinguish a fast answer from
+        // a slow one that started promptly.
+        time_to_first_token_ms: firstTokenMs,
         output_item_count: output.length,
         tool_call_count: calls.length,
         tool_names: calls.map((call) => call.name),
