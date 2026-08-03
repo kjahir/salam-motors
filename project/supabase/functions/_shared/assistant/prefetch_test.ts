@@ -108,3 +108,54 @@ Deno.test("prefetch arguments satisfy the tool schema shape", () => {
   }
   assert(plan.arguments.limit === 20, "prefetch should ask for a modest page");
 });
+
+Deno.test("finance questions are prefetched with the right period", () => {
+  const allowed = new Set(["get_finance_overview"]);
+  const now = new Date("2026-08-03T12:00:00Z");
+
+  const thisMonth = planPrefetch("Explain this month's profit performance", allowed, now);
+  assert(thisMonth?.tool === "get_finance_overview", "finance question was not matched");
+  assert(
+    thisMonth.arguments.date_from === "2026-08-01" &&
+      thisMonth.arguments.date_to === "2026-08-31",
+    `wrong period: ${thisMonth.arguments.date_from}..${thisMonth.arguments.date_to}`,
+  );
+
+  const lastMonth = planPrefetch("how were expenses last month", allowed, now);
+  assert(
+    lastMonth?.arguments.date_from === "2026-07-01" &&
+      lastMonth.arguments.date_to === "2026-07-31",
+    `wrong period: ${lastMonth?.arguments.date_from}..${lastMonth?.arguments.date_to}`,
+  );
+
+  const noPeriod = planPrefetch("show me the overall finance summary", allowed, now);
+  assert(
+    noPeriod?.arguments.date_from === null && noPeriod.arguments.date_to === null,
+    "an unqualified question should not invent a date filter",
+  );
+});
+
+Deno.test("last month crosses a year boundary correctly", () => {
+  const plan = planPrefetch(
+    "what was our profit last month",
+    new Set(["get_finance_overview"]),
+    new Date("2026-01-15T12:00:00Z"),
+  );
+  assert(
+    plan?.arguments.date_from === "2025-12-01" &&
+      plan.arguments.date_to === "2025-12-31",
+    `January's "last month" resolved to ${plan?.arguments.date_from}..${plan?.arguments.date_to}`,
+  );
+});
+
+Deno.test("a vehicle-ranking question is left to the model, not the ledger", () => {
+  // "which vehicle is most profitable" wants inventory ranking; get_finance_overview
+  // returns org-level ledger groups and would answer the wrong question.
+  assert(
+    planPrefetch(
+      "which vehicle is most profitable",
+      new Set(["get_finance_overview", "search_inventory"]),
+    )?.tool !== "get_finance_overview",
+    "a per-vehicle profit question was routed to the org ledger",
+  );
+});

@@ -307,6 +307,13 @@ export const MODEL_TURN_FORMATS = {
     metricBlock,
     emptyBlock,
   ]),
+  // vehicleBlock is included: "which vehicles cost us most" is a finance question with an
+  // inventory answer, and boxing that out would be a worse result, not just a plainer one.
+  finance_overview: turnFormat("salam_motors_assistant_turn_v1_finance", [
+    metricBlock,
+    vehicleBlock,
+    emptyBlock,
+  ]),
 } as const;
 
 export type ModelTurnFormatKey = keyof typeof MODEL_TURN_FORMATS;

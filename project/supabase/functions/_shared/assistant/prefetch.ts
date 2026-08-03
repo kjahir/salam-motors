@@ -25,11 +25,41 @@
  * the way to close that gap.
  */
 
+import { dealershipToday } from "./prompt.ts";
+
 export interface PrefetchPlan {
   tool: string;
   arguments: Record<string, unknown>;
   /** Which rule matched, for the trace. */
   intent: string;
+}
+
+/**
+ * Resolves "this month" / "last month" to real dates, or null for no date filter.
+ *
+ * Worth doing here rather than leaving to the model: a finance question naming a relative
+ * period is exactly the case that produced a confident ₹0 for March 2025 when the model had
+ * to guess the date. Resolving it server-side means the prefetched result is already for
+ * the right period.
+ */
+function periodFilter(
+  message: string,
+  now?: Date,
+): { date_from: string | null; date_to: string | null } {
+  const today = dealershipToday(now);
+  if (/\bthis month\b|\bcurrent month\b/i.test(message)) {
+    return { date_from: today.monthStart, date_to: today.monthEnd };
+  }
+  if (/\blast month\b|\bprevious month\b/i.test(message)) {
+    const [year, month] = today.monthStart.split("-").map(Number);
+    const start = new Date(Date.UTC(year, month - 2, 1));
+    const end = new Date(Date.UTC(year, month - 1, 0));
+    return {
+      date_from: start.toISOString().slice(0, 10),
+      date_to: end.toISOString().slice(0, 10),
+    };
+  }
+  return { date_from: null, date_to: null };
 }
 
 interface Rule {
@@ -39,7 +69,7 @@ interface Rule {
   require: RegExp[];
   /** Any match here disqualifies the rule. */
   reject?: RegExp[];
-  build: (message: string) => Record<string, unknown>;
+  build: (message: string, now?: Date) => Record<string, unknown>;
 }
 
 /** Smaller than the model would ask for: a wrong guess should be cheap to carry. */
@@ -58,6 +88,20 @@ const COMPOUND_INTENT =
   /\b(and then|as well as|after that|also (?:give|show|tell|draft|list)|then (?:give|show|tell|draft|list))\b/i;
 
 const RULES: readonly Rule[] = [
+  {
+    intent: "finance_overview",
+    tool: "get_finance_overview",
+    require: [
+      /\b(profit|finance|financial|revenue|expense|expenses|spending|cash|margin|turnover|earnings|loss)\b/i,
+    ],
+    // "which vehicle is most profitable" wants inventory ranking, not the org ledger.
+    reject: [WRITE_INTENT, /\b(which|what) (vehicle|bike|car|scooter)\b/i],
+    build: (message, now) => ({
+      vehicle_id: null,
+      ...periodFilter(message, now),
+      limit: 100,
+    }),
+  },
   {
     intent: "ageing_stock",
     tool: "get_dashboard_ageing",
@@ -115,6 +159,7 @@ const RULES: readonly Rule[] = [
 export function planPrefetch(
   message: string,
   allowed: ReadonlySet<string>,
+  now?: Date,
 ): PrefetchPlan | null {
   const text = message.trim();
   if (text.length < 6 || text.length > 200) return null;
@@ -126,7 +171,7 @@ export function planPrefetch(
     if (!rule.require.every((pattern) => pattern.test(text))) continue;
     return {
       tool: rule.tool,
-      arguments: rule.build(text),
+      arguments: rule.build(text, now),
       intent: rule.intent,
     };
   }
