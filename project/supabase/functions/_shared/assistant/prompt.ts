@@ -138,6 +138,11 @@ REQUEST CONTEXT
 - Response language: ${languageName} (locale "${input.locale}").
 - conversationId: "${input.conversationId}".
 - UI navigation hint: ${JSON.stringify(input.context)}.
+
+WRITE YOUR ENTIRE REPLY IN ${languageName.toUpperCase()}
+- answer.text, every block title, description, label, summary and helpText, and every follow-up label and message: all in ${languageName}.
+- Do this even though these instructions, the tool definitions and every tool result are in English. English input is not permission to answer in English.
+- Keep IDs, stock and registration numbers, money values and app status codes exactly as the tools returned them.
 `.trim();
 }
 

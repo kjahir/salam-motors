@@ -124,3 +124,36 @@ Deno.test("month bounds handle short months and leap years", () => {
   assert(dealershipToday(new Date("2026-04-10T06:00:00Z")).monthEnd === "2026-04-30", "April has 30 days");
   assert(dealershipToday(new Date("2026-12-10T06:00:00Z")).monthEnd === "2026-12-31", "December has 31 days");
 });
+
+Deno.test("the language mandate is stated concretely, last, and by name", () => {
+  /*
+  Phase 4 moved per-request values into a trailing block for prompt caching, and in doing
+  so replaced the inline language name with "the language named in REQUEST CONTEXT". That
+  is an indirection, added to the one instruction this model already drifts on — the whole
+  reason the corrective translation pass exists. The concrete restatement is now the last
+  thing the model reads.
+  */
+  const tamil = assistantInstructions({
+    principal,
+    locale: "ta-IN",
+    context: { surface: "web" } as unknown as AssistantSurfaceContext,
+    conversationId: "c1",
+  });
+  const tail = tamil.slice(-500);
+  assert(tail.includes("TAMIL"), "the language is not named in the closing instruction");
+  assert(tail.includes("Tamil"), "the language is not named concretely at the end");
+  assert(
+    tail.includes("English input is not permission to answer in English"),
+    "the all-English-context drift is not addressed where it matters",
+  );
+  // The failure this guards: an English prompt must never tell the model to write English
+  // *because* the context is English, and must not leak another locale's name.
+  const english = assistantInstructions({
+    principal,
+    locale: "en-IN",
+    context: { surface: "web" } as unknown as AssistantSurfaceContext,
+    conversationId: "c1",
+  });
+  assert(english.slice(-500).includes("ENGLISH"), "English locale lost its mandate");
+  assert(!english.includes("Tamil"), "an unrelated language leaked into the prompt");
+});
