@@ -716,6 +716,11 @@ export async function runOpenAITurn(
     // overspend is what turns "answering from evidence already gathered" into a timeout.
     const roundEffort = degradedToFinal
       ? input.config.reasoningEffort
+      // No evidence gathered yet means this round's likely job is naming a tool, which is
+      // cheap to decide. Once a tool has run, the round may be writing the answer and gets
+      // the full configured effort.
+      : totalCalls === 0
+      ? input.config.routingEffort
       : reasoningEffortForRound(input.config, sensitiveToolsSeen);
     const roundTools = toolsForPrincipal(input.principal);
     // Built once so the trace records the exact instructions this round was sent, rather

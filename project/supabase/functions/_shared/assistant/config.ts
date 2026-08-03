@@ -17,6 +17,8 @@ export interface AssistantConfig {
   openAiBaseUrl: string;
   model: string;
   reasoningEffort: ReasoningEffort;
+  /** Effort for a round with no evidence gathered yet. See the assignment in loadConfig. */
+  routingEffort: ReasoningEffort;
   maxToolRounds: number;
   maxToolCalls: number;
   maxOutputTokens: number;
@@ -54,11 +56,14 @@ function boundedInteger(
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function configuredEffort(): ReasoningEffort {
-  const value = env("OPENAI_REASONING_EFFORT") ?? "low";
+function configuredEffort(
+  name = "OPENAI_REASONING_EFFORT",
+  fallback: ReasoningEffort = "low",
+): ReasoningEffort {
+  const value = env(name) ?? fallback;
   return REASONING_EFFORTS.includes(value as ReasoningEffort)
     ? value as ReasoningEffort
-    : "low";
+    : fallback;
 }
 
 export function usableActionTokenSecret(
@@ -96,6 +101,17 @@ export function loadAssistantConfig(): AssistantConfig {
       .replace(/\/+$/, ""),
     model: env("OPENAI_MODEL") ?? "gpt-5.6-terra",
     reasoningEffort: configuredEffort(),
+    /*
+    Effort for a round that has no evidence yet — round 0, whose usual job is to name a
+    tool. Choosing between seven tools does not need the reasoning budget that writing a
+    grounded answer does.
+
+    Tunable, and reversible without a deploy, because round 0 is not *always* routing: a
+    greeting or a question needing no dealership data is answered there directly, and that
+    answer is written at this effort. If direct answers start reading thin, raise
+    ASSISTANT_ROUTING_EFFORT before suspecting anything else.
+    */
+    routingEffort: configuredEffort("ASSISTANT_ROUTING_EFFORT", "none"),
     /*
     Rounds are not the lever they look like. The last round always runs with
     tool_choice:"none", so N rounds buy at most N-1 that can call a tool, and
