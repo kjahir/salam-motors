@@ -5,16 +5,74 @@ import type {
   AssistantSurfaceContext,
 } from "./types.ts";
 
+/*
+The dealership operates in India, and edge functions run in UTC. Between 18:30 and 00:00
+UTC it is already the next day in Kolkata, so deriving "today" from the server clock
+without this would put a tenth of all turns on the wrong date — and month boundaries on
+the wrong month.
+*/
+const DEALERSHIP_TIME_ZONE = "Asia/Kolkata";
+
+interface TodayContext {
+  iso: string;
+  readable: string;
+  monthStart: string;
+  monthEnd: string;
+}
+
+/**
+ * The current date where the dealership actually is.
+ *
+ * Nothing used to tell the model what day it was. Asked to "explain this month's profit",
+ * it had no choice but to guess, and guessed a month near its training data — then
+ * faithfully reported ₹0 for a period with no records. Month bounds are supplied ready-made
+ * so a relative period never depends on the model doing calendar arithmetic.
+ */
+export function dealershipToday(now = new Date()): TodayContext {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DEALERSHIP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const year = Number(get("year"));
+  const month = Number(get("month"));
+  const iso = `${get("year")}-${get("month")}-${get("day")}`;
+
+  const readable = new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEALERSHIP_TIME_ZONE,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(now);
+
+  // Day 0 of the next month is the last day of this one, so this stays correct across
+  // leap years and 30/31-day months without a table.
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return {
+    iso,
+    readable,
+    monthStart: `${year}-${pad(month)}-01`,
+    monthEnd: `${year}-${pad(month)}-${pad(lastDay)}`,
+  };
+}
+
 export function assistantInstructions(input: {
   principal: AssistantPrincipal;
   locale: string;
   context: AssistantSurfaceContext;
   conversationId: string;
+  now?: Date;
 }): string {
   const capabilities = capabilitiesFor(input.principal)
     .map((item) => `${item.id} (${item.risk})`)
     .join(", ");
   const languageName = LOCALE_LANGUAGES[normalizeAssistantLocale(input.locale)];
+  const today = dealershipToday(input.now);
 
   /*
   Ordering matters for cost and latency, not just readability.
@@ -46,6 +104,8 @@ GROUNDING AND LANGUAGE
 - MANDATORY LANGUAGE: Write answer.text and every block title, label, summary, and followUp you generate in the language named in REQUEST CONTEXT, even when the user wrote in a different language. This is not a stylistic preference; a reply in the wrong language is a failed turn.
 - Preserve IDs, vehicle names, stock/registration numbers, money values, and app status codes exactly as returned by tools — never translate or transliterate them.
 - For dealership facts, use a tool. Never invent records, totals, prices, compliance state, IDs, or action outcomes.
+- Resolve every relative period — "this month", "last month", "this quarter", "this year", "recently", "so far" — from the current date in REQUEST CONTEXT. Never assume a date from your own knowledge; you have no reliable sense of the present.
+- If a period genuinely has no records, say so and name the period you searched, so the user can tell an empty month from a mistaken one.
 - Lead with the answer, then explain the important pattern, exception, risk, or next step. Do not merely dump rows.
 - Cite only exact entity/id pairs returned by tools.
 
@@ -70,6 +130,8 @@ WRITES
 - Do not simulate any unsupported write. Ask the user to complete it manually or state that the assistant cannot perform it yet.
 
 REQUEST CONTEXT
+- Today is ${today.readable} (${today.iso}), dealership time zone ${DEALERSHIP_TIME_ZONE}.
+- "This month" means ${today.monthStart} to ${today.monthEnd}. Derive every other relative period from today's date.
 - Principal: ${input.principal.kind}, role=${input.principal.role}.
 - Granted capabilities: ${capabilities || "none"}.
 - Response language: ${languageName} (locale "${input.locale}").
