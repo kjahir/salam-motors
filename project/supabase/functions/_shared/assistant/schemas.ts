@@ -207,48 +207,52 @@ const source = strictObject({
   count: nullableNumber,
 });
 
-export const MODEL_TURN_SCHEMA: JsonSchema = strictObject({
-  schemaVersion: { type: "string", enum: ["1.0"] },
-  turnId: { type: "string", minLength: 1, maxLength: 100 },
-  conversationId: { type: "string", minLength: 1, maxLength: 100 },
-  locale: { type: "string", minLength: 2, maxLength: 40 },
-  answer: strictObject({
-    // 20_000 chars is ~7_000 tokens — more than twice the entire output cap, so this
-    // bound never bound anything. 6_000 leaves room for a collection and provenance
-    // alongside it, and a schema-clipped string still yields valid JSON, unlike a
-    // response cut off at max_output_tokens.
-    text: { type: "string", minLength: 1, maxLength: 6_000 },
-    tone: {
-      type: "string",
-      enum: ["neutral", "info", "success", "warning", "danger"],
+const ALL_BLOCKS = [
+  metricBlock,
+  vehicleBlock,
+  alertBlock,
+  timelineBlock,
+  confirmationBlock,
+  receiptBlock,
+  emptyBlock,
+];
+
+function turnSchema(blocks: readonly JsonSchema[]): JsonSchema {
+  return strictObject({
+    schemaVersion: { type: "string", enum: ["1.0"] },
+    turnId: { type: "string", minLength: 1, maxLength: 100 },
+    conversationId: { type: "string", minLength: 1, maxLength: 100 },
+    locale: { type: "string", minLength: 2, maxLength: 40 },
+    answer: strictObject({
+      // 20_000 chars is ~7_000 tokens — more than twice the entire output cap, so this
+      // bound never bound anything. 6_000 leaves room for a collection and provenance
+      // alongside it, and a schema-clipped string still yields valid JSON, unlike a
+      // response cut off at max_output_tokens.
+      text: { type: "string", minLength: 1, maxLength: 6_000 },
+      tone: {
+        type: "string",
+        enum: ["neutral", "info", "success", "warning", "danger"],
+      },
+    }),
+    blocks: {
+      type: "array",
+      maxItems: 24,
+      items: blocks.length === 1 ? blocks[0] : { anyOf: [...blocks] },
     },
-  }),
-  blocks: {
-    type: "array",
-    maxItems: 24,
-    items: {
-      anyOf: [
-        metricBlock,
-        vehicleBlock,
-        alertBlock,
-        timelineBlock,
-        confirmationBlock,
-        receiptBlock,
-        emptyBlock,
-      ],
+    followUps: {
+      type: "array",
+      maxItems: 12,
+      items: { anyOf: [replyAction, navigateAction] },
     },
-  },
-  followUps: {
-    type: "array",
-    maxItems: 12,
-    items: { anyOf: [replyAction, navigateAction] },
-  },
-  provenance: strictObject({
-    asOf: { type: "string", minLength: 1, maxLength: 80 },
-    sources: { type: "array", maxItems: DETAIL_MAX_ITEMS, items: source },
-    truncated: { type: "boolean" },
-  }),
-});
+    provenance: strictObject({
+      asOf: { type: "string", minLength: 1, maxLength: 80 },
+      sources: { type: "array", maxItems: DETAIL_MAX_ITEMS, items: source },
+      truncated: { type: "boolean" },
+    }),
+  });
+}
+
+export const MODEL_TURN_SCHEMA: JsonSchema = turnSchema(ALL_BLOCKS);
 
 export const MODEL_TURN_FORMAT = {
   type: "json_schema",
@@ -256,4 +260,66 @@ export const MODEL_TURN_FORMAT = {
   strict: true,
   schema: MODEL_TURN_SCHEMA,
 } as const;
+
+/*
+Narrower variants of the same turn, differing only in which block types the decoder will
+accept.
+
+Every request used to be decoded against the full seven-block union, so a simple count
+carried the grammar for confirmations and receipts it could never use. Narrowing shrinks
+the grammar and removes a class of mistake — the model cannot wrap a count in a vehicle
+collection if the schema does not offer one.
+
+Three properties keep this safe:
+  - The envelope is untouched, so a turn produced under a variant is still a valid instance
+    of the full schema. parseAssistantTurn and the block renderer need no change.
+  - answer.text is never constrained. A misjudged intent costs a less rich block beside a
+    correct written answer, not a wrong answer.
+  - empty_state is in every variant, so there is always a legal way to say "nothing here".
+
+Each variant is a distinct schema and pays its own one-time grammar compile on first use,
+hence the distinct `name` values. Selection is logged on model.round.started so a bad
+mapping shows up in the trace rather than having to be noticed by eye.
+*/
+function turnFormat(name: string, blocks: readonly JsonSchema[]) {
+  return {
+    type: "json_schema" as const,
+    name,
+    strict: true as const,
+    schema: turnSchema(blocks),
+  };
+}
+
+export const MODEL_TURN_FORMATS = {
+  full: MODEL_TURN_FORMAT,
+  inventory_listing: turnFormat("salam_motors_assistant_turn_v1_inventory", [
+    vehicleBlock,
+    metricBlock,
+    emptyBlock,
+  ]),
+  ageing_stock: turnFormat("salam_motors_assistant_turn_v1_ageing", [
+    metricBlock,
+    vehicleBlock,
+    emptyBlock,
+  ]),
+  compliance_alerts: turnFormat("salam_motors_assistant_turn_v1_alerts", [
+    alertBlock,
+    metricBlock,
+    emptyBlock,
+  ]),
+} as const;
+
+export type ModelTurnFormatKey = keyof typeof MODEL_TURN_FORMATS;
+
+/**
+ * Picks a format for a prefetch intent. Anything unrecognised — including every turn with
+ * no prefetch at all — gets the full union, which is the behaviour that existed before
+ * variants.
+ */
+export function turnFormatForIntent(intent: string | null) {
+  if (!intent) return MODEL_TURN_FORMATS.full;
+  return intent in MODEL_TURN_FORMATS
+    ? MODEL_TURN_FORMATS[intent as ModelTurnFormatKey]
+    : MODEL_TURN_FORMATS.full;
+}
 

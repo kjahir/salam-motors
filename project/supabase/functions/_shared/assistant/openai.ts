@@ -17,7 +17,11 @@ import {
 } from "./locales.ts";
 import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
-import { MODEL_TURN_FORMAT } from "./schemas.ts";
+import {
+  MODEL_TURN_FORMAT,
+  MODEL_TURN_FORMATS,
+  turnFormatForIntent,
+} from "./schemas.ts";
 import { hydrateBlocks } from "./hydrate.ts";
 import { planPrefetch } from "./prefetch.ts";
 import { withheldColumnNames, withholdIdentifiers } from "./redact-rows.ts";
@@ -624,6 +628,12 @@ export async function runOpenAITurn(
    * MODEL_TIMEOUT propagates.
    */
   let degradedToFinal = false;
+  /*
+  Set once the model asks for a tool the prefetch did not seed. After that the prefetch
+  intent is no longer a reliable description of the turn, so block narrowing is dropped
+  back to the full union rather than boxing the model out of a shape it now needs.
+  */
+  let modelChoseOwnTools = false;
 
   const executeCall = async (
     call: FunctionCall,
@@ -793,6 +803,9 @@ export async function runOpenAITurn(
       ? input.config.routingEffort
       : reasoningEffortForRound(input.config, sensitiveToolsSeen);
     const roundTools = toolsForPrincipal(input.principal);
+    const roundFormat = modelChoseOwnTools
+      ? MODEL_TURN_FORMATS.full
+      : turnFormatForIntent(prefetch?.intent ?? null);
     // Built once so the trace records the exact instructions this round was sent, rather
     // than a reconstruction that could drift from what the model actually saw.
     const roundInstructions = assistantInstructions({
@@ -818,6 +831,9 @@ export async function runOpenAITurn(
         // Promoted out of the instructions string: the mandated response language is a
         // first-order cost driver — Indic scripts cost several times the tokens of English
         // for the same answer — and reading it required scanning a 4KB prompt.
+        // Which block union this round was decoded against, so a bad intent mapping is
+        // visible in the timeline instead of having to be spotted by eye.
+        turn_format: roundFormat.name,
         response_locale: input.request.locale,
         response_language:
           LOCALE_LANGUAGES[normalizeAssistantLocale(input.request.locale)],
@@ -849,7 +865,7 @@ export async function runOpenAITurn(
         tools: roundTools,
         tool_choice: roundPlan.forceFinal ? "none" : "auto",
         parallel_tool_calls: true,
-        text: { format: MODEL_TURN_FORMAT },
+        text: { format: roundFormat },
         max_output_tokens: input.config.maxOutputTokens,
         safety_identifier: await safetyIdentifier(
           input.principal.userId,
@@ -1255,6 +1271,9 @@ export async function runOpenAITurn(
       );
     }
     totalCalls += calls.length;
+    // The model wanted something the prefetch did not anticipate, so the intent guess no
+    // longer describes this turn and block narrowing is dropped from here on.
+    modelChoseOwnTools ||= calls.some((call) => call.name !== prefetch?.tool);
     sensitiveToolsSeen ||= roundTouchesSensitiveData(
       calls.map((call) => call.name),
     );
