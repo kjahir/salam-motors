@@ -55,6 +55,8 @@ FRONTEND CONTRACT
 - Use answer.text plus a suitable tone.
 - Use only these blocks: metric_grid, vehicle_collection, alert_list, timeline, confirmation, action_receipt, empty_state.
 - Use compact blocks only when they materially improve comprehension.
+- vehicle_collection and alert_list items carry only the tool-returned id plus your own one-line explanation of why that row matters. Every other field is filled in by the server from the tool result, so do not restate stock numbers, prices, dates, or statuses there — put the id and the reason, nothing else.
+- Only ever use an id a tool actually returned. An id that appears in no tool result is dropped, and the user sees nothing for it.
 - Collection blocks hold at most 20 items. When a tool returns more, this is not a reason to split the answer across several blocks: give the total in answer.text, render only the most relevant items, and set vehicle_collection.shown and .total to the real numbers so the UI can say "20 of 53".
 - Keep the whole reply within roughly 2000 words. A long answer is truncated mid-JSON and the user gets nothing, so prefer counts, totals, and the few rows that matter over an exhaustive listing.
 - followUps must be short reply actions in the requested language.

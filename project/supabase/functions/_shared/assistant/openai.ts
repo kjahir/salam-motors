@@ -18,6 +18,7 @@ import {
 import type { AssistantPersistence } from "./persistence.ts";
 import { assistantInstructions } from "./prompt.ts";
 import { MODEL_TURN_FORMAT } from "./schemas.ts";
+import { hydrateBlocks } from "./hydrate.ts";
 import { AnswerTextScanner, readSseData } from "./streaming.ts";
 import {
   executeTool,
@@ -576,6 +577,8 @@ export async function runOpenAITurn(
   }
 
   const evidence = new Map<string, ToolEntity>();
+  /** Full tool rows, server-only, used to hydrate blocks the model referenced by id. */
+  const toolRows = new Map<string, Record<string, unknown>>();
   const issuedProposals: IssuedProposal[] = [];
   const context: ToolExecutionContext = {
     client: input.client,
@@ -587,6 +590,7 @@ export async function runOpenAITurn(
     locale: input.request.locale,
     issuedProposals,
     evidence,
+    rows: toolRows,
     onStatus: input.onStatus,
   };
   const replay: unknown[] = [
@@ -1022,6 +1026,29 @@ export async function runOpenAITurn(
           .filter((item) => item.type === "vehicle")
           .map((item) => item.id),
       );
+      // Before normalization, so the validator sees the same full block shape it always
+      // has and the wire format the client receives is unchanged by hydration.
+      if (isRecord(parsed) && Array.isArray(parsed.blocks)) {
+        const filled = hydrateBlocks(parsed.blocks, toolRows);
+        parsed.blocks = filled.blocks;
+        await input.persistence.logTrace(input.runId, input.conversationId, {
+          workflowStep: WORKFLOW_STEP.GROUND_ANSWER,
+          category: "validation",
+          eventKey: "response.blocks.hydrated",
+          status: filled.dropped > 0 ? "flagged" : "completed",
+          summary: filled.dropped > 0
+            ? `Hydrated ${filled.hydrated} block item(s) from tool rows; dropped ${filled.dropped} the model referenced by an id no tool returned.`
+            : `Hydrated ${filled.hydrated} block item(s) from tool rows.`,
+          details: {
+            round: round + 1,
+            hydrated_item_count: filled.hydrated,
+            // Non-zero means the model invented an id. Worth seeing: it is the failure
+            // this design converts from a fabricated card into a missing one.
+            dropped_item_count: filled.dropped,
+            available_row_count: toolRows.size,
+          },
+        });
+      }
       let turn = normalizeModelTurn(
         parsed,
         input.conversationId,

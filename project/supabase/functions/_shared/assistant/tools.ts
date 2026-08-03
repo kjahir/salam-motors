@@ -46,7 +46,30 @@ export interface ToolExecutionContext {
   locale: string;
   issuedProposals: IssuedProposal[];
   evidence: Map<string, ToolEntity>;
+  /**
+   * Full rows behind the entities, keyed `type:id`, for server-side block hydration.
+   *
+   * Deliberately on the context rather than on ToolResult: the result is JSON-serialized
+   * into the model replay, so anything stored there would be sent to OpenAI — the exact
+   * opposite of what hydration is for. These rows never leave the server; they are used to
+   * fill in block fields the model referenced by id.
+   */
+  rows: Map<string, Record<string, unknown>>;
   onStatus?: (message: string) => void;
+}
+
+/**
+ * Records the rows behind a set of entities so blocks referencing them by id can be
+ * hydrated without the model having to transcribe every field.
+ */
+function remember(
+  context: ToolExecutionContext,
+  type: string,
+  items: readonly Record<string, unknown>[],
+): void {
+  for (const item of items) {
+    if (typeof item.id === "string") context.rows.set(`${type}:${item.id}`, item);
+  }
 }
 
 const nullableText = (maximum = 200): JsonSchema => ({
@@ -370,6 +393,7 @@ async function searchInventory(
     }));
   }
 
+  remember(context, "vehicle", vehicles);
   return {
     ok: true,
     data: {
@@ -609,6 +633,7 @@ async function getDashboardAgeing(
       {},
     );
   }
+  remember(context, "vehicle", ageing);
   return {
     ok: true,
     data,
@@ -661,6 +686,7 @@ async function getAlertsCompliance(
   const compliance = rows(complianceResult, "compliance");
   const entities = alerts.map((alert) => entity("alert", alert.id, alert.title))
     .filter(Boolean) as ToolEntity[];
+  remember(context, "alert", alerts);
   for (const item of compliance) {
     const vehicle = entity(
       "vehicle",

@@ -94,35 +94,24 @@ const vehicleBlock = strictObject({
   title: { type: "string", maxLength: 200 },
   description: nullableString,
   view: { type: "string", enum: ["cards", "table"] },
+  /*
+  Reference plus judgement, not a transcription.
+
+  This used to require all 21 vehicle fields on every item, so twenty vehicles cost 420
+  forced key/value emissions of data the server already held from the tool call — roughly
+  2,300 output tokens, about nine seconds of generation, to retype rows that were already
+  in memory. `hydrateBlocks` now fills the facts server-side from those rows and the model
+  supplies only what it alone knows: which rows matter, and why.
+
+  Two consequences beyond speed: the model cannot misreport a price it never types, and an
+  id it invented has nothing to hydrate from, so it is dropped rather than rendered.
+  */
   items: {
     type: "array",
     maxItems: COLLECTION_MAX_ITEMS,
     items: strictObject({
       id: { type: "string", minLength: 1, maxLength: 80 },
-      stockNumber: { type: "string", minLength: 1, maxLength: 100 },
-      registrationNumber: nullableString,
-      manufacturer: { type: "string", minLength: 1, maxLength: 120 },
-      model: { type: "string", minLength: 1, maxLength: 120 },
-      variant: nullableString,
-      status: { type: "string", minLength: 1, maxLength: 80 },
-      year: nullableNumber,
-      fuelType: nullableString,
-      odometer: nullableNumber,
-      daysInStock: nullableNumber,
-      askingPrice: nullableNumber,
-      minimumPrice: nullableNumber,
-      totalCost: nullableNumber,
-      estimatedProfit: nullableNumber,
-      realisedProfit: nullableNumber,
-      alertCount: { type: "number", minimum: 0 },
-      complianceCount: { type: "number", minimum: 0 },
-      complianceSeverity: nullableString,
       explanation: nullableString,
-      actions: {
-        type: "array",
-        maxItems: 6,
-        items: navigateAction,
-      },
     }),
   },
   shown: { type: "integer", minimum: 0 },
@@ -132,17 +121,13 @@ const vehicleBlock = strictObject({
 const alertBlock = strictObject({
   type: { type: "string", enum: ["alert_list"] },
   title: { type: "string", maxLength: 200 },
+  /** Hydrated server-side from the alert rows. See vehicleBlock.items. */
   items: {
     type: "array",
     maxItems: COLLECTION_MAX_ITEMS,
     items: strictObject({
       id: { type: "string", minLength: 1, maxLength: 80 },
-      vehicleId: nullableString,
-      title: { type: "string", minLength: 1, maxLength: 200 },
-      message: nullableString,
-      severity: { type: "string", minLength: 1, maxLength: 80 },
-      status: { type: "string", minLength: 1, maxLength: 80 },
-      createdAt: nullableString,
+      explanation: nullableString,
     }),
   },
 });
