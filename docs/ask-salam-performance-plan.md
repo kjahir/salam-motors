@@ -1,6 +1,10 @@
 # Ask Salam: getting a response in a few seconds
 
-Design plan. Nothing here is built yet. Written 2026-08-03 against `staging`.
+Written 2026-08-03 against `staging`.
+
+**Status: Phases 1-6 are built and deployed to staging. Phase 7 is a proposal.**
+Production still runs the original code. Nothing here has been measured under real
+concurrent load — the numbers below come from single traced turns.
 
 ## Baseline
 
@@ -15,6 +19,37 @@ Measured from a real failing run's execution trace, not estimated:
 | **Total to first visible word** | **~16s** | |
 
 Target: first word in ~2s, complete answer in ~5s.
+
+## Measured after Phases 1-6
+
+Same question ("explain this month's profit performance"), traced before and after. The
+"after" column is a warm-cache run — the first run following a deploy is slower.
+
+| | before | after |
+|---|---|---|
+| time to first token | 5,705ms | **2,049ms** |
+| input tokens | 11,696 | 7,128 |
+| of which cached | not recorded | **4,396** |
+| output tokens | 3,200 (hit the cap, truncated) | ~1,000 |
+| reasoning tokens | 389 | 29 |
+| output cap hit | yes — turn failed | no |
+
+The first-token target is met. Two things this exposed that were not in the original plan:
+
+- **`get_finance_overview` was returning the whole ledger** so the model could add it up —
+  44 rows, ~3,400 input tokens, to produce three subtotals. Now aggregated in Postgres,
+  which is also why reasoning fell 389 → 29.
+- **Forced-final rounds were shipped all 14 tool definitions** despite `tool_choice: "none"`
+  making them uncallable — ~3,450 tokens of prefill per round for a capability the round
+  did not have.
+
+Prompt caching is fully effective: the ~4,900-token static prefix comes back cached, and
+the uncached remainder is the per-request tool result, history and question. There is
+nothing further to win there.
+
+What remains is output generation — ~1,000 tokens at ~240 tok/s ≈ 4.4s — which is genuine
+model work (metric labels, help text, follow-ups), not transcription hydration can remove.
+Shortening it is a product decision about answer verbosity, not an optimisation.
 
 ## The finding that reframes everything
 
@@ -326,6 +361,81 @@ Smaller grammars decode faster and remove forced-null fields for blocks that can
 This is the smallest of the six levers — worth doing for answer-shape correctness as much as
 for speed, and not worth doing on its own.
 
+## Phase 7 — Classify intent with embeddings instead of keywords
+
+**Proposal. Not built. The first change in this sequence that adds a real dependency
+rather than rearranging what already exists.**
+
+### The problem it solves
+
+Phase 3's prefetch matches English keywords. Ask Salam supports six locales, so the other
+five never match and pay the full routing round on every single question. No amount of
+pattern-writing fixes that; a Tamil question shares no characters with an English one.
+
+It also misses paraphrase. "How's the money looking" contains none of the finance keywords
+but means exactly what "explain this month's profit performance" means.
+
+### What embeddings can and cannot do here
+
+**Can**: say "this is a finance question" across languages and phrasings, because a
+multilingual embedding places "which bikes are unsold" and "எந்த பைக்குகள்
+விற்கப்படவில்லை" near each other.
+
+**Cannot**: produce arguments. Similarity yields a label, not `date_from=2026-08-01` or
+`vehicle_id=<uuid>`. For "Swifts under 5 lakh with under 50,000 km" the intent is obvious
+to a vector and the filters are not.
+
+So this replaces the *regex layer*, not the model round. The model round remains the
+fallback for everything below the similarity threshold, exactly as it is the fallback for
+an unmatched regex today.
+
+### Why coarse arguments are acceptable
+
+The prefetch is a guess the model can override. A vector says `search_inventory`, we seed
+it with defaults, and if the user actually wanted a price filter the model calls the tool
+again properly. One wasted read, no wrong answer.
+
+That means the classifier only has to be right about the *shape* of the question, never the
+details — a much lower bar than routing normally demands, and the reason keyword matching
+was acceptable in the first place.
+
+### Shape
+
+- `create extension vector`, plus a table of labelled example questions per intent.
+- Embed the incoming question. Two options, and the choice matters:
+  - **Supabase Edge Runtime's built-in model** (`Supabase.ai.Session`) — local, ~10-50ms,
+    nothing leaves the infrastructure. **Verify availability on the current plan and
+    runtime version before designing around it**; this has not been checked.
+  - **An OpenAI embedding call** — ~100-300ms round trip. No new exposure, since the
+    question text already goes to OpenAI, but it is a network hop on the critical path.
+- Nearest neighbour over the example table, with a threshold. Below it, fall through to the
+  model round.
+- Log the matched intent and its distance on the trace, so a drifting threshold is visible.
+
+Adding an intent becomes "write ten example questions" rather than "write a regex", which
+is easier to get right and easier to get right in six languages.
+
+### Whether it is worth doing
+
+**This hinges on one number nobody has: how much real traffic is non-English.**
+
+If most questions are English, regex already handles them at zero cost and this is a lot of
+machinery for paraphrase coverage. If Tamil/Hindi/Kannada usage is material, those users pay
+~3.4s on every question today and this is the largest remaining win available to them —
+larger than anything left on the English path.
+
+`response_locale` is now recorded on every round, so this is answerable from traffic rather
+than from assumption. Do that first.
+
+### Costs to weigh
+
+- New extension, new table, labelled data to maintain.
+- A similarity threshold is a tuning parameter that drifts; a misclassification is silent,
+  though recoverable for the same reason regex misses are.
+- If the embedding is an API call, it is a network dependency on the critical path of every
+  turn — including the English ones that regex already handles for free. Worth keeping regex
+  as a fast path ahead of it rather than replacing it outright.
+
 ## Projected
 
 | | first word | complete |
@@ -352,9 +462,13 @@ withholding a column from the LLM also withholds it from the browser.
 Phase 6 has the same kind of constraint: it must follow Phase 3, because routing is what
 selects the schema variant.
 
+Phase 7 replaces Phase 3's classifier, so it depends on Phase 3 existing — and on locale
+numbers from real traffic, which is the actual gate.
+
 ```
 Phase 1 (streaming) ─┬─> Phase 2 (hydration) ──> Phase 5 (send less)
-                     └─> Phase 3 (routing)   ──> Phase 6 (narrow schema)
+                     └─> Phase 3 (routing)   ─┬─> Phase 6 (narrow schema)
+                                              └─> Phase 7 (embed intent)   [proposal]
 ```
 
 Phases 4, 5 and 6 are all optimisations of a working system. Phases 1-3 are where the
@@ -377,3 +491,11 @@ latency actually is.
 6. Phase 6: how many intent variants are worth maintaining? Each is a schema to keep in sync
    with the frontend renderer, and the table above is a guess at the real question mix — the
    trace now records enough to derive it from actual traffic instead.
+7. Phase 7, and the gate on the whole thing: **what share of real questions are not in
+   English?** `response_locale` is on every round now. If the answer is "almost none",
+   Phase 7 is not worth its dependencies; if it is material, it is the biggest remaining win
+   for those users.
+8. Phase 7: is the Supabase Edge Runtime embedding model actually available here? A local
+   model at ~10-50ms and an OpenAI call at ~100-300ms lead to different designs — the second
+   puts a network hop on the critical path of every turn, including English ones that regex
+   already answers for free.
