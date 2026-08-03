@@ -1,4 +1,4 @@
-import { planPrefetch } from "./prefetch.ts";
+import { planForIntent, planPrefetch } from "./prefetch.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -157,5 +157,53 @@ Deno.test("a vehicle-ranking question is left to the model, not the ledger", () 
       new Set(["get_finance_overview", "search_inventory"]),
     )?.tool !== "get_finance_overview",
     "a per-vehicle profit question was routed to the org ledger",
+  );
+});
+
+Deno.test("planForIntent skips keyword matching but keeps the safety rejects", () => {
+  // Reached when embedding similarity identifies an intent from a non-English question.
+  // The require patterns are English and no longer apply; the reject patterns encode facts
+  // about the question itself and must still hold.
+  const allowed = new Set([
+    "get_finance_overview",
+    "search_inventory",
+    "get_alerts_compliance",
+  ]);
+
+  // A Tamil question matches no English pattern, but the intent is already known.
+  const tamil = planForIntent("finance_overview", "இந்த மாத லாபம் எப்படி உள்ளது", allowed);
+  assert(tamil?.tool === "get_finance_overview", "a classified intent produced no plan");
+
+  // Rejects still apply, whatever identified the intent.
+  assert(
+    planForIntent("finance_overview", "which vehicle is most profitable", allowed) === null,
+    "a per-vehicle question reached the org ledger via the vector path",
+  );
+  assert(
+    planForIntent("inventory_listing", "add a new vehicle to stock", allowed) === null,
+    "a write intent was prefetched via the vector path",
+  );
+  assert(
+    planForIntent(
+      "inventory_listing",
+      "show the stock and then draft a summary for the team",
+      allowed,
+    ) === null,
+    "a compound question was prefetched via the vector path",
+  );
+});
+
+Deno.test("an unknown intent degrades to no prefetch", () => {
+  // A stale row in assistant_intent_examples naming a removed intent must not throw.
+  assert(
+    planForIntent("intent_that_no_longer_exists", "anything at all", new Set(["search_inventory"])) === null,
+    "an unknown intent did not degrade cleanly",
+  );
+});
+
+Deno.test("an unauthorized tool is refused however the intent was reached", () => {
+  assert(
+    planForIntent("finance_overview", "இந்த மாத லாபம்", new Set(["search_inventory"])) === null,
+    "the vector path bypassed the caller's capability check",
   );
 });

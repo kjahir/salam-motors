@@ -177,3 +177,33 @@ export function planPrefetch(
   }
   return null;
 }
+
+/**
+ * Builds a plan for an intent identified some other way — currently embedding similarity,
+ * which reaches the five locales these English patterns cannot.
+ *
+ * The keyword `require` patterns are skipped, since the classifier has already decided; the
+ * `reject` patterns are not. Those encode facts about the *question* rather than about
+ * English matching — never prefetch a write, never send a per-vehicle profit question to the
+ * org ledger — and they must hold however the intent was reached.
+ *
+ * Returns null for an unknown intent, so a stale row in the examples table degrades to no
+ * prefetch rather than to an error.
+ */
+export function planForIntent(
+  intent: string,
+  message: string,
+  allowed: ReadonlySet<string>,
+  now?: Date,
+): PrefetchPlan | null {
+  const rule = RULES.find((item) => item.intent === intent);
+  if (!rule || !allowed.has(rule.tool)) return null;
+  const text = message.trim();
+  if (rule.reject?.some((pattern) => pattern.test(text))) return null;
+  if (COMPOUND_INTENT.test(text)) return null;
+  return {
+    tool: rule.tool,
+    arguments: rule.build(text, now),
+    intent: rule.intent,
+  };
+}

@@ -24,7 +24,11 @@ import {
   turnFormatForIntent,
 } from "./schemas.ts";
 import { hydrateBlocks } from "./hydrate.ts";
-import { planPrefetch } from "./prefetch.ts";
+import { planForIntent, planPrefetch } from "./prefetch.ts";
+import {
+  backfillExampleEmbeddings,
+  classifyIntent,
+} from "./intent-vectors.ts";
 import { withheldColumnNames, withholdIdentifiers } from "./redact-rows.ts";
 import { AnswerTextScanner, readSseData } from "./streaming.ts";
 import {
@@ -792,14 +796,34 @@ export async function runOpenAITurn(
   wanted something else, calls what it wanted exactly as before. A miss costs one read and
   some input tokens; it cannot change the answer.
   */
-  const prefetch = planPrefetch(
-    input.request.message,
-    new Set(
-      toolsForPrincipal(input.principal)
-        .map((tool) => tool.name)
-        .filter((name) => READ_ONLY_TOOLS.has(name)),
-    ),
+  const prefetchable = new Set(
+    toolsForPrincipal(input.principal)
+      .map((tool) => tool.name)
+      .filter((name) => READ_ONLY_TOOLS.has(name)),
   );
+  let prefetch = planPrefetch(input.request.message, prefetchable);
+  let prefetchSource = prefetch ? "keyword" : "none";
+  let intentSimilarity: number | null = null;
+  let matchedExampleLocale: string | null = null;
+  /*
+  Keywords are English-only, so five of six locales never match them. When they decline,
+  fall back to embedding similarity, which reaches every locale. Regex stays first because
+  it is free and already correct for English — this only ever runs on questions the fast
+  path gave up on.
+  */
+  if (!prefetch) {
+    const serverClient = input.persistence.serverClient;
+    await backfillExampleEmbeddings(serverClient);
+    const match = await classifyIntent(serverClient, input.request.message);
+    if (match) {
+      prefetch = planForIntent(match.intent, input.request.message, prefetchable);
+      if (prefetch) {
+        prefetchSource = "vector";
+        intentSimilarity = match.similarity;
+        matchedExampleLocale = match.matchedLocale;
+      }
+    }
+  }
   if (prefetch) {
     const started = Date.now();
     const call: FunctionCall = {
@@ -832,6 +856,11 @@ export async function runOpenAITurn(
         : `Prefetch of ${prefetch.tool} failed and was discarded; the model will choose its own tools.`,
       details: {
         intent: prefetch.intent,
+        // "keyword" is the English fast path; "vector" means embedding similarity reached
+        // an intent the patterns could not, which is the whole point for non-English.
+        matched_by: prefetchSource,
+        intent_similarity: intentSimilarity,
+        matched_example_locale: matchedExampleLocale,
         tool_name: prefetch.tool,
         arguments: prefetch.arguments,
         ok: result.ok,
