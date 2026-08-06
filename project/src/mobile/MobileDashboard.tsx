@@ -142,10 +142,10 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         <div className="grid grid-cols-3 gap-3">
           <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
           <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
-          <QuickAction icon={<Pencil size={22} />} tone="navy" label={t("nav.manageVehicles")} onClick={() => onNavigate("update-vehicle")} />
-          <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("vehicleDetail.expenses")} onClick={() => onNavigate("add-expense")} />
-          <QuickAction icon={<FileText size={22} />} tone="success-soft" label={t("vehicleDetail.documents")} onClick={() => onNavigate("add-document")} />
-          <QuickAction icon={<ClipboardCheck size={22} />} tone="warning-soft" label={t("vehicleDetail.inspection")} onClick={() => onNavigate("add-inspection")} />
+          <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense")} />
+          <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document")} />
+          <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection")} />
+          <QuickAction icon={<Pencil size={22} />} tone="warning-soft" label={t("mobileDashboard.manageVehicle")} onClick={() => onNavigate("manage-vehicles")} />
         </div>
       </div>
 

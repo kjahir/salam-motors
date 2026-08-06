@@ -36,6 +36,10 @@
   max-width: 100vw;
   overflow-x: hidden;
 }
+/* Hide the desktop PageHeader when a desktop page is hosted inside the mobile shell. */
+.mobile-shell .mobile-page-header {
+  display: none;
+}
 .mobile-shell h1,
 .mobile-shell h2,
 .mobile-shell h3,

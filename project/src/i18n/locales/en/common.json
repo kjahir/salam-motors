@@ -685,7 +685,11 @@
     "sectionVehicle": "Vehicle",
     "sectionStatus": "Status",
     "sectionMore": "More",
-    "overview": "Overview"
+    "overview": "Overview",
+    "addExpenses": "Add Expenses",
+    "addDocuments": "Add Documents",
+    "addInspections": "Add Inspections",
+    "manageVehicle": "Manage Vehicle"
   },
   "mobileInventory": {
     "title": "Inventory",

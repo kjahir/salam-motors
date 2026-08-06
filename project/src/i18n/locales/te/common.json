@@ -685,7 +685,11 @@
     "sectionVehicle": "వాహనం",
     "sectionStatus": "స్థితి",
     "sectionMore": "మరిన్ని",
-    "overview": "అవలోకనం"
+    "overview": "అవలోకనం",
+    "addExpenses": "Add Expenses",
+    "addDocuments": "Add Documents",
+    "addInspections": "Add Inspections",
+    "manageVehicle": "Manage Vehicle"
   },
   "mobileInventory": {
     "title": "ఇన్వెంటరీ",

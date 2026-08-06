@@ -42,6 +42,7 @@ export type MobileScreen =
   | "add-sale"
   | "view-vehicle"
   | "more"
+  | "manage-vehicles"
   // More's children: the desktop pages, hosted in the mobile shell (see MobileDesktopPage).
   | "alerts"
   | "parties"
@@ -72,7 +73,7 @@ export interface MobileNavigateParams {
 }
 
 /** Set to true to restore the bottom nav bar. False hides it; dashboard quick actions replace it. */
-const SHOW_BOTTOM_NAV = false;
+const SHOW_BOTTOM_NAV = true;
 
 // Targets reachable from the mobile "+" icon row, each landing on its own full-screen page
 // with a vehicle-select dropdown at the top (rather than a pre-navigation picker Sheet) —
@@ -131,6 +132,8 @@ export function MobileApp() {
    * back where they started with the row still open, ready for the next entry.
    */
   const addOriginRef = useRef<MobileScreen | null>(null);
+  /** Tracks which screen navigated into a More-section screen for contextual back. */
+  const fromScreenRef = useRef<MobileScreen>("dashboard");
 
   const navigate = useCallback<MobileNavigate>((next, params) => {
     if (params?.vehicleId) {
@@ -145,7 +148,11 @@ export function MobileApp() {
       setVehicleTab(undefined);
       setHighlightPolicyId(undefined);
     }
-    setScreen(next);
+    setScreen((current) => {
+      // always track previous screen so inventory/reports/More back buttons work contextually
+      fromScreenRef.current = current;
+      return next;
+    });
     if (addOriginRef.current && BOTTOM_NAV_SCREENS.includes(next)) {
       addOriginRef.current = null;
       setAddRowOpen(true);
@@ -243,7 +250,7 @@ export function MobileApp() {
   // A plain function, not a component: an inline component would be a new type on every
   // render and would remount (and so reset) the hosted page's state.
   const morePage = (target: MobileScreen, content: React.ReactNode) => (
-    <MobileDesktopPage title={t(MORE_TITLE_KEYS[target])} onBack={() => navigate("more")}>
+    <MobileDesktopPage title={t(MORE_TITLE_KEYS[target])} onBack={() => navigate(fromScreenRef.current)}>
       {content}
     </MobileDesktopPage>
   );
@@ -253,7 +260,9 @@ export function MobileApp() {
       case "dashboard":
         return <MobileDashboard onNavigate={navigate} />;
       case "inventory":
-        return <MobileInventory onNavigate={navigate} />;
+        return <MobileInventory onNavigate={navigate} onBack={() => navigate(fromScreenRef.current as MobileScreen)} />;
+      case "manage-vehicles":
+        return <MobileInventory manageMode onBack={genericBack("overview")} onNavigate={navigate} />;
       case "vehicle":
         return vehicleId ? (
           <MobileVehicleDetail
@@ -275,7 +284,7 @@ export function MobileApp() {
           <MobileInventory onNavigate={navigate} />
         );
       case "reports":
-        return <MobileReports onNavigate={navigate} />;
+        return <MobileReports onNavigate={navigate} onBack={() => navigate(fromScreenRef.current as MobileScreen)} />;
       case "update-vehicle":
         return <MobileUpdateVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("overview")} />;
       case "add-expense":

@@ -685,7 +685,11 @@
     "sectionVehicle": "वाहन",
     "sectionStatus": "स्थिति",
     "sectionMore": "अधिक",
-    "overview": "अवलोकन"
+    "overview": "अवलोकन",
+    "addExpenses": "खर्च जोड़ें",
+    "addDocuments": "दस्तावेज जोड़ें",
+    "addInspections": "निरीक्षण जोड़ें",
+    "manageVehicle": "वाहन प्रबंधित करें"
   },
   "mobileInventory": {
     "title": "इन्वेंटरी",

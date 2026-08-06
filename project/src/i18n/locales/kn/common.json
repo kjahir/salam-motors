@@ -685,7 +685,11 @@
     "sectionVehicle": "ವಾಹನ",
     "sectionStatus": "ಸ್ಥಿತಿ",
     "sectionMore": "ಹೆಚ್ಚು",
-    "overview": "ಅವಲೋಕನ"
+    "overview": "ಅವಲೋಕನ",
+    "addExpenses": "Add Expenses",
+    "addDocuments": "Add Documents",
+    "addInspections": "Add Inspections",
+    "manageVehicle": "Manage Vehicle"
   },
   "mobileInventory": {
     "title": "ಇನ್ವೆಂಟರಿ",

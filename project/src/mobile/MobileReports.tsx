@@ -32,7 +32,7 @@ type SortDir = "desc" | "asc";
 
 const PAGE_SIZE = 10;
 
-export function MobileReports({ onNavigate }: { onNavigate: MobileNavigate }) {
+export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNavigate; onBack?: () => void }) {
   const [tab, setTab] = useState<ReportTab>("inventory");
   const [purchases, setPurchases] = useState<(Purchase & { vehicle: Vehicle | null; seller: Party | null })[]>([]);
   const [sales, setSales] = useState<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]>([]);
@@ -123,15 +123,14 @@ export function MobileReports({ onNavigate }: { onNavigate: MobileNavigate }) {
   if (loading) {
     return (
       <div>
-        <TopBar title={t("mobileReports.title")} />
-        <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
+        <TopBar title={t("mobileReports.title")} onBack={onBack} />
       </div>
     );
   }
 
   return (
     <div>
-      <TopBar title={t("mobileReports.title")} />
+      <TopBar title={t("mobileReports.title")} onBack={onBack} />
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />

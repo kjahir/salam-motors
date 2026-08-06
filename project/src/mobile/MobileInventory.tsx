@@ -17,7 +17,12 @@ function complianceTagColor(maxSeverityRank: number): "success" | "warning" | "e
   return "success";
 }
 
-export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) {
+export function MobileInventory({ onNavigate, manageMode, onBack }: {
+  onNavigate: MobileNavigate;
+  /** When true: shows only in-stock, changes title to Manage Vehicle, adds back button. */
+  manageMode?: boolean;
+  onBack?: () => void;
+}) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
@@ -54,8 +59,9 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
   const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
 
   const filtered = useMemo(() => {
+    const activeFilter = manageMode ? "in-stock" : filter;
     return vehicles
-      .filter((v) => (filter === "sold" ? SOLD_STATUSES.includes(v.current_status) : !SOLD_STATUSES.includes(v.current_status)))
+      .filter((v) => (activeFilter === "sold" ? SOLD_STATUSES.includes(v.current_status) : !SOLD_STATUSES.includes(v.current_status)))
       .filter((v) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
@@ -66,24 +72,26 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
           .includes(q);
       })
       .sort((a, b) => daysSince(b.onboarded_at) - daysSince(a.onboarded_at));
-  }, [vehicles, filter, search]);
+  }, [vehicles, filter, manageMode, search]);
 
   return (
     <div>
-      <TopBar title={t("mobileInventory.title")} />
+      <TopBar title={manageMode ? t("mobileDashboard.manageVehicle") : t("mobileInventory.title")} onBack={manageMode ? onBack : undefined} />
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("mobileInventory.searchPlaceholder")} className="pl-10" />
         </div>
-        <SegmentedTabs
-          tabs={[
-            { key: "in-stock", label: t("mobileInventory.inStock") },
-            { key: "sold", label: t("mobileInventory.sold") },
-          ]}
-          active={filter}
-          onChange={(k) => setFilter(k as "in-stock" | "sold")}
-        />
+        {!manageMode && (
+          <SegmentedTabs
+            tabs={[
+              { key: "in-stock", label: t("mobileInventory.inStock") },
+              { key: "sold", label: t("mobileInventory.sold") },
+            ]}
+            active={filter}
+            onChange={(k) => setFilter(k as "in-stock" | "sold")}
+          />
+        )}
       </div>
 
       {loading ? (

@@ -685,7 +685,11 @@
     "sectionVehicle": "வாகனம்",
     "sectionStatus": "நிலை",
     "sectionMore": "மேலும்",
-    "overview": "கண்ணோட்டம்"
+    "overview": "கண்ணோட்டம்",
+    "addExpenses": "செலவு சேர்",
+    "addDocuments": "ஆவணம் சேர்",
+    "addInspections": "ஆய்வு சேர்",
+    "manageVehicle": "வாகனம் நிர்வஹி"
   },
   "mobileInventory": {
     "title": "இன்வென்டரி",

@@ -685,7 +685,11 @@
     "sectionVehicle": "വാഹനം",
     "sectionStatus": "നില",
     "sectionMore": "കൂടുതൽ",
-    "overview": "അവലോകനം"
+    "overview": "അവലോകനം",
+    "addExpenses": "Add Expenses",
+    "addDocuments": "Add Documents",
+    "addInspections": "Add Inspections",
+    "manageVehicle": "Manage Vehicle"
   },
   "mobileInventory": {
     "title": "ഇൻവെന്ററി",
