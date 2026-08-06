@@ -76,7 +76,7 @@ export function MobileInventory({ onNavigate, manageMode, onBack }: {
 
   return (
     <div>
-      <TopBar title={manageMode ? t("mobileDashboard.manageVehicle") : t("mobileInventory.title")} onBack={manageMode ? onBack : undefined} />
+      <TopBar title={manageMode ? t("mobileDashboard.manageVehicle") : t("mobileInventory.title")} onBack={onBack} />
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
