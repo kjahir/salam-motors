@@ -42,7 +42,8 @@
     "audit": "Audit",
     "manageVehicles": "Vehicles",
     "vehicles": "Manage",
-    "vehicle": "Vehicle"
+    "vehicle": "Vehicle",
+    "billing": "Billing"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -680,7 +681,11 @@
     "readyForSale": "Ready for Sale",
     "totalSold": "Total Sold",
     "underRepair": "Under Repair",
-    "totalAmountInvested": "Total Amount Invested"
+    "totalAmountInvested": "Total Amount Invested",
+    "sectionVehicle": "Vehicle",
+    "sectionStatus": "Status",
+    "sectionMore": "More",
+    "overview": "Overview"
   },
   "mobileInventory": {
     "title": "Inventory",
@@ -1099,6 +1104,61 @@
       "ownerOnlyName": "Only the owner can rename the dealership"
     }
   },
+  "saleSigning": {
+    "addStamp": "Add stamp paper (eStamp)",
+    "articleCode": "Article code",
+    "buyer": "Buyer",
+    "buyerDob": "Buyer's date of birth",
+    "buyerPan": "Buyer's PAN",
+    "cancel": "Cancel",
+    "cancelFailed": "The request could not be cancelled.",
+    "cancelReason": "Cancelled by the dealership.",
+    "cancelled": "The signature request was cancelled.",
+    "checkStatus": "Check status",
+    "contactRequired": "Add a 10-digit mobile number or an email — the signing link is sent there.",
+    "disclaimer": "The agreement is generated from this sale record, in English. Have your own terms reviewed before relying on it.",
+    "email": "Email",
+    "generate": "Generate agreement",
+    "generateFailed": "The agreement could not be generated.",
+    "generated": "Agreement generated and filed under Documents.",
+    "history": "Requests",
+    "loading": "Loading…",
+    "mobile": "Mobile",
+    "mobileHint": "10 digits, no country code.",
+    "noRequests": "Nothing sent for signature yet.",
+    "openAgreement": "Open agreement",
+    "openFailed": "That document could not be opened.",
+    "openSignLink": "Open signing link",
+    "openSigned": "Open signed copy",
+    "paidByBuyer": "The buyer",
+    "paidByDealer": "The dealership",
+    "selectArticle": "Select an article code",
+    "selectState": "Select a state",
+    "selectStateFirst": "Select a state first",
+    "send": "Send for signature",
+    "sendFailed": "The agreement could not be sent for signature.",
+    "sendStamped": "Buy stamp and send",
+    "sent": "Sent for signature.",
+    "stampAmount": "Stamp duty (₹)",
+    "stampDetailsRequired": "Stamp paper needs the buyer's date of birth and PAN.",
+    "stampHint": "Protean buys the stamp paper and attaches it to the agreement before it is signed. The buyer's date of birth and PAN are required by the stamp authority.",
+    "stampIncomplete": "Choose a state, an article code, and a stamp duty amount.",
+    "stampOptionsFailed": "The state and article lists could not be loaded from Protean.",
+    "stampPaidBy": "Stamp duty paid by",
+    "stampState": "Stamp duty state",
+    "stamped": "Stamped",
+    "status": {
+      "initiated": "Starting",
+      "pending": "Awaiting signature",
+      "completed": "Signed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "expired": "Expired"
+    },
+    "statusFailed": "The status could not be checked.",
+    "subtitle": "Generate the agreement, then send it for signature — with stamp paper if the sale needs it.",
+    "title": "Sale documents"
+  },
   "assistant": {
     "launcher": {
       "label": "Ask Salam",
@@ -1122,6 +1182,41 @@
       "working": "Working…",
       "executing": "Completing the approved action…",
       "revalidating": "Revalidating permissions and current data…",
+      "planning": "Working out where to look…",
+      "reviewing": "Reading what came back…",
+      "tool": {
+        "inventory": "Going through the vehicle list…",
+        "inventoryQuery": "Looking for “{{query}}” in stock…",
+        "vehicle": "Opening the vehicle's full record…",
+        "vehicleNamed": "Opening {{vehicle}}'s full record…",
+        "ageing": "Checking how long stock has been sitting…",
+        "ageingDays": "Finding vehicles sitting longer than {{days}} days…",
+        "compliance": "Checking open alerts and compliance gaps…",
+        "complianceNamed": "Checking alerts and compliance for {{vehicle}}…",
+        "portfolio": "Opening the investor's portfolio…",
+        "portfolioNamed": "Opening {{partner}}'s portfolio…",
+        "parties": "Going through buyers, sellers, and mechanics…",
+        "partiesQuery": "Looking up “{{query}}” in contacts…",
+        "partners": "Going through investment partners…",
+        "partnersQuery": "Looking up “{{query}}” among partners…",
+        "finance": "Adding up purchases, sales, and expenses…",
+        "financeNamed": "Working out the numbers on {{vehicle}}…",
+        "inspections": "Reading inspection reports…",
+        "documents": "Checking the document file…",
+        "listings": "Checking live ad listings…",
+        "enquiries": "Going through customer enquiries…",
+        "records": "Reading the paperwork trail…",
+        "policies": "Checking the compliance rulebook…",
+        "team": "Checking who's on the team…",
+        "audit": "Reading the activity log…",
+        "acknowledge": "Marking the alert as seen…",
+        "draftPurchase": "Drafting the vehicle entry for your approval…",
+        "draftSale": "Drafting the sale for your approval…",
+        "working": "Getting what's needed…",
+        "found_one": "Found 1 match — reading it now…",
+        "found_other": "Found {{count}} matches — reading them now…",
+        "foundNone": "Nothing matched that…"
+      },
       "stopped": "Stopped.",
       "starting": "Starting…",
       "finalizing": "Finalizing…"
@@ -1478,5 +1573,76 @@
     "saveChanges": "Save Changes",
     "emptyTitle": "No vehicle selected",
     "emptyDescription": "Choose a vehicle above to edit its details, or add a new vehicle."
+  },
+  "billing": {
+    "title": "Billing",
+    "description": "Your subscription, plan and payments",
+    "ownerOnly": "Only the dealership owner can change the subscription.",
+    "currentPlan": "Current plan",
+    "noPlan": "No plan selected",
+    "trialEnds": "Trial ends",
+    "renewsOn": "Renews on",
+    "accessUntil": "Access until",
+    "graceEnds": "Access continues until",
+    "billingCycle": "Billing cycle",
+    "choosePlan": "Choose a plan",
+    "current": "Current",
+    "subscribe": "Subscribe",
+    "contactSales": "Contact sales",
+    "cancelSubscription": "Cancel subscription",
+    "confirmCancel": "Cancel your subscription? You will keep full access until the end of the current billing period.",
+    "cancelScheduled": "Subscription cancelled. You keep access until the end of the current period.",
+    "paymentHistory": "Payment history",
+    "noPayments": "No payments yet",
+    "noPaymentsHint": "Payments appear here once your first subscription charge is confirmed.",
+    "exGst": "excluding GST",
+    "checkoutDescription": "{{plan}} subscription",
+    "paymentReceived": "Payment received. Your plan updates as soon as it is confirmed.",
+    "checkoutDismissed": "Checkout closed. Nothing was charged.",
+    "per": {
+      "monthly": "/mo",
+      "annual": "/yr"
+    },
+    "cycle": {
+      "monthly": "Monthly",
+      "annual": "Annual"
+    },
+    "status": {
+      "trialing": "Trial",
+      "active": "Active",
+      "past_due": "Payment failed",
+      "lapsed": "Read-only",
+      "cancelled": "Cancelled",
+      "comped": "Complimentary"
+    },
+    "errors": {
+      "notConfigured": "Online payments are not switched on for this system yet. Nothing was charged.",
+      "priceNotSet": "The {{plan}} plan does not have a price set yet. Please contact us.",
+      "checkoutFailed": "Could not start checkout. Nothing was charged.",
+      "checkoutScript": "Could not load the payment window. Check your connection and try again.",
+      "cancelFailed": "Could not cancel the subscription."
+    },
+    "banner": {
+      "action": "Manage billing",
+      "trial_ending": {
+        "title": "Your trial is ending soon",
+        "body_one": "{{count}} day left in your trial. Choose a plan to keep access.",
+        "body_other": "{{count}} days left in your trial. Choose a plan to keep access."
+      },
+      "payment_failed": {
+        "title": "Payment failed",
+        "body_one": "We could not collect your renewal payment. Access becomes limited in {{count}} day.",
+        "body_other": "We could not collect your renewal payment. Access becomes limited in {{count}} days."
+      },
+      "cancelled": {
+        "title": "Subscription cancelled",
+        "body_one": "Your account becomes read-only in {{count}} day.",
+        "body_other": "Your account becomes read-only in {{count}} days."
+      },
+      "read_only": {
+        "title": "Your account is read-only",
+        "body": "Your subscription has lapsed, so new records cannot be added. All your data is safe and can still be viewed and exported."
+      }
+    }
   }
 }

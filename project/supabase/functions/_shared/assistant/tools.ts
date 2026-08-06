@@ -11,6 +11,11 @@ import { canUseTool } from "./capabilities.ts";
 import type { AssistantConfig } from "./config.ts";
 import { AssistantPersistence } from "./persistence.ts";
 import { addAuthoritativeSaleGuards } from "./sale-guard-loader.ts";
+import {
+  type StatusParams,
+  toolResultStatus,
+  toolStatus,
+} from "./status.ts";
 import type {
   ActionTokenPayload,
   AssistantPrincipal,
@@ -55,7 +60,7 @@ export interface ToolExecutionContext {
    * fill in block fields the model referenced by id.
    */
   rows: Map<string, Record<string, unknown>>;
-  onStatus?: (message: string) => void;
+  onStatus?: (message: string, params?: StatusParams) => void;
 }
 
 /**
@@ -1425,11 +1430,8 @@ export async function executeTool(
       },
     };
   }
-  context.onStatus?.(
-    actionSpecByTool(name)
-      ? "assistant.status.preparing"
-      : "assistant.status.searching",
-  );
+  const status = toolStatus(name, raw, context.evidence);
+  context.onStatus?.(status.key, status.params);
   try {
     let result: ToolResult;
     switch (name) {
@@ -1480,6 +1482,8 @@ export async function executeTool(
     for (const item of result.entities ?? []) {
       context.evidence.set(`${item.type}:${item.id}`, item);
     }
+    const found = toolResultStatus(name, result);
+    if (found) context.onStatus?.(found.key, found.params);
     return result;
   } catch (error) {
     if (error instanceof ToolDatabaseError) {

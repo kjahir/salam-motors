@@ -71,8 +71,17 @@ function Harness() {
       <button onClick={assistant.clearConversation}>Clear</button>
       <output data-testid="conversation">{assistant.conversationId ?? ""}</output>
       <output data-testid="messages">{assistant.messages.length}</output>
+      <output data-testid="status">{assistant.statusText}</output>
+      <output data-testid="status-key">{assistant.statusKey}</output>
     </>
   );
+}
+
+function onStatusOf(call: number) {
+  return mocks.requestAssistantTurn.mock.calls[call][1].onStatus as (
+    text: string,
+    params?: Record<string, string | number>,
+  ) => void;
 }
 
 function renderProvider() {
@@ -137,6 +146,101 @@ describe("AssistantProvider request ownership", () => {
       expect.any(AbortSignal),
     );
     expect(i18n.resolvedLanguage).toBe("en");
+  });
+
+  it("writes the status locally from the key and values the server sent", async () => {
+    const pending = deferred<AssistantTurnResponse>();
+    mocks.requestAssistantTurn.mockReturnValueOnce(pending.promise);
+    renderProvider();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const { onStatus } = mocks.requestAssistantTurn.mock.calls[0][1];
+    // Each status is given the floor before the next one, so this reads what the caller
+    // would actually see rather than only the last frame.
+    const show = (text: string, params?: Record<string, string | number>) =>
+      act(() => {
+        onStatus(text, params);
+        vi.advanceTimersByTime(600);
+      });
+
+    vi.useFakeTimers();
+    try {
+      show("assistant.status.tool.inventoryQuery", { query: "Swift" });
+      expect(screen.getByTestId("status")).toHaveTextContent("Looking for “Swift” in stock…");
+      // The key is kept alongside the copy so the shell can pick an icon without matching
+      // on translated prose.
+      expect(screen.getByTestId("status-key")).toHaveTextContent(
+        "assistant.status.tool.inventoryQuery",
+      );
+
+      show("assistant.status.tool.found", { count: 3 });
+      expect(screen.getByTestId("status")).toHaveTextContent("Found 3 matches");
+      show("assistant.status.tool.found", { count: 1 });
+      expect(screen.getByTestId("status")).toHaveTextContent("Found 1 match — reading it now…");
+
+      // A backend that still sends prose is shown as-is, with no key to style it by.
+      show("Searching dealership records…");
+      expect(screen.getByTestId("status")).toHaveTextContent("Searching dealership records…");
+      expect(screen.getByTestId("status-key")).toHaveTextContent("");
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await act(async () => {
+      pending.resolve(response("status-conversation"));
+      await pending.promise;
+    });
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+  });
+
+  it("holds a status on screen long enough to be read", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = deferred<AssistantTurnResponse>();
+      mocks.requestAssistantTurn.mockReturnValueOnce(pending.promise);
+      renderProvider();
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      expect(screen.getByTestId("status")).toHaveTextContent("Understanding your request…");
+
+      // The search, its result, and the next model round all report within a few
+      // milliseconds of each other.
+      act(() => {
+        onStatusOf(0)("assistant.status.tool.inventory");
+        onStatusOf(0)("assistant.status.tool.found", { count: 4 });
+        onStatusOf(0)("assistant.status.reviewing");
+      });
+      expect(screen.getByTestId("status")).toHaveTextContent("Understanding your request…");
+
+      // Each one still gets its turn on screen, in order, rather than the last writer
+      // winning and the count never being seen.
+      act(() => void vi.advanceTimersByTime(600));
+      expect(screen.getByTestId("status")).toHaveTextContent("Going through the vehicle list…");
+      act(() => void vi.advanceTimersByTime(600));
+      expect(screen.getByTestId("status")).toHaveTextContent("Found 4 matches");
+      act(() => void vi.advanceTimersByTime(600));
+      expect(screen.getByTestId("status")).toHaveTextContent("Reading what came back…");
+
+      // Caught up: a status arriving after the quiet period shows immediately.
+      act(() => void vi.advanceTimersByTime(600));
+      act(() => onStatusOf(0)("assistant.status.tool.finance"));
+      expect(screen.getByTestId("status")).toHaveTextContent(
+        "Adding up purchases, sales, and expenses…",
+      );
+
+      // A finished turn drops whatever was still queued behind it.
+      act(() => {
+        onStatusOf(0)("assistant.status.tool.documents");
+        onStatusOf(0)("assistant.status.tool.listings");
+      });
+      await act(async () => {
+        pending.resolve(response("queued-conversation"));
+        await pending.promise;
+      });
+      act(() => void vi.advanceTimersByTime(2_000));
+      expect(screen.getByTestId("status")).toHaveTextContent("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("starts a clean conversation when the selected language changes", async () => {

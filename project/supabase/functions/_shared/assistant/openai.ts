@@ -31,6 +31,7 @@ import {
 } from "./intent-vectors.ts";
 import { withheldColumnNames, withholdIdentifiers } from "./redact-rows.ts";
 import { AnswerTextScanner, readSseData } from "./streaming.ts";
+import type { StatusParams } from "./status.ts";
 import {
   executeTool,
   type ToolExecutionContext,
@@ -89,7 +90,7 @@ export interface OpenAIRunInput {
   conversationId: string;
   history: ConversationHistoryItem[];
   runId: string | null;
-  onStatus?: (messageKey: string) => void;
+  onStatus?: (messageKey: string, params?: StatusParams) => void;
   /**
    * Receives answer text as the model writes it. Present only on streaming (SSE) requests;
    * when absent the model call is buffered exactly as before, so the non-streaming JSON
@@ -872,7 +873,14 @@ export async function runOpenAITurn(
   }
 
   for (let round = 0; round < input.config.maxToolRounds; round += 1) {
-    input.onStatus?.("assistant.status.thinking");
+    // The first round is the model deciding where to look; every round after it has data in
+    // hand and is deciding what that data means. Saying "Thinking…" for both wastes the one
+    // moment the caller is actually watching the status line.
+    input.onStatus?.(
+      round === 0
+        ? "assistant.status.planning"
+        : "assistant.status.reviewing",
+    );
 
     const remainingMs = deadlineAt - Date.now();
     if (remainingMs <= DEADLINE_CLOCK_SKEW_MS) {

@@ -5,6 +5,8 @@ import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { canWrite } from "@/lib/entitlements";
 import { checkRegistrationUnique } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { VehicleDetailsForm } from "@/components/VehicleDetailsForm";
@@ -31,6 +33,7 @@ export function AddVehicle({ onNavigate, embedded, onCreated }: AddVehicleProps)
   const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const { toast } = useToast();
   const { user } = useAuth();
+  const { entitlements } = useEntitlements();
 
   const update = <K extends keyof VehicleFullFormData>(key: K, value: VehicleFullFormData[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -118,6 +121,25 @@ export function AddVehicle({ onNavigate, embedded, onCreated }: AddVehicleProps)
               {t("vehicleForm.onboardAnother")}
             </button>
           </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // The database rejects the insert outright when the subscription has
+  // lapsed, so filling in the whole onboarding form would end in a failure
+  // at submit. Say so up front instead.
+  if (!canWrite(entitlements)) {
+    return (
+      <div className={embedded ? "space-y-5" : "p-6 max-w-2xl mx-auto space-y-5"}>
+        {!embedded && <PageHeader title={t("vehicleForm.onboardTitle")} />}
+        <Card className="p-6">
+          <h2 className="text-base font-semibold text-slate-900">
+            {t("billing.banner.read_only.title")}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            {t("billing.banner.read_only.body")}
+          </p>
         </Card>
       </div>
     );

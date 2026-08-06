@@ -12,6 +12,8 @@ import { EditVehicleModal } from "@/components/EditVehicleModal";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
 import type { Vehicle, VehicleFinancialSummary, Partner, VehicleComplianceStatus, AppSettings } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 
 interface InventoryProps {
   onNavigate: (page: PageKey, params?: NavigateParams) => void;
@@ -21,6 +23,7 @@ type AgeingFilter = "all" | "normal" | "attention" | "high" | "breach";
 
 export function Inventory({ onNavigate }: InventoryProps) {
   const { t } = useTranslation();
+  const { entitlements } = useEntitlements();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -313,9 +316,11 @@ export function Inventory({ onNavigate }: InventoryProps) {
                               </span>
                             )}
                           </button>
-                          <button onClick={() => onNavigate("passport", { vehicleId: v.id })} className="text-slate-400 hover:text-brand-600 p-1.5" title={t("inventory.viewPassport")}>
-                            <Share2 size={14} />
-                          </button>
+                          {isFeatureAvailable(entitlements, "vehicle_passport") && (
+                            <button onClick={() => onNavigate("passport", { vehicleId: v.id })} className="text-slate-400 hover:text-brand-600 p-1.5" title={t("inventory.viewPassport")}>
+                              <Share2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>

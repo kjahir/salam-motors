@@ -23,6 +23,7 @@ import { Badge, VerificationBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
+import { proteanLookup } from "@/lib/proteanApi";
 import { formatDate } from "@/lib/format";
 import { computeOverallScore } from "@/lib/calc";
 import { fetchVehicleFull } from "@/lib/queries";
@@ -125,26 +126,21 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
     }
   };
 
-  // Task 8 (Protean eGov lookups) surfaced here as a light "Verify Vehicle"
-  // panel — full lookup/eSign UI is out of scope for this pass (deferred to
-  // the broader UI work). Placeholder Protean credentials are provisioned
-  // on staging but not yet real, so this call is expected to fail with
-  // PROTEAN_NOT_CONFIGURED until an operator fills in real API keys; that
-  // failure is surfaced inline rather than as an opaque error.
+  // Protean lookups, surfaced here as a light "Verify Vehicle" panel. These now go to the
+  // Protean service (services/protean-api/) rather than a Supabase function, because
+  // Protean whitelists the calling IP — see src/lib/proteanApi.ts. Failures are surfaced
+  // inline rather than as an opaque error, since "not connected yet" is a normal state
+  // until the service is deployed with real credentials.
   const runProteanLookup = async (lookupType: ProteanLookupType) => {
     if (!orgId || !vehicle.registration_number) return;
     setProteanState((s) => ({ ...s, loading: lookupType, errors: { ...s.errors, [lookupType]: undefined } }));
     try {
-      const { data, error } = await supabase.functions.invoke("protean-lookup", {
-        body: {
-          org_id: orgId,
-          vehicle_id: vehicle.id,
-          lookup_type: lookupType,
-          registration_number: vehicle.registration_number,
-        },
+      const data = await proteanLookup<{ cached?: boolean; result?: { response_payload?: Record<string, unknown> } }>({
+        org_id: orgId,
+        vehicle_id: vehicle.id,
+        lookup_type: lookupType,
+        registration_number: vehicle.registration_number,
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error.message ?? data.error.code ?? "Lookup failed");
       setProteanState((s) => ({
         ...s,
         loading: null,

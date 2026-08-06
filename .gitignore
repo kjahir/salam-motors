@@ -1,0 +1,28 @@
+# Repo-root ignores. `project/.gitignore` covers the app; this covers everything else,
+# including the keys and certificates the Protean integration needs.
+
+# Key material. The Protean onboarding involves an IP whitelist and a .cer upload, so
+# private keys and certificates now land in this working tree — none of it belongs in git.
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+id_rsa*
+id_ed25519*
+hostinger-*
+!hostinger-*.md
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Windows/WSL metadata
+*:Zone.Identifier
+
+# Editors and OS
+.DS_Store
+.idea/
+*.swp

@@ -24,8 +24,11 @@ import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge, StatusBadge, VerificationBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { InlineEditableField } from "@/components/ui/InlineEditableField";
+import { SaleSigningPanel } from "@/components/SaleSigningPanel";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 import { EditVehicleModal } from "@/components/EditVehicleModal";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
 import { formatINR, formatINRRange, formatDate, daysSince, formatPercent } from "@/lib/format";
@@ -76,6 +79,7 @@ interface VehicleDetailProps {
 
 export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openEditVehicle, highlightPolicyId, embedded }: VehicleDetailProps) {
   const { t } = useTranslation();
+  const { entitlements } = useEntitlements();
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
@@ -204,9 +208,11 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
                 <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
               </button>
             )}
-            <button onClick={() => onNavigate("passport", { vehicleId: vehicle.id })} className="btn-secondary">
-              <Share2 size={16} /> {t("vehicleDetail.viewPassport")}
-            </button>
+            {isFeatureAvailable(entitlements, "vehicle_passport") && (
+              <button onClick={() => onNavigate("passport", { vehicleId: vehicle.id })} className="btn-secondary">
+                <Share2 size={16} /> {t("vehicleDetail.viewPassport")}
+              </button>
+            )}
             <button onClick={() => setShowEditModal(true)} className="btn-secondary">
               <Pencil size={16} /> {t("vehicleDetail.edit")}
             </button>
@@ -1706,6 +1712,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
   const [acknowledging, setAcknowledging] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { entitlements: saleEntitlements } = useEntitlements();
 
   const sale = vehicle.sale;
   const distributions = vehicle.profit_distributions ?? [];
@@ -1802,6 +1809,8 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
             <Spec label="Return on Cost" value={formatPercent(profit?.returnOnCostPct)} />
           </div>
         </Card>
+
+        {isFeatureAvailable(saleEntitlements, "esign_estamp") && <SaleSigningPanel sale={sale} />}
 
         <Card className="p-5">
           <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2"><TrendingUp size={18} className="text-slate-400" /> Profit Distribution</h3>

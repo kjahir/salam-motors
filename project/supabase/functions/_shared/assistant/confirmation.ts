@@ -7,6 +7,7 @@ import type { AssistantConfig } from "./config.ts";
 import { AssistantHttpError, type SseTurnResult } from "./http.ts";
 import { assistantStrings, formatMoney, interpolate } from "./locales.ts";
 import type { AssistantPersistence } from "./persistence.ts";
+import type { StatusParams } from "./status.ts";
 import type {
   ActionTokenPayload,
   AssistantBlock,
@@ -26,7 +27,7 @@ export interface ConfirmedActionInput {
   principal: AssistantPrincipal;
   config: AssistantConfig;
   request: AssistantTurnRequest;
-  onStatus?: (messageKey: string) => void;
+  onStatus?: (messageKey: string, params?: StatusParams) => void;
 }
 
 async function verifyToken(

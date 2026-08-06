@@ -24,6 +24,9 @@ import { MobileUpdateVehicle } from "./MobileUpdateVehicle";
 import { MobileViewVehicle } from "./MobileViewVehicle";
 import { usePermissions } from "@/lib/usePermissions";
 import { useAssistant } from "@/assistant/AssistantProvider";
+import { MobileBillingBanner } from "./MobileBillingBanner";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { canWrite } from "@/lib/entitlements";
 
 export type MobileScreen =
   | "dashboard"
@@ -67,6 +70,9 @@ export interface MobileNavigateParams {
   openEditVehicle?: boolean;
   highlightPolicyId?: string;
 }
+
+/** Set to true to restore the bottom nav bar. False hides it; dashboard quick actions replace it. */
+const SHOW_BOTTOM_NAV = false;
 
 // Targets reachable from the mobile "+" icon row, each landing on its own full-screen page
 // with a vehicle-select dropdown at the top (rather than a pre-navigation picker Sheet) —
@@ -113,6 +119,7 @@ export function MobileApp() {
   const { t } = useTranslation();
   const { registerNavigation, setAppContext } = useAssistant();
   const { canAccessMobileTab } = usePermissions();
+  const { entitlements } = useEntitlements();
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
@@ -212,7 +219,7 @@ export function MobileApp() {
     const origin = addOriginRef.current;
     if (origin === "vehicle" && vehicleId) return navigate("vehicle", { vehicleId, tab });
     if (origin) return navigate(origin);
-    return vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("inventory");
+    return vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("dashboard");
   };
 
   /**
@@ -305,12 +312,29 @@ export function MobileApp() {
   // "vehicle" is included so the global "+" button (and its jump-straight-to-page behavior
   // for a vehicle already open) stays reachable from a vehicle's own detail page, not just
   // from Dashboard/Inventory/Reports.
-  const showBottomNav = BOTTOM_NAV_SCREENS.includes(screen);
-  const canAddVehicle = canAccessMobileTab("add-vehicle");
+  const showBottomNav = SHOW_BOTTOM_NAV && BOTTOM_NAV_SCREENS.includes(screen);
+  // Role decides whether this person may create records at all; billing
+  // decides whether the dealership currently may. Both must hold - the
+  // database enforces the second one regardless (see the billing migration),
+  // this just avoids offering an action that would be rejected.
+  const canAddVehicle = canAccessMobileTab("add-vehicle") && canWrite(entitlements);
 
   return (
     <div className="mobile-shell min-h-screen">
+      {/* Renders nothing while the subscription is healthy. */}
+      <MobileBillingBanner />
       <div className={showBottomNav ? "pb-20" : ""}>{renderScreen()}</div>
+
+      {/* Floating back-to-dashboard button — visible on all non-dashboard screens when the bottom nav is hidden */}
+      {!showBottomNav && screen !== "dashboard" && (
+        <button
+          onClick={() => navigate("dashboard")}
+          className="fixed bottom-6 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-2xl bg-mobile-navy text-white shadow-mobile-md active:opacity-80"
+          aria-label={t("nav.dashboard")}
+        >
+          <LayoutDashboard size={20} />
+        </button>
+      )}
 
       {/* Transparent tap-outside-to-dismiss layer: purely functional, never visually
           covers the dashboard/inventory content behind the icon row. */}

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { formatPaise } from "@/lib/entitlements";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { APP_ENTRY_HREF } from "@/components/marketing/constants";
@@ -8,6 +10,8 @@ import { Badge } from "@/components/ui/Badge";
 type BillingCycle = "monthly" | "annual";
 
 interface Tier {
+  /** Matches subscription_plans.code - how a card finds its live price. */
+  code: string;
   name: string;
   tagline: string;
   price: string;
@@ -17,9 +21,20 @@ interface Tier {
   features: string[];
 }
 
-// TODO: real pricing — figures below are placeholders until commercial terms are finalized.
+/** The priced part of a plan, read live from the public catalog. */
+interface PlanPrice {
+  code: string;
+  monthly_price_paise: number | null;
+  annual_price_paise: number | null;
+}
+
+// Feature bullets stay in code - they are marketing copy, not billing data.
+// PRICES do not: they come from the subscription_plans table below, so
+// setting a real price is a data change rather than a redeploy. Until one is
+// set the card falls back to the "₹—" placeholder this page has always shown.
 const TIERS: Tier[] = [
   {
+    code: "starter",
     name: "Starter",
     tagline: "For a single dealership getting off spreadsheets",
     price: "₹—",
@@ -34,6 +49,7 @@ const TIERS: Tier[] = [
     ],
   },
   {
+    code: "growth",
     name: "Growth",
     tagline: "For dealerships managing finance & investment partners",
     price: "₹—",
@@ -50,6 +66,7 @@ const TIERS: Tier[] = [
     ],
   },
   {
+    code: "enterprise",
     name: "Enterprise",
     tagline: "For multi-location dealer groups & networks",
     price: "Custom",
@@ -87,6 +104,37 @@ const FAQS = [
 export function PricingPage() {
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [prices, setPrices] = useState<Record<string, PlanPrice>>({});
+
+  // The catalog is readable by anonymous visitors (see the
+  // public_read_active_plans RLS policy) precisely so this page can show
+  // live prices without a login. A failure here is silent: the cards fall
+  // back to their placeholder, which is strictly better than an error
+  // banner on a marketing page.
+  useEffect(() => {
+    let active = true;
+    void supabase
+      .from("subscription_plans")
+      .select("code, monthly_price_paise, annual_price_paise")
+      .eq("is_active", true)
+      .then(({ data }) => {
+        if (!active || !data) return;
+        setPrices(Object.fromEntries((data as PlanPrice[]).map((p) => [p.code, p])));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /**
+   * Live price for a tier, or null when it is unpriced or not self-serve.
+   * Enterprise deliberately keeps its hardcoded "Custom" copy.
+   */
+  const priceFor = (tier: Tier): string | null => {
+    const row = prices[tier.code];
+    if (!row) return null;
+    return formatPaise(cycle === "annual" ? row.annual_price_paise : row.monthly_price_paise);
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -144,8 +192,14 @@ export function PricingPage() {
                 <p className="mt-1 text-sm text-slate-500">{tier.tagline}</p>
 
                 <div className="mt-5 flex items-baseline gap-1.5">
-                  <span className="text-3xl font-bold text-slate-900">{tier.price}</span>
-                  <span className="text-sm text-slate-500">{tier.priceNote}</span>
+                  <span className="text-3xl font-bold text-slate-900">
+                    {priceFor(tier) ?? tier.price}
+                  </span>
+                  <span className="text-sm text-slate-500">
+                    {priceFor(tier)
+                      ? `${cycle === "annual" ? "/yr" : "/mo"} + 18% GST`
+                      : tier.priceNote}
+                  </span>
                 </div>
 
                 <a
@@ -177,16 +231,17 @@ export function PricingPage() {
               cycle until cancelled.
             </p>
             {/*
-              TODO(razorpay-integration): This is where Razorpay Subscriptions / UPI AutoPay attaches once a
-              merchant account exists. On CTA click for a self-serve tier, this page should call a backend
-              endpoint (new Supabase Edge Function, mirroring project/supabase/functions/assistant-turn/) that:
-                1. Creates a Razorpay Plan (if not already created) for the selected tier + billing cycle.
-                2. Creates a Razorpay Subscription via razorpay.subscriptions.create() with the customer's
-                   organization id in `notes`, and authorizes it via UPI AutoPay (or card) using Razorpay
-                   Checkout's subscription mode.
-                3. Verifies the subscription webhook (subscription.activated / charged / cancelled) server-side
-                   before flipping the organization's plan/entitlements in the DB.
-              This is a follow-up task — no merchant credentials exist yet, so no live checkout is wired here.
+              Razorpay Subscriptions / UPI AutoPay is implemented, but NOT on this page, and that is
+              deliberate: a subscription is attached to an organization, and a signed-out visitor does
+              not have one yet. So the CTAs here go to signup; the dealer creates their dealership,
+              lands on a 14-day trial, and subscribes from Settings > Billing (src/pages/Billing.tsx),
+              which calls the billing-checkout Edge Function and opens Razorpay Checkout in
+              subscription mode. Access only changes when the signature-verified billing-webhook
+              confirms the charge.
+
+              Prices above are read live from the subscription_plans table. They render as "₹—" until
+              a real price is set there - no merchant credentials or commercial terms exist yet, so
+              checkout currently returns "not configured" rather than charging anyone.
             */}
           </div>
         </div>

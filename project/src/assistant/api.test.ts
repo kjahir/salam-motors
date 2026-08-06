@@ -102,7 +102,7 @@ describe("assistant API client", () => {
 
     const response = await requestAssistantTurn(request, { onStatus, onDelta });
 
-    expect(onStatus).toHaveBeenCalledWith("Searching inventory…");
+    expect(onStatus).toHaveBeenCalledWith("Searching inventory…", undefined);
     expect(onDelta).toHaveBeenCalledWith("Three vehicles");
     // No `meta` frame in this stream, so there is no run to attribute a spoken reply to.
     expect(response).toEqual({ conversationId: "conversation-1", turn, runId: null });
@@ -115,6 +115,41 @@ describe("assistant API client", () => {
           apikey: "anon-key",
         }),
       }),
+    );
+  });
+
+  it("forwards status interpolation values, dropping anything unprintable", async () => {
+    const payload = [
+      'event: status\ndata: {"key":"assistant.status.tool.inventoryQuery","message":"assistant.status.tool.inventoryQuery","params":{"query":"Swift","count":3,"junk":{"nested":true},"missing":null}}',
+      'event: status\ndata: {"message":"assistant.status.tool.inventory","params":null}',
+      `event: turn\ndata: ${JSON.stringify({ conversationId: "conversation-1", turn })}`,
+      "event: done\ndata: {}",
+      "",
+    ].join("\n\n");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(payload, {
+          status: 200,
+          headers: { "content-type": "text/event-stream; charset=utf-8" },
+        }),
+      ),
+    );
+    const onStatus = vi.fn();
+
+    await requestAssistantTurn(request, { onStatus });
+
+    expect(onStatus).toHaveBeenNthCalledWith(
+      1,
+      "assistant.status.tool.inventoryQuery",
+      { query: "Swift", count: 3 },
+    );
+    // A status with no values must not hand i18next an empty object to interpolate with.
+    expect(onStatus).toHaveBeenNthCalledWith(
+      2,
+      "assistant.status.tool.inventory",
+      undefined,
     );
   });
 

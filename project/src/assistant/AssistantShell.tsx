@@ -9,16 +9,37 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowUp,
   Bot,
+  Briefcase,
+  Calculator,
+  Car,
+  CheckCheck,
+  ClipboardCheck,
+  Clock,
+  Compass,
+  Eye,
+  FileText,
+  Files,
+  History,
+  ListChecks,
   Loader2,
+  Megaphone,
   MessageCircle,
+  MessageSquare,
   Mic,
   Paperclip,
+  PenLine,
   RotateCcw,
+  ScrollText,
+  Search,
+  SearchX,
+  ShieldAlert,
   Sparkles,
   Square,
   Trash2,
+  Users,
   VolumeX,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { useAuth } from "@/lib/useAuth";
@@ -46,6 +67,61 @@ const SPEECH_LEVEL_THRESHOLD = 0.025;
 const LIVE_TRANSCRIPT_INTERVAL_MS = 1_800;
 const MIN_LIVE_AUDIO_BYTES = 2_000;
 const TTS_PCM_SAMPLE_RATE = 24_000;
+
+/**
+ * The icon that goes with each status.
+ *
+ * Keyed on the translation key rather than the shown text, so it survives translation. A
+ * status the map does not know keeps the spinner, which is what every status used to show.
+ */
+const STATUS_ICONS: Record<string, LucideIcon> = {
+  "assistant.status.planning": Compass,
+  "assistant.status.reviewing": Eye,
+  "assistant.status.tool.inventory": Car,
+  "assistant.status.tool.inventoryQuery": Search,
+  "assistant.status.tool.vehicle": Car,
+  "assistant.status.tool.vehicleNamed": Car,
+  "assistant.status.tool.ageing": Clock,
+  "assistant.status.tool.ageingDays": Clock,
+  "assistant.status.tool.compliance": ShieldAlert,
+  "assistant.status.tool.complianceNamed": ShieldAlert,
+  "assistant.status.tool.portfolio": Briefcase,
+  "assistant.status.tool.portfolioNamed": Briefcase,
+  "assistant.status.tool.parties": Users,
+  "assistant.status.tool.partiesQuery": Search,
+  "assistant.status.tool.partners": Users,
+  "assistant.status.tool.partnersQuery": Search,
+  "assistant.status.tool.finance": Calculator,
+  "assistant.status.tool.financeNamed": Calculator,
+  "assistant.status.tool.inspections": ClipboardCheck,
+  "assistant.status.tool.documents": FileText,
+  "assistant.status.tool.listings": Megaphone,
+  "assistant.status.tool.enquiries": MessageSquare,
+  "assistant.status.tool.records": Files,
+  "assistant.status.tool.policies": ScrollText,
+  "assistant.status.tool.team": Users,
+  "assistant.status.tool.audit": History,
+  "assistant.status.tool.acknowledge": CheckCheck,
+  "assistant.status.tool.draftPurchase": PenLine,
+  "assistant.status.tool.draftSale": PenLine,
+  "assistant.status.tool.found": ListChecks,
+  "assistant.status.tool.foundNone": SearchX,
+  "assistant.status.revalidating": ShieldAlert,
+  "assistant.status.executing": CheckCheck,
+};
+
+/**
+ * Shows what the assistant is doing, not merely that it is doing something.
+ *
+ * A named icon stops spinning — it pulses instead — because the spinner's job is to say
+ * "no news yet", and a status that names its work is news.
+ */
+function StatusIcon({ statusKey, size = 14 }: { statusKey: string; size?: number }) {
+  const Icon = STATUS_ICONS[statusKey];
+  return Icon
+    ? <Icon size={size} className="shrink-0 animate-pulse-soft" aria-hidden="true" />
+    : <Loader2 size={size} className="shrink-0 animate-spin" aria-hidden="true" />;
+}
 
 function preferredAudioType(): string | undefined {
   if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported)
@@ -428,6 +504,7 @@ export function AssistantShell() {
     isOpen,
     isBusy,
     statusText,
+    statusKey,
     messages,
     starterPrompts,
     open,
@@ -786,7 +863,7 @@ export function AssistantShell() {
                         <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-relaxed text-slate-700">
                           {message.text || (
                             <span className="flex items-center gap-2 text-slate-400">
-                              <Loader2 size={14} className="animate-spin" />
+                              <StatusIcon statusKey={statusKey} />
                               {statusText || t("assistant.status.thinking")}
                             </span>
                           )}
@@ -802,7 +879,7 @@ export function AssistantShell() {
                     className="flex items-center gap-2 pl-9 text-[11px] text-slate-400"
                     aria-live="polite"
                   >
-                    <Loader2 size={12} className="animate-spin" />
+                    <StatusIcon statusKey={statusKey} size={12} />
                     {statusText}
                   </div>
                 )}

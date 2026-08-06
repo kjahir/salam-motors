@@ -5,7 +5,10 @@ import { formatINR, formatPercent } from "@/lib/format";
 import { computeProfit } from "@/lib/calc";
 import { isHardBlocking, type ComplianceViolation } from "@/lib/compliance";
 import type { VehicleWithRelations } from "@/lib/types";
+import { MobileSaleSigningPanel } from "./MobileSaleSigningPanel";
 import type { MobileNavigate } from "./MobileApp";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 
 function Spec({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -27,12 +30,14 @@ export function MobileSaleTab({ vehicle, profit, complianceViolations, onNavigat
   onNavigate: MobileNavigate;
 }) {
   const { t } = useTranslation();
+  const { entitlements } = useEntitlements();
 
   const hardBlockingViolations = complianceViolations.filter(isHardBlocking);
 
   return (
     <div className="space-y-3 pt-3">
       {vehicle.sale ? (
+        <>
         <Card className="p-4">
           <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3"> {t("mobileVehicle.saleCompleted")}</h3>
           <div className="grid grid-cols-2 gap-3 text-xs">
@@ -44,6 +49,8 @@ export function MobileSaleTab({ vehicle, profit, complianceViolations, onNavigat
             <Spec label={t("mobileVehicle.returnOnCost")} value={formatPercent(profit?.returnOnCostPct)} />
           </div>
         </Card>
+        {isFeatureAvailable(entitlements, "esign_estamp") && <MobileSaleSigningPanel sale={vehicle.sale} />}
+        </>
       ) : hardBlockingViolations.length > 0 ? (
         <Card className="p-4">
           <h3 className="text-sm font-poppins font-semibold text-mobile-error"> {t("vehicleDetail.saleBlockedTitle")}</h3>

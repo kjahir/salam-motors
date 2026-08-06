@@ -13,6 +13,7 @@ import { getAppLocale } from "@/i18n";
 import { useAuth } from "@/lib/useAuth";
 import {
   requestAssistantTurn,
+  type AssistantStatusParams,
   type AssistantTurnMeta,
   type SpokenAssistantLocale,
 } from "./api";
@@ -41,6 +42,12 @@ interface AssistantContextValue {
   isOpen: boolean;
   isBusy: boolean;
   statusText: string;
+  /**
+   * The i18n key behind `statusText`, empty when the server sent literal copy. The shell
+   * uses it to pick an icon: the text is already translated, so matching on it would mean
+   * matching translated prose.
+   */
+  statusKey: string;
   streamingText: string;
   conversationId?: string;
   messages: AssistantChatMessage[];
@@ -76,6 +83,11 @@ function starterKeyFor(role: string | null, isPartner: boolean): StarterKey {
   }
 }
 
+/** How long a status stays on screen before a newer one may replace it. */
+const MIN_STATUS_MS = 600;
+/** How far the status line may fall behind the work before it starts skipping steps. */
+const MAX_QUEUED_STATUSES = 3;
+
 function nowId(prefix: string): string {
   return `${prefix}-${Date.now()}-${crypto.randomUUID()}`;
 }
@@ -87,6 +99,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [statusKey, setStatusKey] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
@@ -99,6 +112,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const lastUserMessageRef = useRef<string>("");
   const lastSendOptionsRef = useRef<AssistantSendOptions | undefined>();
   const principalRef = useRef<string | null>(null);
+  const statusShownAtRef = useRef(0);
+  const statusTimerRef = useRef<number | null>(null);
+  const pendingStatusRef = useRef<(() => void)[]>([]);
 
   const starterPrompts = useMemo(
     () => {
@@ -108,18 +124,81 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     [partner, role, t],
   );
 
-  const localizeStatus = useCallback(
-    (text: string) => text.startsWith("assistant.") ? t(text) : text,
+  /**
+   * Shows a status the server sent.
+   *
+   * The server names what it is doing with a key and its values — "looking for X", "found
+   * N" — and never a finished sentence, so the wording is chosen here, in the caller's
+   * language. Anything that is not a key is shown verbatim; older backends sent prose.
+   *
+   * Statuses are held for {@link MIN_STATUS_MS} before being replaced. The server emits
+   * them at the speed it works, and some pairs land microseconds apart — a search result
+   * count is followed immediately by the next model round — so without a floor the more
+   * informative half of the pair would never be on screen long enough to read.
+   */
+  const showStatus = useCallback(
+    (text: string, params?: AssistantStatusParams) => {
+      const isKey = text.startsWith("assistant.");
+      const apply = () => {
+        statusShownAtRef.current = Date.now();
+        setStatusKey(isKey ? text : "");
+        setStatusText(isKey ? t(text, params ?? {}) : text);
+      };
+      const waited = Date.now() - statusShownAtRef.current;
+      if (waited >= MIN_STATUS_MS && statusTimerRef.current === null) {
+        apply();
+        return;
+      }
+      // Queued rather than replaced: a status that lost the race — "found 4 matches",
+      // overtaken by the next round a millisecond later — is usually the interesting one.
+      // The queue is short, so the line trails the real work by at most a beat or two, and
+      // the burst it absorbs is over long before the model round it describes is.
+      pendingStatusRef.current.push(apply);
+      if (pendingStatusRef.current.length > MAX_QUEUED_STATUSES) {
+        pendingStatusRef.current.shift();
+      }
+      if (statusTimerRef.current !== null) return;
+      const release = () => {
+        const next = pendingStatusRef.current.shift();
+        if (!next) {
+          statusTimerRef.current = null;
+          return;
+        }
+        next();
+        statusTimerRef.current = pendingStatusRef.current.length > 0
+          ? window.setTimeout(release, MIN_STATUS_MS)
+          : null;
+      };
+      statusTimerRef.current = window.setTimeout(
+        release,
+        Math.max(0, MIN_STATUS_MS - waited),
+      );
+    },
     [t],
   );
+
+  const clearStatus = useCallback(() => {
+    if (statusTimerRef.current !== null) {
+      window.clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = null;
+    }
+    pendingStatusRef.current = [];
+    statusShownAtRef.current = 0;
+    setStatusKey("");
+    setStatusText("");
+  }, []);
+
+  useEffect(() => () => {
+    if (statusTimerRef.current !== null) window.clearTimeout(statusTimerRef.current);
+  }, []);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
     setIsBusy(false);
-    setStatusText("");
+    clearStatus();
     setStreamingText("");
-  }, []);
+  }, [clearStatus]);
 
   const clearConversation = useCallback(() => {
     stop();
@@ -198,7 +277,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
       setMessages((current) => [...current, userMessage, assistantMessage]);
       setIsBusy(true);
-      setStatusText(t("assistant.status.understanding"));
+      showStatus("assistant.status.understanding");
       setStreamingText("");
 
       const controller = new AbortController();
@@ -235,8 +314,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             stream: true,
           },
           {
-            onStatus: (text) => {
-              if (abortRef.current === controller) setStatusText(localizeStatus(text));
+            onStatus: (text, params) => {
+              if (abortRef.current === controller) showStatus(text, params);
             },
             onMeta: (meta) => {
               if (abortRef.current === controller) turnMeta = meta;
@@ -293,12 +372,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         if (abortRef.current === controller) {
           abortRef.current = null;
           setIsBusy(false);
-          setStatusText("");
+          clearStatus();
           setStreamingText("");
         }
       }
     },
-    [activeLocale, appContext, conversationId, isBusy, localizeStatus, t],
+    [activeLocale, appContext, clearStatus, conversationId, isBusy, showStatus, t],
   );
 
   const executeAction = useCallback(
@@ -316,7 +395,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         },
       ]);
       setIsBusy(true);
-      setStatusText(t("assistant.status.revalidating"));
+      showStatus("assistant.status.revalidating");
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -331,8 +410,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             action: { token },
           },
           {
-            onStatus: (text) => {
-              if (abortRef.current === controller) setStatusText(localizeStatus(text));
+            onStatus: (text, params) => {
+              if (abortRef.current === controller) showStatus(text, params);
             },
           },
           controller.signal,
@@ -368,11 +447,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         if (abortRef.current === controller) {
           abortRef.current = null;
           setIsBusy(false);
-          setStatusText("");
+          clearStatus();
         }
       }
     },
-    [activeLocale, appContext, conversationId, isBusy, localizeStatus, t],
+    [activeLocale, appContext, clearStatus, conversationId, isBusy, showStatus, t],
   );
 
   const handleAction = useCallback(
@@ -410,6 +489,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       isOpen,
       isBusy,
       statusText,
+      statusKey,
       streamingText,
       conversationId,
       messages,
@@ -441,6 +521,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       sendMessage,
       setAppContext,
       starterPrompts,
+      statusKey,
       statusText,
       stop,
       streamingText,

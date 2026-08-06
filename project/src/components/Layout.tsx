@@ -16,12 +16,15 @@ import {
   FileBarChart,
   UserCog,
   ScrollText,
+  CreditCard,
   Receipt,
   FileText,
   ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { usePermissions } from "@/lib/usePermissions";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 import { ROLE_LABELS } from "@/lib/constants";
 
 export type PageKey =
@@ -43,7 +46,8 @@ export type PageKey =
   | "history"
   | "policies"
   | "team"
-  | "audit";
+  | "audit"
+  | "billing";
 
 // The "Vehicles" group in the sidebar: a pure expand/collapse header (it is not itself a
 // page) over the per-vehicle work screens. Each child is a full page with a vehicle-select
@@ -86,6 +90,7 @@ const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
   { key: "policies", labelKey: "nav.policies", icon: <ShieldCheck size={18} /> },
   { key: "team", labelKey: "nav.team", icon: <UserCog size={18} /> },
   { key: "audit", labelKey: "nav.audit", icon: <ScrollText size={18} /> },
+  { key: "billing", labelKey: "nav.billing", icon: <CreditCard size={18} /> },
 ];
 
 /** "vehicles" is the collapsible group above, not a page. */
@@ -94,7 +99,7 @@ type NavEntry = { key: PageKey } | { group: "vehicles" };
 const navSections: NavEntry[][] = [
   [{ key: "dashboard" }, { group: "vehicles" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
-  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }, { key: "audit" }],
+  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }, { key: "audit" }, { key: "billing" }],
 ];
 
 const isGroup = (e: NavEntry): e is { group: "vehicles" } => "group" in e;
@@ -106,6 +111,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
   const [vehiclesOpen, setVehiclesOpen] = useState(isOnVehicleGroup);
   const { canAccessPage } = usePermissions();
   const { orgName } = useAuth();
+  const { entitlements } = useEntitlements();
 
   const isActive = (key: PageKey) => {
     if (key === "inventory" && (current === "vehicle" || current === "parties")) return true;
@@ -121,7 +127,11 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
 
   const visibleNavSections = navSections
     .map((section) =>
-      section.filter((entry) => (isGroup(entry) ? visibleVehicleGroup.length > 0 : canAccessPage(entry.key))),
+      section.filter((entry) =>
+        isGroup(entry)
+          ? visibleVehicleGroup.length > 0
+          : canAccessPage(entry.key) && isFeatureAvailable(entitlements, entry.key as never),
+      ),
     )
     .filter((section) => section.length > 0);
 

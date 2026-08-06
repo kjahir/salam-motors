@@ -1,3 +1,4 @@
+import type { StatusParams } from "./status.ts";
 import type { AssistantTurn } from "./types.ts";
 
 export const ASSISTANT_CORS_HEADERS = {
@@ -112,7 +113,11 @@ export interface SseTurnResult {
 
 /** What a run may emit while it works. */
 export interface SseTurnSink {
-  status: (messageKey: string) => void;
+  /**
+   * A status key, plus any values it interpolates. The client owns the wording — it holds
+   * the translations — so nothing here is ever a finished sentence.
+   */
+  status: (messageKey: string, params?: StatusParams) => void;
   /**
    * Announces the run before any answer text. The client starts speaking on the first
    * delta and the speech call must name the run for the step-8 trace, so the run id has
@@ -144,11 +149,12 @@ export function sseTurnResponse(
         if (!closed) controller.enqueue(encoder.encode(event(name, value)));
       };
       const sink: SseTurnSink = {
-        status: (messageKey) =>
+        status: (messageKey, params) =>
           write("status", {
             key: messageKey,
             message: messageKey,
             text: messageKey,
+            params: params ?? null,
           }),
         meta: (value) => {
           if (metaSent) return;

@@ -28,7 +28,12 @@ import { History } from "@/pages/History";
 import { Policies } from "@/pages/Policies";
 import { Team } from "@/pages/Team";
 import { Audit } from "@/pages/Audit";
+import { Billing } from "@/pages/Billing";
 import { PartnerPortal } from "@/pages/PartnerPortal";
+import { BillingBanner } from "@/components/BillingBanner";
+import { EntitlementsProvider } from "@/lib/entitlementsProvider";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 import { fetchAlerts } from "@/lib/queries";
 import { canAccessPage } from "@/lib/permissions";
 import { AssistantProvider, useAssistant } from "@/assistant/AssistantProvider";
@@ -54,6 +59,7 @@ const PAGE_KEYS: ReadonlySet<PageKey> = new Set([
   "policies",
   "team",
   "audit",
+  "billing",
 ]);
 
 function isPageKey(value: string): value is PageKey {
@@ -63,6 +69,7 @@ function isPageKey(value: string): value is PageKey {
 function AppContent() {
   const { t } = useTranslation();
   const { session, loading, membership, partner, role } = useAuth();
+  const { entitlements } = useEntitlements();
   const { registerNavigation, setAppContext } = useAssistant();
   const isMobile = useIsMobileViewport();
   const [page, setPage] = useState<PageKey>("dashboard");
@@ -170,7 +177,9 @@ function AppContent() {
           <Inventory onNavigate={handleNavigate} />
         );
       case "passport":
-        return vehicleId ? <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} /> : <Inventory onNavigate={handleNavigate} />;
+        return vehicleId && isFeatureAvailable(entitlements, "vehicle_passport")
+          ? <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} />
+          : <Inventory onNavigate={handleNavigate} />;
       case "partners":
         return <Partners onNavigate={handleNavigate} />;
       case "parties":
@@ -187,6 +196,8 @@ function AppContent() {
         return <Team />;
       case "audit":
         return <Audit />;
+      case "billing":
+        return isFeatureAvailable(entitlements, "billing") ? <Billing /> : <Dashboard onNavigate={handleNavigate} />;
       default:
         return <Dashboard onNavigate={handleNavigate} />;
     }
@@ -220,7 +231,7 @@ function AppContent() {
     return <MobileApp />;
   }
 
-  const isPassport = page === "passport";
+  const isPassport = page === "passport" && isFeatureAvailable(entitlements, "vehicle_passport");
 
   return (
     <>
@@ -228,6 +239,8 @@ function AppContent() {
         <Passport vehicleId={vehicleId} onNavigate={handleNavigate} onBack={handleBack} />
       ) : (
         <Layout current={page} onNavigate={handleNavigate} alertCount={alertCount}>
+          {/* Renders nothing while the subscription is healthy. */}
+          <BillingBanner onNavigate={handleNavigate} />
           {renderPage()}
         </Layout>
       )}
@@ -256,16 +269,26 @@ function AppCrashFallback({ reset }: { reset: () => void }) {
   );
 }
 
+/** Gate: renders nothing when the AI assistant WIP flag is off or the plan excludes it. */
+function MaybeAssistantShell() {
+  const { entitlements } = useEntitlements();
+  if (!isFeatureAvailable(entitlements, "ai_assistant")) return null;
+  return <AssistantShell />;
+}
+
 export default function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <AssistantProvider>
-          <ErrorBoundary label="app-root" fallback={(_error, reset) => <AppCrashFallback reset={reset} />}>
-            <AppContent />
-          </ErrorBoundary>
-          <AssistantShell />
-        </AssistantProvider>
+        {/* Inside AuthProvider: entitlements are looked up per org_id. */}
+        <EntitlementsProvider>
+          <AssistantProvider>
+            <ErrorBoundary label="app-root" fallback={(_error, reset) => <AppCrashFallback reset={reset} />}>
+              <AppContent />
+            </ErrorBoundary>
+            <MaybeAssistantShell />
+          </AssistantProvider>
+        </EntitlementsProvider>
       </AuthProvider>
     </ToastProvider>
   );

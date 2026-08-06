@@ -23,6 +23,9 @@ export const PAGE_ACCESS: Partial<Record<PageKey, Role[]>> = {
   finance: ["owner", "manager", "accountant"],
   team: ["owner", "manager"],
   audit: ["owner", "manager"],
+  // Committing the dealership to a recurring payment is the owner's call
+  // alone - mirrors BILLING_ROLES in the billing-checkout Edge Function.
+  billing: ["owner"],
 };
 
 export const MOBILE_TAB_ACCESS: Partial<Record<MobileScreen, Role[]>> = {

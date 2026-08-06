@@ -28,6 +28,7 @@ import {
 } from "../_shared/assistant/http.ts";
 import { runOpenAITurn } from "../_shared/assistant/openai.ts";
 import { AssistantPersistence } from "../_shared/assistant/persistence.ts";
+import type { StatusParams } from "../_shared/assistant/status.ts";
 import type {
   AssistantPrincipal,
   AssistantTurnRequest,
@@ -45,7 +46,7 @@ interface TurnContext {
   principal: AssistantPrincipal;
   config: AssistantConfig;
   request: AssistantTurnRequest;
-  onStatus?: (messageKey: string) => void;
+  onStatus?: (messageKey: string, params?: StatusParams) => void;
   /** Answer text as the model writes it. SSE path only. */
   onAnswerDelta?: (text: string) => void;
   /**

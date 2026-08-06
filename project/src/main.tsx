@@ -8,7 +8,7 @@ import "./i18n";
 import "./index.css";
 
 const passportMatch = window.location.pathname.match(/^\/passport\/([^/]+)\/?$/);
-const homeMatch = window.location.pathname.match(/^\/$/);
+const homeMatch = window.location.pathname.match(/^\/$/) && import.meta.env.VITE_ENABLE_WIP_FEATURES === "true";
 const pricingMatch = window.location.pathname.match(/^\/pricing\/?$/);
 
 createRoot(document.getElementById("root")!).render(

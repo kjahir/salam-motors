@@ -15,8 +15,12 @@ export interface AssistantTurnMeta {
   runId: string | null;
 }
 
+/** Values a status key interpolates — a searched-for phrase, a vehicle label, a count. */
+export type AssistantStatusParams = Record<string, string | number>;
+
 export interface AssistantStreamCallbacks {
-  onStatus?: (text: string) => void;
+  /** `text` is a translation key when the server sent one, and literal copy otherwise. */
+  onStatus?: (text: string, params?: AssistantStatusParams) => void;
   onDelta?: (text: string) => void;
   onTurn?: (turn: AssistantTurn) => void;
   onMeta?: (meta: AssistantTurnMeta) => void;
@@ -67,6 +71,26 @@ function parseSseFrame(frame: string): SseEvent | null {
   }
   if (data.length === 0) return null;
   return { event, data: data.join("\n") };
+}
+
+/**
+ * Interpolation values off a status frame.
+ *
+ * Only strings and finite numbers survive: these end up inside translated copy, and a
+ * nested object or a raw null there would render as "[object Object]" mid-sentence.
+ */
+function statusParams(value: unknown): AssistantStatusParams | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const source = (value as { params?: unknown }).params;
+  if (typeof source !== "object" || source === null) return undefined;
+  const params: AssistantStatusParams = {};
+  for (const [name, item] of Object.entries(source)) {
+    if (typeof item === "string") params[name] = item;
+    else if (typeof item === "number" && Number.isFinite(item)) {
+      params[name] = item;
+    }
+  }
+  return Object.keys(params).length > 0 ? params : undefined;
 }
 
 function messageFromUnknown(value: unknown): string {
@@ -219,7 +243,7 @@ export async function requestAssistantTurn(
     }
 
     if (item.event === "status") {
-      callbacks.onStatus?.(messageFromUnknown(payload));
+      callbacks.onStatus?.(messageFromUnknown(payload), statusParams(payload));
       return;
     }
     if (item.event === "delta") {
