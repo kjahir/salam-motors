@@ -1,32 +1,41 @@
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Bell, ChevronRight, History as HistoryIcon, ScrollText, ShieldCheck, UserCog, Users, Wallet } from "lucide-react";
-import { Card } from "./ui/primitives";
+import { Bell, History as HistoryIcon, ScrollText, ShieldCheck, UserCog, Users, Wallet } from "lucide-react";
+import { MoreButton } from "./ui/primitives";
 import { usePermissions } from "@/lib/usePermissions";
 import type { PageKey } from "@/components/Layout";
 import type { MobileNavigate, MobileScreen } from "./MobileApp";
 
 /**
  * Everything the desktop sidebar reaches that the three other bottom-nav tabs do not. Each
- * row opens the same page component the desktop renders (wrapped in MobileDesktopPage), so
+ * button opens the same page component the desktop renders (wrapped in MobileDesktopPage), so
  * there is one implementation of Parties/Team/Audit/etc. rather than a mobile fork that
- * would drift.
+ * would drift. Icon-only and no background by design: Bill, Passport, Social Media Add,
+ * eSign and eStamp are all landing here too, and a growing list of full-width rows would
+ * outgrow the screen fast.
  *
- * `page` is the desktop PageKey the row's permission is checked against - these screens
+ * `page` is the desktop PageKey the button's permission is checked against - these screens
  * are gated by the desktop role matrix (PAGE_ACCESS), not the mobile one, because they
  * *are* the desktop screens.
+ *
+ * `vehicleScoped: false` marks the entries that operate across the whole dealership rather
+ * than one vehicle - those grey out while Bottom Bar V2 has a vehicle selected, same as the
+ * Dashboard's own More row.
  */
-const MORE_ITEMS: { screen: MobileScreen; page: PageKey; labelKey: string; icon: ReactNode }[] = [
-  { screen: "alerts", page: "alerts", labelKey: "nav.alerts", icon: <Bell size={18} /> },
-  { screen: "parties", page: "parties", labelKey: "nav.parties", icon: <Users size={18} /> },
-  { screen: "partners", page: "partners", labelKey: "nav.partners", icon: <Wallet size={18} /> },
-  { screen: "team", page: "team", labelKey: "nav.team", icon: <UserCog size={18} /> },
-  { screen: "policies", page: "policies", labelKey: "nav.policies", icon: <ShieldCheck size={18} /> },
-  { screen: "history", page: "history", labelKey: "nav.history", icon: <HistoryIcon size={18} /> },
-  { screen: "audit", page: "audit", labelKey: "nav.audit", icon: <ScrollText size={18} /> },
+const MORE_ITEMS: { screen: MobileScreen; page: PageKey; labelKey: string; icon: ReactNode; color: string; vehicleScoped?: false }[] = [
+  { screen: "alerts", page: "alerts", labelKey: "nav.alerts", icon: <Bell size={22} />, color: "text-mobile-error" },
+  { screen: "parties", page: "parties", labelKey: "nav.parties", icon: <Users size={22} />, color: "text-mobile-primary", vehicleScoped: false },
+  { screen: "partners", page: "partners", labelKey: "nav.partners", icon: <Wallet size={22} />, color: "text-mobile-success", vehicleScoped: false },
+  { screen: "team", page: "team", labelKey: "nav.team", icon: <UserCog size={22} />, color: "text-mobile-navy", vehicleScoped: false },
+  { screen: "policies", page: "policies", labelKey: "nav.policies", icon: <ShieldCheck size={22} />, color: "text-mobile-warning" },
+  { screen: "history", page: "history", labelKey: "nav.history", icon: <HistoryIcon size={22} />, color: "text-mobile-purple" },
+  { screen: "audit", page: "audit", labelKey: "nav.audit", icon: <ScrollText size={22} />, color: "text-mobile-text-secondary" },
 ];
 
-export function MobileMore({ onNavigate }: { onNavigate: MobileNavigate }) {
+export function MobileMore({ onNavigate, selectedVehicleId }: {
+  onNavigate: MobileNavigate;
+  selectedVehicleId?: string | null;
+}) {
   const { t } = useTranslation();
   const { canAccessPage } = usePermissions();
   const items = MORE_ITEMS.filter((item) => canAccessPage(item.page));
@@ -39,18 +48,19 @@ export function MobileMore({ onNavigate }: { onNavigate: MobileNavigate }) {
         <p className="text-xs text-white/70 mt-1">{t("mobileMore.description")}</p>
       </div>
 
-      <div className="px-4 -mt-4 pb-4 space-y-2">
-        {items.map((item) => (
-          <Card key={item.screen} className="px-4 py-3.5" onClick={() => onNavigate(item.screen)}>
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mobile-primary/10 text-mobile-primary">
-                {item.icon}
-              </span>
-              <span className="flex-1 min-w-0 truncate text-sm font-medium text-mobile-text">{t(item.labelKey)}</span>
-              <ChevronRight size={16} className="shrink-0 text-mobile-text-muted" />
-            </div>
-          </Card>
-        ))}
+      <div className="px-4 pt-4 pb-8">
+        <div className="grid grid-cols-4 gap-2">
+          {items.map((item) => (
+            <MoreButton
+              key={item.screen}
+              icon={item.icon}
+              color={item.color}
+              label={t(item.labelKey)}
+              onClick={() => onNavigate(item.screen)}
+              disabled={item.vehicleScoped === false && !!selectedVehicleId}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

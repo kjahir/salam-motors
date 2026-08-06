@@ -9,11 +9,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
-  Filter,
 } from "lucide-react";
-import { PageHeader, Select, Spinner } from "@/components/ui/Primitives";
+import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { VehicleSearchField } from "@/components/VehicleSearchField";
 import { formatINR, formatDate } from "@/lib/format";
 import { downloadCSV } from "@/lib/calc";
 import { fetchAlerts, fetchFinancialSummaries, fetchCompliancePolicies } from "@/lib/queries";
@@ -38,7 +38,7 @@ export function Alerts({ onNavigate }: AlertsProps) {
   const [error, setError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("Open");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [vehicleId, setVehicleId] = useState("");
   const { toast } = useToast();
 
   const reload = useCallback(async () => {
@@ -66,10 +66,17 @@ export function Alerts({ onNavigate }: AlertsProps) {
     return alerts.filter((a) => {
       if (severityFilter !== "all" && a.severity !== severityFilter) return false;
       if (statusFilter !== "all" && a.status !== statusFilter) return false;
-      if (typeFilter !== "all" && a.alert_type !== typeFilter) return false;
+      if (vehicleId && a.vehicle_id !== vehicleId) return false;
       return true;
     });
-  }, [alerts, severityFilter, statusFilter, typeFilter]);
+  }, [alerts, severityFilter, statusFilter, vehicleId]);
+
+  /** Total/Open/Critical/High each set a distinct (status, severity) pair, so the active
+   *  tile can be highlighted and tapping it again is a natural way to see what's selected. */
+  const applyTileFilter = (status: string, severity: string) => {
+    setStatusFilter(status);
+    setSeverityFilter(severity);
+  };
 
   const stats = useMemo(() => {
     const open = alerts.filter((a) => a.status === "Open");
@@ -147,37 +154,40 @@ export function Alerts({ onNavigate }: AlertsProps) {
         actions={<button onClick={handleExport} className="btn-secondary"><Download size={16} /> {t("alertsPage.export")}</button>}
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label={t("alertsPage.totalAlerts")} value={stats.total} icon={<Bell size={18} />} color="slate" />
-        <StatCard label={t("alertsPage.open")} value={stats.open} icon={<AlertTriangle size={18} />} color="amber" />
-        <StatCard label={t("alertsPage.critical")} value={stats.critical} icon={<AlertTriangle size={18} />} color="red" />
-        <StatCard label={t("alertsPage.highPriority")} value={stats.high} icon={<AlertTriangle size={18} />} color="orange" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <StatCard
+          compact
+          active={statusFilter === "all" && severityFilter === "all"}
+          label={t("alertsPage.totalAlerts")} value={stats.total} icon={<Bell size={15} />} color="slate"
+          onClick={() => applyTileFilter("all", "all")}
+        />
+        <StatCard
+          compact
+          active={statusFilter === "Open" && severityFilter === "all"}
+          label={t("alertsPage.open")} value={stats.open} icon={<AlertTriangle size={15} />} color="amber"
+          onClick={() => applyTileFilter("Open", "all")}
+        />
+        <StatCard
+          compact
+          active={severityFilter === "Critical"}
+          label={t("alertsPage.critical")} value={stats.critical} icon={<AlertTriangle size={15} />} color="red"
+          onClick={() => applyTileFilter("Open", "Critical")}
+        />
+        <StatCard
+          compact
+          active={severityFilter === "High"}
+          label={t("alertsPage.highPriority")} value={stats.high} icon={<AlertTriangle size={15} />} color="orange"
+          onClick={() => applyTileFilter("Open", "High")}
+        />
       </div>
 
       <Card className="p-4 mb-5">
-        <div className="flex flex-wrap gap-2 items-center">
-          <Filter size={16} className="text-slate-400" />
-          <Select value={statusFilter} onChange={setStatusFilter} options={[
-            { value: "all", label: t("alertsPage.allStatuses") },
-            { value: "Open", label: t("status.Open") },
-            { value: "Acknowledged", label: t("status.Acknowledged") },
-            { value: "Resolved", label: t("status.Resolved") },
-          ]} className="w-auto" />
-          <Select value={severityFilter} onChange={setSeverityFilter} options={[
-            { value: "all", label: t("alertsPage.allSeverities") },
-            { value: "Critical", label: t("status.Critical") },
-            { value: "High", label: t("status.High") },
-            { value: "Warning", label: t("status.Warning") },
-            { value: "Info", label: t("status.Info") },
-          ]} className="w-auto" />
-          <Select value={typeFilter} onChange={setTypeFilter} options={[
-            { value: "all", label: t("alertsPage.allTypes") },
-            { value: "Ageing", label: t("status.Ageing") },
-            { value: "Document", label: t("status.Document") },
-            { value: "Repair", label: t("status.Repair") },
-            { value: "Compliance", label: t("status.Compliance") },
-          ]} className="w-auto" />
-        </div>
+        <VehicleSearchField
+          value={vehicleId}
+          onChange={(id) => setVehicleId(id)}
+          placeholder={t("alertsPage.searchVehicle")}
+          className="max-w-sm"
+        />
       </Card>
 
       {filtered.length === 0 ? (

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Card, Field, Select, Input, Spinner, EmptyState, Sheet, Button } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import { AttachButton, Combobox, MoreDetailsButton, RowCommitButton, RowDeleteButton, type QuickRowState } from "./ui/QuickEntryRow";
+import { useHighlightRow } from "./ui/useHighlightRow";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -71,10 +72,12 @@ const hasDetails = (row: ExpenseRow) => Boolean(row.vendor || row.description ||
 // Mobile counterpart of src/pages/QuickAddExpense.tsx — the same one-line-per-expense
 // model, saved row by row with no page-level save button. Two lines per row here rather
 // than one, because a phone cannot fit category, amount and four 44px controls across.
-export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBack }: {
+export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBack, highlightRecordId }: {
   vehicleId?: string;
   onNavigate: MobileNavigate;
   onBack: () => void;
+  /** An expense id to scroll to and briefly highlight — set when arriving from a Reports row. */
+  highlightRecordId?: string;
 }) {
   const { t } = useTranslation();
   const [vehicleId, setVehicleId] = useState(initialVehicleId ?? "");
@@ -86,6 +89,7 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
   const [pendingDelete, setPendingDelete] = useState<ExpenseRow | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { setRowRef, highlighted } = useHighlightRow(rows, highlightRecordId);
 
   useEffect(() => {
     fetchPartners().then(setPartners).catch(() => {});
@@ -235,7 +239,7 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
     <div>
       <TopBar title={t("mobileExpenses.addExpenses")} onBack={onBack} />
       <div className="p-4 space-y-3 pb-28">
-        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+        <MobileVehicleSearch value={vehicleId} onChange={(id) => setVehicleId(id)} label={t("mobileAdd.selectVehicle")} />
 
         {vehicleId && !loadingRows && (
           <Card className="p-3.5">
@@ -260,57 +264,63 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
             {rows.map((row) => {
               const state = rowState(row);
               return (
-                <Card key={row.key} className={`p-3 space-y-2.5 ${state === "draft" ? "border-mobile-primary/30" : ""}`}>
-                  <Combobox
-                    value={row.category}
-                    onChange={(v) => editRow(row.key, { category: v })}
-                    options={EXPENSE_CATEGORIES}
-                    placeholder={t("quickEntry.categoryPlaceholder")}
-                  />
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      type="number"
-                      className="flex-1 min-w-0"
-                      value={row.amount}
-                      onChange={(e) => editRow(row.key, { amount: e.target.value })}
-                      placeholder=""
+                <div
+                  key={row.key}
+                  ref={setRowRef(row.id)}
+                  className={`rounded-2xl transition-shadow ${highlighted === row.id ? "ring-2 ring-mobile-primary" : ""}`}
+                >
+                  <Card className={`p-3 space-y-2.5 ${state === "draft" ? "border-mobile-primary/30" : ""}`}>
+                    <Combobox
+                      value={row.category}
+                      onChange={(v) => editRow(row.key, { category: v })}
+                      options={EXPENSE_CATEGORIES}
+                      placeholder={t("quickEntry.categoryPlaceholder")}
                     />
-                    <AttachButton
-                      bucket={BUCKET}
-                      pathPrefix={`${vehicleId}/${row.key}`}
-                      value={row.files}
-                      onChange={(files) => editRow(row.key, { files })}
-                    />
-                    <MoreDetailsButton open={row.expanded} onToggle={() => patchRow(row.key, { expanded: !row.expanded })} badge={hasDetails(row)} />
-                    <RowCommitButton state={state} busy={row.busy} disabled={!rowComplete(row)} onAdd={() => handleAdd(row)} onSave={() => handleSave(row)} />
-                    <RowDeleteButton state={state} busy={row.busy} onDelete={() => requestDelete(row)} />
-                  </div>
-
-                  {row.expanded && (
-                    <div className="space-y-3 border-t border-mobile-border pt-3 animate-fade-in">
-                      <Field label={t("mobileExpenses.description")}>
-                        <Input value={row.description} onChange={(e) => editRow(row.key, { description: e.target.value })} placeholder="Brake pads + air filter" />
-                      </Field>
-                      <Field label={t("mobileExpenses.vendor")}>
-                        <Input value={row.vendor} onChange={(e) => editRow(row.key, { vendor: e.target.value })} placeholder="Sai Spares" />
-                      </Field>
-                      <Field label={t("mobileExpenses.paidBy")}>
-                        <Select
-                          value={row.paid_by_partner_id}
-                          onChange={(v) => editRow(row.key, { paid_by_partner_id: v })}
-                          placeholder={t("mobileExpenses.business")}
-                          options={partners.map((p) => ({ value: p.id, label: p.name }))}
-                        />
-                      </Field>
-                      {/* No upload grid here on purpose: the paperclip on the row above already
-                          attaches bills, and having camera/library/file in both places made the
-                          same job look like two different jobs. */}
-                      <Field label={t("quickEntry.date")}>
-                        <Input type="date" value={row.expense_date} onChange={(e) => editRow(row.key, { expense_date: e.target.value })} />
-                      </Field>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        className="flex-1 min-w-0"
+                        value={row.amount}
+                        onChange={(e) => editRow(row.key, { amount: e.target.value })}
+                        placeholder=""
+                      />
+                      <AttachButton
+                        bucket={BUCKET}
+                        pathPrefix={`${vehicleId}/${row.key}`}
+                        value={row.files}
+                        onChange={(files) => editRow(row.key, { files })}
+                      />
+                      <MoreDetailsButton open={row.expanded} onToggle={() => patchRow(row.key, { expanded: !row.expanded })} badge={hasDetails(row)} />
+                      <RowCommitButton state={state} busy={row.busy} disabled={!rowComplete(row)} onAdd={() => handleAdd(row)} onSave={() => handleSave(row)} />
+                      <RowDeleteButton state={state} busy={row.busy} onDelete={() => requestDelete(row)} />
                     </div>
-                  )}
-                </Card>
+
+                    {row.expanded && (
+                      <div className="space-y-3 border-t border-mobile-border pt-3 animate-fade-in">
+                        <Field label={t("mobileExpenses.description")}>
+                          <Input value={row.description} onChange={(e) => editRow(row.key, { description: e.target.value })} placeholder="Brake pads + air filter" />
+                        </Field>
+                        <Field label={t("mobileExpenses.vendor")}>
+                          <Input value={row.vendor} onChange={(e) => editRow(row.key, { vendor: e.target.value })} placeholder="Sai Spares" />
+                        </Field>
+                        <Field label={t("mobileExpenses.paidBy")}>
+                          <Select
+                            value={row.paid_by_partner_id}
+                            onChange={(v) => editRow(row.key, { paid_by_partner_id: v })}
+                            placeholder={t("mobileExpenses.business")}
+                            options={partners.map((p) => ({ value: p.id, label: p.name }))}
+                          />
+                        </Field>
+                        {/* No upload grid here on purpose: the paperclip on the row above already
+                            attaches bills, and having camera/library/file in both places made the
+                            same job look like two different jobs. */}
+                        <Field label={t("quickEntry.date")}>
+                          <Input type="date" value={row.expense_date} onChange={(e) => editRow(row.key, { expense_date: e.target.value })} />
+                        </Field>
+                      </div>
+                    )}
+                  </Card>
+                </div>
               );
             })}
 
@@ -356,7 +366,7 @@ export function MobileAddExpense({ vehicleId: initialVehicleId, onNavigate, onBa
 function TotalLine({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <div className={`flex items-baseline justify-between gap-3 py-1.5 ${emphasis ? "border-t border-mobile-border mt-1 pt-2.5" : ""}`}>
-      <span className={`text-sm ${emphasis ? "font-semibold text-mobile-text" : "text-mobile-text-secondary"}`}>{label}</span>
+      <span className={`text-sm ${emphasis ? "font-semibold text-mobile-text" : "text-mobile-text"}`}>{label}</span>
       <span className={`shrink-0 ${emphasis ? "text-base font-poppins font-bold text-mobile-text" : "text-sm font-medium text-mobile-text"}`}>{value}</span>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Card, Field, Input, Spinner, EmptyState } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { AttachButton, Combobox, MoreDetailsButton, RowCommitButton, RowDeleteButton, type QuickRowState } from "./ui/QuickEntryRow";
 import { useToast } from "@/components/ui/useToast";
@@ -189,7 +189,7 @@ export function MobileAddDocument({ vehicleId: initialVehicleId, onNavigate, onB
     <div>
       <TopBar title={t("mobileDocuments.addDocuments")} onBack={onBack} />
       <div className="p-4 space-y-3 pb-28">
-        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+        <MobileVehicleSearch value={vehicleId} onChange={(id) => setVehicleId(id)} label={t("mobileAdd.selectVehicle")} />
 
         {!vehicleId && (
           <Card className="p-5">

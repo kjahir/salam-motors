@@ -9,6 +9,7 @@ import { useProofLightbox } from "@/hooks/useProofLightbox";
 import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatDate } from "@/lib/format";
 import { fetchMyInvestments, fetchMyProfitDistributions } from "@/lib/queries";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import type { Investment, ProfitDistribution, ProfitSettlementPayment, Vehicle } from "@/lib/types";
 
 type DistributionRow = ProfitDistribution & { vehicle: Vehicle | null; payments: ProfitSettlementPayment[] };
@@ -36,7 +37,7 @@ export function PartnerPortal() {
 
   const stats = useMemo(() => {
     const totalInvested = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
     const totalProfit = distributions.reduce((s, d) => s + d.profit_share, 0);
     const balancePayable = distributions.reduce((s, d) => s + d.balance_payable, 0);

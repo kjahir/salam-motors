@@ -40,9 +40,9 @@ export function RowCommitButton({ state, busy, disabled, onAdd, onSave }: {
       onClick={isDraft ? onAdd : onSave}
       disabled={busy || disabled}
       aria-label={label}
-      className={`${SLOT} text-white disabled:opacity-40 ${isDraft ? "bg-mobile-primary active:bg-mobile-primary-active" : "bg-mobile-success"}`}
+      className={`${SLOT} text-white disabled:opacity-40 bg-mobile-success active:bg-mobile-success/80`}
     >
-      {busy ? <Spinner size={16} /> : isDraft ? <Plus size={18} /> : <Save size={18} />}
+      {busy ? <Spinner size={16} /> : <Save size={18} />}
     </button>
   );
 }

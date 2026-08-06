@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, ShoppingCart } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Card, Button, EmptyState } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import { MobileVehicleForm } from "./MobileVehicleForm";
 import type { MobileNavigate } from "./MobileApp";
 
@@ -24,7 +24,7 @@ export function MobileUpdateVehicle({ vehicleId: initialVehicleId, onNavigate, o
       <div className="p-4 space-y-3">
         <div className="flex items-end gap-2">
           <div className="flex-1 min-w-0">
-            <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+            <MobileVehicleSearch value={vehicleId} onChange={(id) => setVehicleId(id)} label={t("mobileAdd.selectVehicle")} />
           </div>
           <Button variant="secondary" onClick={() => onNavigate("add-vehicle")} className="shrink-0" disabled={!!vehicleId}>
             <Plus size={16} /> {t("manageVehicles.addNew")}

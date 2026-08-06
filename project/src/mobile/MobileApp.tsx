@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, MoreHorizontal, Receipt, FileText, ClipboardCheck, X } from "lucide-react";
+import { LayoutDashboard, Bike, FileBarChart, MoreHorizontal, X } from "lucide-react";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
 import { MobileMore } from "./MobileMore";
 import { MobileDesktopPage } from "./MobileDesktopPage";
+import { Sheet } from "./ui/primitives";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import { Alerts } from "@/pages/Alerts";
 import { Audit } from "@/pages/Audit";
 import { History } from "@/pages/History";
@@ -25,8 +27,6 @@ import { MobileViewVehicle } from "./MobileViewVehicle";
 import { usePermissions } from "@/lib/usePermissions";
 import { useAssistant } from "@/assistant/AssistantProvider";
 import { MobileBillingBanner } from "./MobileBillingBanner";
-import { useEntitlements } from "@/lib/useEntitlements";
-import { canWrite } from "@/lib/entitlements";
 
 export type MobileScreen =
   | "dashboard"
@@ -70,27 +70,13 @@ export interface MobileNavigateParams {
   tab?: string;
   openEditVehicle?: boolean;
   highlightPolicyId?: string;
+  /** A specific record's id to scroll to and briefly highlight on arrival — used when a
+   *  Reports row deep-links into a list+editor screen like Add Expense. */
+  highlightRecordId?: string;
 }
 
-/** Set to true to restore the bottom nav bar. False hides it; dashboard quick actions replace it. */
+/** Set to false to hide the bottom nav bar entirely. It shows on every screen. */
 const SHOW_BOTTOM_NAV = true;
-
-// Targets reachable from the mobile "+" icon row, each landing on its own full-screen page
-// with a vehicle-select dropdown at the top (rather than a pre-navigation picker Sheet) —
-// so every one is directly reachable whether or not a vehicle was already in context.
-//
-// Mirrors the desktop sidebar's "Vehicles" group (src/components/Layout.tsx): viewing a
-// vehicle is what tapping an Inventory row does, and selling starts from the Sell Vehicle
-// button on the Dashboard and on the vehicle itself, so neither needs an icon here.
-const ADD_TARGETS: { key: string; screen: MobileScreen; labelKey: string; icon: typeof Receipt }[] = [
-  { key: "vehicle", screen: "update-vehicle", labelKey: "nav.manageVehicles", icon: Bike },
-  { key: "expenses", screen: "add-expense", labelKey: "vehicleDetail.expenses", icon: Receipt },
-  { key: "documents", screen: "add-document", labelKey: "vehicleDetail.documents", icon: FileText },
-  { key: "inspection", screen: "add-inspection", labelKey: "vehicleDetail.inspection", icon: ClipboardCheck },
-];
-
-/** Screens that keep the bottom bar (and so can host the vehicle-action row). */
-const BOTTOM_NAV_SCREENS: MobileScreen[] = ["dashboard", "inventory", "reports", "vehicle", "more"];
 
 export interface MobileNavigate {
   (screen: MobileScreen, params?: MobileNavigateParams): void;
@@ -120,19 +106,17 @@ export function MobileApp() {
   const { t } = useTranslation();
   const { registerNavigation, setAppContext } = useAssistant();
   const { canAccessMobileTab } = usePermissions();
-  const { entitlements } = useEntitlements();
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
   const [highlightPolicyId, setHighlightPolicyId] = useState<string | undefined>(undefined);
-  const [addRowOpen, setAddRowOpen] = useState(false);
-  /**
-   * The screen the vehicle-action row was opened from. Kept in a ref so `navigate` can stay
-   * a stable callback: leaving an action page for any bottom-nav screen drops the dealer
-   * back where they started with the row still open, ready for the next entry.
-   */
-  const addOriginRef = useRef<MobileScreen | null>(null);
-  /** Tracks which screen navigated into a More-section screen for contextual back. */
+  const [highlightRecordId, setHighlightRecordId] = useState<string | undefined>(undefined);
+  /** Selected vehicle context for Bottom Bar V2. */
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [selectedVehicleLabel, setSelectedVehicleLabel] = useState("");
+  const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
+
+  /** Tracks which screen navigated into the current screen for contextual back. */
   const fromScreenRef = useRef<MobileScreen>("dashboard");
 
   const navigate = useCallback<MobileNavigate>((next, params) => {
@@ -148,30 +132,17 @@ export function MobileApp() {
       setVehicleTab(undefined);
       setHighlightPolicyId(undefined);
     }
+    setHighlightRecordId(params?.highlightRecordId);
     setScreen((current) => {
       // always track previous screen so inventory/reports/More back buttons work contextually
       fromScreenRef.current = current;
       return next;
     });
-    if (addOriginRef.current && BOTTOM_NAV_SCREENS.includes(next)) {
-      addOriginRef.current = null;
-      setAddRowOpen(true);
-    }
   }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
-
-  // Published as a CSS variable rather than a prop because the assistant launcher lives
-  // outside this tree (AssistantShell), and only needs to know how much room to leave.
-  useEffect(() => {
-    const showing = addRowOpen && BOTTOM_NAV_SCREENS.includes(screen);
-    document.documentElement.style.setProperty("--mobile-action-row", showing ? "6.5rem" : "0rem");
-    return () => {
-      document.documentElement.style.removeProperty("--mobile-action-row");
-    };
-  }, [addRowOpen, screen]);
 
   useEffect(() => {
     setAppContext({
@@ -207,27 +178,11 @@ export function MobileApp() {
     return screen === key;
   };
 
-  // The raised "+" button is global (not vehicle-scoped): tapping it reveals a horizontal
-  // row of all 7 targets, just above the bottom nav. "Vehicle" goes straight to Add
-  // Vehicle. Every other target lands on its own full-screen page that owns its own
-  // vehicle-select dropdown, so if we're already inside a specific vehicle's page we
-  // just pass that vehicleId along as a convenience preselect; otherwise the page opens
-  // with nothing selected and the dealer picks a vehicle right there.
-  const handlePickAddTarget = (targetScreen: MobileScreen) => {
-    addOriginRef.current = screen;
-    setAddRowOpen(false);
-    navigate(targetScreen, screen === "vehicle" && vehicleId ? { vehicleId } : undefined);
-  };
-
-  // Backing out of a vehicle-action page returns to whatever was on screen when it was
-  // opened — dashboard, inventory, reports or the vehicle itself (on its matching tab, so
-  // the record just added is visible). navigate() reopens the action row on arrival.
-  const genericBack = (tab: string) => () => {
-    const origin = addOriginRef.current;
-    if (origin === "vehicle" && vehicleId) return navigate("vehicle", { vehicleId, tab });
-    if (origin) return navigate(origin);
-    return vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("dashboard");
-  };
+  // Backing out of a vehicle-action page returns to the vehicle itself (on its matching
+  // tab, so the record just added is visible) if one was already in context, otherwise to
+  // the dashboard — matching wherever the dealer would have started the action from.
+  const genericBack = (tab: string) => () =>
+    vehicleId ? navigate("vehicle", { vehicleId, tab }) : navigate("dashboard");
 
   /**
    * The More screens are the desktop page components, so they hand back desktop PageKeys.
@@ -258,9 +213,15 @@ export function MobileApp() {
   const renderScreen = () => {
     switch (screen) {
       case "dashboard":
-        return <MobileDashboard onNavigate={navigate} />;
+        return <MobileDashboard onNavigate={navigate} selectedVehicleId={selectedVehicleId} />;
       case "inventory":
-        return <MobileInventory onNavigate={navigate} onBack={() => navigate(fromScreenRef.current as MobileScreen)} />;
+        return (
+          <MobileInventory
+            onNavigate={navigate}
+            onBack={() => navigate(fromScreenRef.current as MobileScreen)}
+            vehicleFilter={selectedVehicleId}
+          />
+        );
       case "manage-vehicles":
         return <MobileInventory manageMode onBack={genericBack("overview")} onNavigate={navigate} />;
       case "vehicle":
@@ -284,11 +245,24 @@ export function MobileApp() {
           <MobileInventory onNavigate={navigate} />
         );
       case "reports":
-        return <MobileReports onNavigate={navigate} onBack={() => navigate(fromScreenRef.current as MobileScreen)} />;
+        return (
+          <MobileReports
+            onNavigate={navigate}
+            onBack={() => navigate(fromScreenRef.current as MobileScreen)}
+            vehicleFilter={selectedVehicleId}
+          />
+        );
       case "update-vehicle":
         return <MobileUpdateVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("overview")} />;
       case "add-expense":
-        return <MobileAddExpense vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("expenses")} />;
+        return (
+          <MobileAddExpense
+            vehicleId={vehicleId ?? undefined}
+            onNavigate={navigate}
+            onBack={genericBack("expenses")}
+            highlightRecordId={highlightRecordId}
+          />
+        );
       case "add-document":
         return <MobileAddDocument vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("documents")} />;
       case "add-inspection":
@@ -298,7 +272,7 @@ export function MobileApp() {
       case "view-vehicle":
         return <MobileViewVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={() => navigate("inventory")} />;
       case "more":
-        return <MobileMore onNavigate={navigate} />;
+        return <MobileMore onNavigate={navigate} selectedVehicleId={selectedVehicleId} />;
       case "alerts":
         return morePage("alerts", <Alerts onNavigate={desktopNavigate} />);
       case "parties":
@@ -314,88 +288,78 @@ export function MobileApp() {
       case "audit":
         return morePage("audit", <Audit />);
       default:
-        return <MobileDashboard onNavigate={navigate} />;
+        return <MobileDashboard onNavigate={navigate} selectedVehicleId={selectedVehicleId} />;
     }
   };
 
-  // "vehicle" is included so the global "+" button (and its jump-straight-to-page behavior
-  // for a vehicle already open) stays reachable from a vehicle's own detail page, not just
-  // from Dashboard/Inventory/Reports.
-  const showBottomNav = SHOW_BOTTOM_NAV && BOTTOM_NAV_SCREENS.includes(screen);
-  // Role decides whether this person may create records at all; billing
-  // decides whether the dealership currently may. Both must hold - the
-  // database enforces the second one regardless (see the billing migration),
-  // this just avoids offering an action that would be rejected.
-  const canAddVehicle = canAccessMobileTab("add-vehicle") && canWrite(entitlements);
+  // Always visible: the bottom bar is the one constant navigation surface on every screen.
+  const showBottomNav = SHOW_BOTTOM_NAV;
 
   return (
     <div className="mobile-shell min-h-screen">
       {/* Renders nothing while the subscription is healthy. */}
       <MobileBillingBanner />
-      <div className={showBottomNav ? "pb-20" : ""}>{renderScreen()}</div>
+      <div className="pb-20">{renderScreen()}</div>
 
-      {/* Floating back-to-dashboard button — visible on all non-dashboard screens when the bottom nav is hidden */}
-      {!showBottomNav && screen !== "dashboard" && (
-        <button
-          onClick={() => navigate("dashboard")}
-          className="fixed bottom-6 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-2xl bg-mobile-navy text-white shadow-mobile-md active:opacity-80"
-          aria-label={t("nav.dashboard")}
-        >
-          <LayoutDashboard size={20} />
-        </button>
-      )}
-
-      {/* Transparent tap-outside-to-dismiss layer: purely functional, never visually
-          covers the dashboard/inventory content behind the icon row. */}
-      {addRowOpen && <div className="fixed inset-0 z-20" onClick={() => setAddRowOpen(false)} />}
+      {/* Transparent tap-outside-to-dismiss layer: purely functional. */}
+      {vehiclePickerOpen && <div className="fixed inset-0 z-20" onClick={() => setVehiclePickerOpen(false)} />}
 
       {showBottomNav && (
         <div className="fixed bottom-0 left-0 right-0 z-30">
-          {addRowOpen && canAddVehicle && (
-            <div className="mx-auto max-w-md w-full bg-mobile-card border-t border-x border-mobile-border rounded-t-2xl shadow-mobile-lg px-2 pt-3 pb-2 animate-slide-up">
-              <div className="grid grid-cols-4 gap-1">
-                {ADD_TARGETS.map(({ key, screen: targetScreen, labelKey, icon: Icon }) => (
-                  <button
-                    key={key}
-                    onClick={() => handlePickAddTarget(targetScreen)}
-                    className="flex flex-col items-center gap-1 py-1 active:opacity-70"
-                  >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary"><Icon size={20} /></span>
-                    <span className="text-[10px] font-medium text-mobile-text-secondary text-center leading-tight">{t(labelKey)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Vehicle picker sheet */}
+          <Sheet
+            open={vehiclePickerOpen}
+            onClose={() => setVehiclePickerOpen(false)}
+            title={t("mobileAdd.selectVehicle")}
+            compact
+            bodyClassName="flex flex-col min-h-[50vh]"
+          >
+            <MobileVehicleSearch
+              value={selectedVehicleId ?? ""}
+              onChange={(id, v) => {
+                setSelectedVehicleId(id || null);
+                setSelectedVehicleLabel(v ? [v.manufacturer, v.model].filter(Boolean).join(" ") || v.stock_number : "");
+                setVehiclePickerOpen(false);
+              }}
+              inStockOnly
+              inline
+            />
+          </Sheet>
 
           <nav className="bg-mobile-card border-t border-mobile-border">
             <div className="flex items-stretch max-w-md mx-auto">
               <NavButton
                 active={isTabActive("dashboard")}
-                disabled={addRowOpen}
                 icon={<LayoutDashboard size={20} />}
                 label={t("nav.dashboard")}
                 onClick={() => navigate("dashboard")}
               />
-              {canAddVehicle && (
-                <button
-                  onClick={() => setAddRowOpen((o) => !o)}
-                  className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
-                  aria-label={addRowOpen ? t("mobileAdd.closeMenu") : t("mobileAdd.openMenu")}
-                  aria-expanded={addRowOpen}
-                >
-                  <span className={`flex h-[30px] w-[30px] items-center justify-center rounded-full text-white transition-colors ${addRowOpen ? "bg-mobile-primary-active" : "bg-mobile-primary"}`}>
-                    {addRowOpen ? <X size={18} /> : <Bike size={18} />}
+              {/* Vehicle context button: opens picker; shows selected vehicle name above when active */}
+              <button
+                onClick={() => setVehiclePickerOpen(true)}
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
+                aria-label={t("nav.vehicle")}
+              >
+                {selectedVehicleId && (
+                  <span className="flex items-center gap-0.5 rounded-pill bg-mobile-primary/10 px-2 py-0.5 text-[9px] font-semibold text-mobile-primary leading-tight max-w-[80px] mb-0.5">
+                    <span className="truncate">{selectedVehicleLabel}</span>
+                    <X
+                      size={10}
+                      onClick={(e) => { e.stopPropagation(); setSelectedVehicleId(null); setSelectedVehicleLabel(""); }}
+                      className="shrink-0"
+                    />
                   </span>
-                  <span className="text-[11px] font-semibold leading-none text-mobile-primary">
-                    {addRowOpen ? t("mobileAdd.closeMenu") : t("nav.vehicle")}
-                  </span>
-                </button>
-              )}
+                )}
+                <span className={`flex h-[30px] w-[30px] items-center justify-center rounded-full transition-colors ${
+                  selectedVehicleId ? "bg-mobile-primary text-white" : "bg-mobile-primary/10 text-mobile-primary"
+                }`}>
+                  <Bike size={18} />
+                </span>
+                <span className="text-[10px] font-medium leading-none text-mobile-primary">{t("nav.vehicle")}</span>
+              </button>
               {canAccessMobileTab("reports") && (
                 <NavButton
                   active={isTabActive("reports")}
-                  disabled={addRowOpen}
                   icon={<FileBarChart size={20} />}
                   label={t("nav.reports")}
                   onClick={() => navigate("reports")}
@@ -403,7 +367,6 @@ export function MobileApp() {
               )}
               <NavButton
                 active={isTabActive("more")}
-                disabled={addRowOpen}
                 icon={<MoreHorizontal size={20} />}
                 label={t("nav.more")}
                 onClick={() => navigate("more")}

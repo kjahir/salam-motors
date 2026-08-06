@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { History as HistoryIcon, AlertTriangle, X } from "lucide-react";
+import { History as HistoryIcon, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
+import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
+import { VehicleSearchField } from "@/components/VehicleSearchField";
 import { formatDate } from "@/lib/format";
 import { fetchAllStatusHistory } from "@/lib/queries";
 import { vehicleLabel } from "@/lib/vehicleLabel";
@@ -18,10 +19,14 @@ export function History({ vehicleFilter }: HistoryProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vehicleId, setVehicleId] = useState<string>(vehicleFilter ?? "");
+  /** Label for a vehicle picked directly in the search field; falls back to deriving one
+   *  from the loaded history when vehicleId instead arrives via the vehicleFilter prop. */
+  const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const { t } = useTranslation();
 
   useEffect(() => {
     setVehicleId(vehicleFilter ?? "");
+    setPickedLabel(null);
   }, [vehicleFilter]);
 
   useEffect(() => {
@@ -52,7 +57,7 @@ export function History({ vehicleFilter }: HistoryProps) {
   }, [history]);
 
   const filtered = vehicleId ? history.filter((h) => h.vehicle_id === vehicleId) : history;
-  const filteredVehicleLabel = vehicleId ? vehicleOptions.find((v) => v.value === vehicleId)?.label : null;
+  const filteredVehicleLabel = vehicleId ? (pickedLabel ?? vehicleOptions.find((v) => v.value === vehicleId)?.label) : null;
 
   if (loading) {
     return (
@@ -81,20 +86,15 @@ export function History({ vehicleFilter }: HistoryProps) {
       />
 
       <Card className="p-4 mb-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={vehicleId}
-            onChange={setVehicleId}
-            placeholder={t("historyPage.allVehicles")}
-            options={vehicleOptions}
-            className="w-auto min-w-[220px]"
-          />
-          {vehicleId && (
-            <button onClick={() => setVehicleId("")} className="btn-ghost btn-sm">
-              <X size={14} /> {t("historyPage.clearFilter")}
-            </button>
-          )}
-        </div>
+        <VehicleSearchField
+          value={vehicleId}
+          onChange={(id, v) => {
+            setVehicleId(id);
+            setPickedLabel(v ? vehicleLabel(v) : null);
+          }}
+          placeholder={t("historyPage.allVehicles")}
+          className="max-w-sm"
+        />
       </Card>
 
       {filteredVehicleLabel && (

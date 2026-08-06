@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
@@ -9,6 +9,8 @@ import { PAYMENT_METHODS } from "@/lib/constants";
 import { FileUploadGrid } from "@/components/FileUploadGrid";
 import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
 import { isImageName, type UploadedFile } from "@/lib/uploadedFile";
+import { fetchCompliancePolicies } from "@/lib/queries";
+import { recordSettlementPayment } from "@/lib/settlement";
 import type { Partner, ProfitDistribution, ProfitSettlementPayment, Vehicle } from "@/lib/types";
 
 interface SettlementModalProps {
@@ -29,10 +31,39 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
   const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [paymentLightbox, setPaymentLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
+  const [proofRequired, setProofRequired] = useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
 
   const trStatus = (value: string) => t("status." + value, { defaultValue: value });
+
+  // Waterfall: principal is always paid back before profit. amount_paid is cumulative
+  // across every past payment on this distribution and doesn't record how each one split
+  // between the two, so this recomputes it from principal_return alone — equivalent to
+  // assuming every past payment already followed the same principal-first rule, which is
+  // exactly the rule being introduced here.
+  const principalPaidSoFar = Math.min(distribution.amount_paid, distribution.principal_return);
+  const principalRemaining = distribution.principal_return - principalPaidSoFar;
+  const profitRemaining = distribution.balance_payable - principalRemaining;
+  const payAmount = Number(amount) || 0;
+  const principalPortion = Math.min(payAmount, principalRemaining);
+  const profitPortion = payAmount - principalPortion;
+
+  useEffect(() => {
+    if (!open) return;
+    fetchCompliancePolicies()
+      .then((policies) => {
+        // Only a hard-block ("auto_only") policy actually stops the dealer here — a manual
+        // one still flags a missing-evidence violation (visible on the vehicle/at sale time)
+        // without blocking this specific action, same as expense/investment evidence do.
+        setProofRequired(
+          policies.some((p) =>
+            p.is_active && p.rule_type === "evidence_required" && p.params.entity === "settlement" && p.resolution_mode === "auto_only",
+          ),
+        );
+      })
+      .catch(() => setProofRequired(false));
+  }, [open]);
 
   const reset = () => {
     setAmount(String(distribution.balance_payable));
@@ -48,52 +79,39 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
     onClose();
   };
 
-  const isValid = Boolean(amount && Number(amount) > 0 && Number(amount) <= distribution.balance_payable);
+  const isValid = Boolean(
+    amount && Number(amount) > 0 && Number(amount) <= distribution.balance_payable
+      && (!proofRequired || proofFiles.length > 0),
+  );
 
   const handleSubmit = async () => {
-    if (!isValid) {
+    if (!amount || Number(amount) <= 0 || Number(amount) > distribution.balance_payable) {
       toast(t("financeModals.settlementAmountInvalid"), "error");
       return;
     }
+    if (proofRequired && proofFiles.length === 0) {
+      toast(t("financeModals.settlementProofRequired"), "error");
+      return;
+    }
     setSubmitting(true);
-    const payAmount = Number(amount);
-    let paymentId: string | null = null;
-    const rollback = async () => {
-      try {
-        if (paymentId) await supabase.from("profit_settlement_payments").delete().eq("id", paymentId);
-      } catch {
-        // best-effort cleanup; the original error is what gets surfaced to the user
-      }
-    };
     try {
-      const proofUrls = proofFiles.map((f) => f.path);
-      const { data: paymentRec, error: payErr } = await supabase.from("profit_settlement_payments").insert({
-        distribution_id: distribution.id,
-        amount: payAmount,
-        payment_method: paymentMethod,
-        reference: reference.trim() || null,
-        notes: notes.trim() || null,
-        proof_url: proofUrls[0] ?? null,
-        proof_urls: proofUrls,
-        paid_at: new Date(paidAt).toISOString(),
-      }).select().single();
-      if (payErr) throw payErr;
-      paymentId = paymentRec.id;
-
-      const newAmountPaid = distribution.amount_paid + payAmount;
-      const newBalance = Math.max(0, distribution.total_entitlement - newAmountPaid);
-      const { error: updErr } = await supabase.from("profit_distributions").update({
-        amount_paid: newAmountPaid,
-        balance_payable: newBalance,
-        status: newBalance <= 0 ? "Paid" : "Partially paid",
-      }).eq("id", distribution.id);
-      if (updErr) throw updErr;
-
-      toast(newBalance <= 0 ? t("financeModals.settlementCompleted") : t("financeModals.partialSettlementRecorded"), "success");
+      const result = await recordSettlementPayment(
+        distribution,
+        distribution.vehicle?.stock_number ?? "",
+        {
+          amount: payAmount,
+          paidAt,
+          paymentMethod,
+          reference: reference.trim() || null,
+          notes: notes.trim() || null,
+          proofUrls: proofFiles.map((f) => f.path),
+        },
+        () => toast(t("financeModals.investmentReturnUpdateFailed"), "error"),
+      );
+      toast(result.fullyPaid ? t("financeModals.settlementCompleted") : t("financeModals.partialSettlementRecorded"), "success");
       onSaved();
       handleClose();
     } catch (e) {
-      await rollback();
       toast(e instanceof Error ? e.message : t("financeModals.settlementFailed"), "error");
     } finally {
       setSubmitting(false);
@@ -117,6 +135,23 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
       }
     >
       <div className="space-y-4">
+        {distribution.principal_return > 0 && (
+          <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-slate-50 text-sm">
+            <div>
+              <p className="text-xs text-slate-500">{t("financeModals.principalRemaining")}</p>
+              <p className="font-semibold text-slate-800">{formatINR(principalRemaining)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">{t("financeModals.profitRemaining")}</p>
+              <p className="font-semibold text-slate-800">{formatINR(profitRemaining)}</p>
+            </div>
+            {payAmount > 0 && (
+              <p className="col-span-2 pt-2 border-t border-slate-200 text-xs text-slate-500">
+                {t("financeModals.paymentSplitPreview", { principal: formatINR(principalPortion), profit: formatINR(profitPortion) })}
+              </p>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("financeModals.amountToPay")} required hint={t("financeModals.balancePayable", { amount: formatINR(distribution.balance_payable) })}>
             <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -140,6 +175,7 @@ export function SettlementModal({ distribution, open, onClose, onSaved }: Settle
           value={proofFiles}
           onChange={setProofFiles}
           label={t("financeModals.paymentProof")}
+          required={proofRequired}
           hint={t("financeModals.proofHint")}
         />
 

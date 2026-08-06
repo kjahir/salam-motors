@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import type { MobileNavigate } from "./MobileApp";
 
 // Full-screen "View Vehicle" entry point: pick a vehicle from the dropdown, which then
@@ -31,7 +31,7 @@ export function MobileViewVehicle({ vehicleId: initialVehicleId, onNavigate, onB
     <div>
       <TopBar title={t("mobileViewVehicle.title")} onBack={onBack} />
       <div className="p-4 space-y-4">
-        <VehicleSelectField value={vehicleId} onChange={handleSelect} />
+        <MobileVehicleSearch value={vehicleId} onChange={handleSelect} label={t("mobileAdd.selectVehicle")} />
       </div>
     </div>
   );

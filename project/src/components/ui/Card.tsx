@@ -26,9 +26,13 @@ interface StatCardProps {
   trend?: ReactNode;
   color?: "brand" | "emerald" | "amber" | "red" | "slate" | "orange";
   onClick?: () => void;
+  /** Denser padding/type for tile grids that double as click-to-filter controls. */
+  compact?: boolean;
+  /** Highlights the tile as the current filter selection. Only meaningful with onClick. */
+  active?: boolean;
 }
 
-export function StatCard({ label, value, icon, hint, trend, color = "slate", onClick }: StatCardProps) {
+export function StatCard({ label, value, icon, hint, trend, color = "slate", onClick, compact, active }: StatCardProps) {
   const iconColors = {
     brand: "bg-brand-50 text-brand-600",
     emerald: "bg-emerald-50 text-emerald-600",
@@ -38,16 +42,20 @@ export function StatCard({ label, value, icon, hint, trend, color = "slate", onC
     orange: "bg-orange-50 text-orange-600",
   };
   return (
-    <Card hover={!!onClick} onClick={onClick} className="p-5">
+    <Card
+      hover={!!onClick}
+      onClick={onClick}
+      className={`${compact ? "p-3" : "p-5"} ${active ? "border-brand-400 ring-1 ring-brand-400" : ""}`}
+    >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="stat-label">{label}</p>
-          <p className="stat-value mt-1.5 truncate">{value}</p>
+          <p className={compact ? "text-xs font-medium text-slate-500 truncate" : "stat-label"}>{label}</p>
+          <p className={compact ? "text-lg font-bold text-slate-900 mt-1 truncate" : "stat-value mt-1.5 truncate"}>{value}</p>
           {hint && <p className="text-xs text-slate-500 mt-1">{hint}</p>}
           {trend && <div className="mt-2">{trend}</div>}
         </div>
         {icon && (
-          <div className={`ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconColors[color]}`}>
+          <div className={`${compact ? "h-8 w-8 ml-2" : "h-10 w-10 ml-3"} flex shrink-0 items-center justify-center rounded-lg ${iconColors[color]}`}>
             {icon}
           </div>
         )}

@@ -10,6 +10,7 @@ import { useProofLightbox } from "@/hooks/useProofLightbox";
 import { formatINR, formatDate, formatPercent } from "@/lib/format";
 import { downloadCSV, isApproved } from "@/lib/calc";
 import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import {
   fetchInvestments,
   fetchAllExpenses,
@@ -117,7 +118,7 @@ export function Finance({ onNavigate }: FinanceProps) {
 
   const totals = useMemo(() => {
     const totalInvested = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
     const totalExpenses = expenses.filter(isApproved).reduce((s, e) => s + e.amount, 0);
     const pendingExpenses = expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft");

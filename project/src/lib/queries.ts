@@ -213,7 +213,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
       .eq("vehicle_id", vehicleId),
     supabase
       .from("profit_distributions")
-      .select("*, partner:partners(*)")
+      .select("*, partner:partners(*), payments:profit_settlement_payments(*)")
       .eq("vehicle_id", vehicleId),
     supabase
       .from("vehicle_status_history")
@@ -295,7 +295,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
     documents: documentsRes.data as VehicleDocument[],
     sale: sale ? { ...sale, buyer, payments: salePayments } : null,
     profit_share_allocations: allocationsRes.data as (ProfitShareAllocation & { partner: Partner | null })[],
-    profit_distributions: distributionsRes.data as (ProfitDistribution & { partner: Partner | null })[],
+    profit_distributions: distributionsRes.data as (ProfitDistribution & { partner: Partner | null; payments: ProfitSettlementPayment[] })[],
     status_history: statusHistoryRes.data as VehicleStatusHistory[],
     alerts: alertsRes.data as Alert[],
     listing: listingRes.data as Listing | null,

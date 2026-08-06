@@ -25,6 +25,7 @@ import { Badge, StatusBadge, VerificationBadge, ComplianceBadge } from "@/compon
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { InlineEditableField } from "@/components/ui/InlineEditableField";
 import { SaleSigningPanel } from "@/components/SaleSigningPanel";
+import { SettlementModal } from "@/components/SettlementModal";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { useEntitlements } from "@/lib/useEntitlements";
@@ -1697,6 +1698,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
 }) {
   const { t } = useTranslation();
   const [showBuyers, setShowBuyers] = useState(false);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     buyer_party_id: "",
     sale_price: "",
@@ -1773,22 +1775,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
     }
   };
 
-  const handleSettle = async (distId: string) => {
-    try {
-      const dist = distributions.find((d) => d.id === distId);
-      if (!dist) return;
-      const { error } = await supabase.from("profit_distributions").update({
-        amount_paid: dist.total_entitlement,
-        balance_payable: 0,
-        status: "Paid",
-      }).eq("id", distId);
-      if (error) throw error;
-      toast("Settlement marked as paid", "success");
-      onChanged();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to settle", "error");
-    }
-  };
+  const settlingDistribution = settlingId ? distributions.find((d) => d.id === settlingId) : undefined;
 
   if (sale) {
     return (
@@ -1832,7 +1819,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
                       <td className="py-2.5 text-right">{formatINR(d.amount_paid)}</td>
                       <td className="py-2.5"><Badge color={d.status === "Paid" ? "emerald" : d.status === "Calculated" ? "amber" : "slate"}>{d.status}</Badge></td>
                       <td className="py-2.5 text-right">
-                        {d.status !== "Paid" && <button onClick={() => handleSettle(d.id)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">Mark Paid</button>}
+                        {d.status !== "Paid" && <button onClick={() => setSettlingId(d.id)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">Settle</button>}
                       </td>
                     </tr>
                   ))}
@@ -1843,6 +1830,15 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
             <EmptyState title="No profit distributions calculated" />
           )}
         </Card>
+
+        {settlingDistribution && (
+          <SettlementModal
+            distribution={{ ...settlingDistribution, partner: settlingDistribution.partner ?? null, vehicle, payments: settlingDistribution.payments ?? [] }}
+            open={settlingId !== null}
+            onClose={() => setSettlingId(null)}
+            onSaved={onChanged}
+          />
+        )}
       </div>
     );
   }
@@ -1852,30 +1848,30 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
   return (
     <div className="space-y-5">
       <Card className="p-5">
-        <h3 className="font-semibold text-slate-900 mb-4">Cost Sheet</h3>
+        <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.costSheetTitle")}</h3>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Spec label={t("vehicleDetail.purchaseCost")} value={formatINR(cost.purchaseCost)} />
           <Spec label={t("vehicleDetail.refurbishment")} value={formatINR(cost.refurbishmentCost)} />
           <Spec label={t("vehicleDetail.holdingCost")} value={formatINR(cost.holdingCost)} />
           <Spec label={t("vehicleDetail.logisticsCost")} value={formatINR(cost.logisticsCost)} />
           <Spec label={t("vehicleDetail.docsSelling")} value={formatINR(cost.documentationSellingCost)} />
-          <Spec label="Other" value={formatINR(cost.otherCost)} />
+          <Spec label={t("vehicleDetail.otherCost")} value={formatINR(cost.otherCost)} />
         </div>
         <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-          <span className="font-semibold">Total Vehicle Cost</span>
+          <span className="font-semibold">{t("vehicleDetail.totalVehicleCost")}</span>
           <span className="text-lg font-bold">{formatINR(cost.totalVehicleCost)}</span>
         </div>
       </Card>
 
       <Card className="p-5">
-        <h3 className="font-semibold text-slate-900 mb-4">Sale Projection</h3>
+        <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.saleProjectionTitle")}</h3>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <Spec label="Asking Price" value={formatINR(vehicle.asking_price)} />
-          <Spec label="Minimum Price" value={formatINR(vehicle.minimum_price)} />
+          <Spec label={t("vehicleDetail.askingPrice")} value={formatINR(vehicle.asking_price)} />
+          <Spec label={t("vehicleDetail.minimumPrice")} value={formatINR(vehicle.minimum_price)} />
           <div>
-            <p className="text-xs text-slate-500">Estimated Profit Range</p>
+            <p className="text-xs text-slate-500">{t("vehicleDetail.estimatedProfitRange")}</p>
             <p className="text-sm font-bold mt-0.5 text-emerald-600">{formatINRRange(estRange.low, estRange.high)}</p>
-            <p className="text-xs text-slate-400 mt-1">{marginLow}%–{marginHigh}% of total cost</p>
+            <p className="text-xs text-slate-400 mt-1">{marginLow}%–{marginHigh}% {t("vehicleDetail.ofTotalCost")}</p>
           </div>
         </div>
       </Card>

@@ -556,7 +556,7 @@ export interface VehicleWithRelations extends Vehicle {
   investments?: (Investment & { partner?: Partner | null })[];
   purchase?: (Purchase & { seller?: Party | null; payments?: PurchasePayment[] }) | null;
   sale?: (Sale & { buyer?: Party | null; payments?: SalePayment[] }) | null;
-  profit_distributions?: (ProfitDistribution & { partner?: Partner | null })[];
+  profit_distributions?: (ProfitDistribution & { partner?: Partner | null; payments?: ProfitSettlementPayment[] })[];
   profit_share_allocations?: (ProfitShareAllocation & { partner?: Partner | null })[];
   status_history?: VehicleStatusHistory[];
   alerts?: Alert[];

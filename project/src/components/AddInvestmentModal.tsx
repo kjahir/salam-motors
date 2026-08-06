@@ -13,7 +13,11 @@ import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { Partner, Vehicle } from "@/lib/types";
 
 interface AddInvestmentModalProps {
-  partner: Partner;
+  /** A fixed partner (opened from that partner's own card) hides the picker entirely. Pass
+   *  null when opened from a general context (the Investment table) so the dealer picks one. */
+  partner: Partner | null;
+  /** Only needed when `partner` is null, to populate the picker. */
+  partners?: Partner[];
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -21,10 +25,11 @@ interface AddInvestmentModalProps {
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInvestmentModalProps) {
+export function AddInvestmentModal({ partner, partners = [], open, onClose, onSaved }: AddInvestmentModalProps) {
   const { t } = useTranslation();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState("");
+  const [partnerId, setPartnerId] = useState(partner?.id ?? "");
   const [amount, setAmount] = useState("");
   const [investmentDate, setInvestmentDate] = useState(todayISO());
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
@@ -43,8 +48,13 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     fetchVehicles().then(setVehicles).catch(() => { /* ignore */ });
   }, [open]);
 
+  useEffect(() => {
+    if (open) setPartnerId(partner?.id ?? "");
+  }, [open, partner]);
+
   const reset = () => {
     setVehicleId("");
+    setPartnerId(partner?.id ?? "");
     setAmount("");
     setInvestmentDate(todayISO());
     setPaymentMethod("Bank transfer");
@@ -60,9 +70,14 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     onClose();
   };
 
-  const isValid = Boolean(amount && Number(amount) > 0 && investmentDate);
+  const isValid = Boolean(partnerId && amount && Number(amount) > 0 && investmentDate);
+  const selectedPartnerName = partner?.name ?? partners.find((p) => p.id === partnerId)?.name;
 
   const handleSubmit = async () => {
+    if (!partnerId) {
+      toast(t("financeModals.selectPartnerRequired"), "error");
+      return;
+    }
     if (!isValid) {
       toast(t("financeModals.validAmountDate"), "error");
       return;
@@ -71,7 +86,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     try {
       const proofUrls = proofFiles.map((f) => f.path);
       const { error } = await supabase.from("investments").insert({
-        partner_id: partner.id,
+        partner_id: partnerId,
         vehicle_id: vehicleId || null,
         amount: Number(amount),
         investment_date: new Date(investmentDate).toISOString(),
@@ -99,7 +114,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
     <Modal
       open={open}
       onClose={handleClose}
-      title={t("financeModals.addInvestmentTitle", { partner: partner.name })}
+      title={t("financeModals.addInvestmentTitle", { partner: selectedPartnerName ?? t("financeModals.partner") })}
       size="lg"
       footer={
         <>
@@ -111,6 +126,16 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
       }
     >
       <div className="space-y-4">
+        {!partner && (
+          <Field label={t("financeModals.partner")} required>
+            <Select
+              value={partnerId}
+              onChange={setPartnerId}
+              placeholder={t("financeModals.selectPartnerPlaceholder")}
+              options={partners.map((p) => ({ value: p.id, label: p.name }))}
+            />
+          </Field>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("financeModals.amount")} required>
             <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="" />
@@ -144,7 +169,7 @@ export function AddInvestmentModal({ partner, open, onClose, onSaved }: AddInves
         </Field>
         <FileUploadGrid
           bucket="finance-proofs"
-          pathPrefix={`investments/${partner.id}`}
+          pathPrefix={`investments/${partnerId || "unassigned"}`}
           value={proofFiles}
           onChange={setProofFiles}
           label={t("financeModals.paymentProof")}

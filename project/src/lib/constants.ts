@@ -172,6 +172,13 @@ export const INVESTMENT_STATUSES = [
   "Cancelled",
 ];
 
+// Statuses counted toward "total invested" everywhere it's displayed. Includes "Returned"
+// deliberately: a capital return is recorded as a *new* negative-amount row rather than
+// mutating the original investment (see SettlementModal.tsx), so the original stays an
+// untouched historical record and the negative row is what nets the running total back
+// down — which only works if both rows are summed under the same filter.
+export const INVESTMENT_TOTAL_STATUSES = ["Received", "Partially used", "Fully used", "Returned"];
+
 export const ENQUIRY_STATUSES = [
   "New",
   "Contacted",
@@ -261,12 +268,13 @@ export const COMPLIANCE_RULE_TYPE_LABELS: Record<string, string> = {
   amount_reconciliation: "Amount reconciliation",
 };
 
-export const COMPLIANCE_EVIDENCE_ENTITIES = ["purchase_payment", "expense", "investment"] as const;
+export const COMPLIANCE_EVIDENCE_ENTITIES = ["purchase_payment", "expense", "investment","settlement"] as const;
 
 export const COMPLIANCE_EVIDENCE_ENTITY_LABELS: Record<string, string> = {
   purchase_payment: "Purchase payment",
   expense: "Expense",
   investment: "Investment",
+  settlement: "Settlement",
 };
 
 export const COMPLIANCE_RESOLUTION_MODES = ["manual", "auto_only"] as const;
@@ -299,5 +307,6 @@ export const DEFAULT_COMPLIANCE_POLICIES: DefaultCompliancePolicy[] = [
   { name: "Purchase payments need proof", description: "Every purchase payment must have a supporting screenshot or receipt.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "purchase_payment" }, severity: "High", resolution_mode: "manual" },
   { name: "Expenses need bills", description: "Every submitted or approved expense must have a bill or receipt attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "expense" }, severity: "Warning", resolution_mode: "manual" },
   { name: "Vehicle investments need proof", description: "Every investment tied to a specific vehicle must have supporting proof attached.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "investment" }, severity: "Warning", resolution_mode: "manual" },
+  { name: "Settlement payments need proof", description: "Every partner profit-settlement payment must have a supporting screenshot or receipt.", category: "financial_evidence", rule_type: "evidence_required", params: { entity: "settlement" }, severity: "Warning", resolution_mode: "manual" },
   { name: "Purchase payments must match price", description: "Total purchase payments must reconcile exactly to the agreed price plus broker commission and other fees.", category: "financial_reconciliation", rule_type: "amount_reconciliation", params: { target: "purchase_payments_vs_purchase_price", tolerance: 0.01 }, severity: "Critical", resolution_mode: "auto_only" },
 ];

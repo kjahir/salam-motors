@@ -13,6 +13,8 @@ interface FileUploadGridProps {
   value: UploadedFile[];
   onChange: (value: UploadedFile[]) => void;
   label?: string;
+  /** Shows the same red-asterisk marker as Field's `required` prop. */
+  required?: boolean;
   hint?: string;
   maxSizeMB?: number;
   fileAccept?: string;
@@ -62,7 +64,7 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
   );
 }
 
-export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label, hint, maxSizeMB = 10, fileAccept = "image/*,.pdf,.doc,.docx" }: FileUploadGridProps) {
+export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label, required, hint, maxSizeMB = 10, fileAccept = "image/*,.pdf,.doc,.docx" }: FileUploadGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { t } = useTranslation();
   const { uploading, cameraRef, libraryRef, fileRef, openCamera, openLibrary, openFile, handleCameraChange, handleLibraryChange, handleFileChange, removeAt } =
@@ -81,7 +83,10 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, label, hin
 
   return (
     <div>
-      <label className="label">{label ?? t("uploads.files")}</label>
+      <label className="label">
+        {label ?? t("uploads.files")}
+        {required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
       {hint && <p className="text-xs text-slate-500 -mt-1 mb-2">{hint}</p>}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple onChange={handleCameraChange} className="hidden" />
       <input ref={libraryRef} type="file" accept="image/*" multiple onChange={handleLibraryChange} className="hidden" />

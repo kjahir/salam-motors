@@ -52,6 +52,11 @@ function hasMissingEvidence(vehicle: VehicleWithRelations, policy: CompliancePol
   if (entity === "investment") {
     return (vehicle.investments ?? []).some((i) => !i.proof_urls || i.proof_urls.length === 0);
   }
+  if (entity === "settlement") {
+    return (vehicle.profit_distributions ?? []).some((d) =>
+      (d.payments ?? []).some((p) => !p.proof_urls || p.proof_urls.length === 0),
+    );
+  }
   return false;
 }
 
@@ -123,6 +128,7 @@ export function resolveAlertDestination(policy: CompliancePolicy | undefined): A
   if (policy.rule_type === "document_required") return { tab: "documents" };
   if (policy.rule_type === "evidence_required" && policy.params.entity === "expense") return { tab: "expenses" };
   if (policy.rule_type === "evidence_required" && policy.params.entity === "purchase_payment") return { tab: "overview", openEditVehicle: true };
+  if (policy.rule_type === "evidence_required" && policy.params.entity === "settlement") return { tab: "sale" };
   if (policy.rule_type === "amount_reconciliation") return { tab: "overview", openEditVehicle: true };
   return { tab: "overview" };
 }

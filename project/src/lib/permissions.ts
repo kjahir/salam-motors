@@ -18,7 +18,6 @@ export const PAGE_ACCESS: Partial<Record<PageKey, Role[]>> = {
   "quick-add-expense": ["owner", "manager", "sales_executive"],
   "quick-add-document": ["owner", "manager", "sales_executive"],
   "quick-add-inspection": ["owner", "manager", "sales_executive"],
-  "quick-add-sale": ["owner", "manager", "sales_executive"],
   partners: ["owner", "manager", "accountant"],
   finance: ["owner", "manager", "accountant"],
   team: ["owner", "manager"],

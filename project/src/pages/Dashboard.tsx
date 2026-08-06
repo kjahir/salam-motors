@@ -15,12 +15,14 @@ import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Modal } from "@/components/ui/Modal";
+import { VehicleSearchField } from "@/components/VehicleSearchField";
 import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
 import { vehicleRef } from "@/lib/vehicleLabel";
 import { computeEstimatedProfitRange } from "@/lib/calc";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import {
   fetchVehicles,
   fetchFinancialSummaries,
@@ -60,6 +62,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [editingMargin, setEditingMargin] = useState(false);
   /** Which headline tile's detail popup is open. */
   const [panel, setPanel] = useState<"stock" | "month" | "finance" | null>(null);
+  /** "Sell Vehicle" has no vehicle in context yet — this picks one, then hands off to the
+   *  vehicle's own Sale tab (the one canonical Record Sale design, also reached from
+   *  ManageVehicles and the vehicle page itself). */
+  const [sellPickerOpen, setSellPickerOpen] = useState(false);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +127,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     });
 
     const totalInvestment = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
     const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const totalAsking = inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0);
@@ -226,7 +232,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         actions={
           <>
             <LanguageSwitcher preferredLanguages={settings?.preferred_languages ?? null} />
-            <button onClick={() => onNavigate("quick-add-sale")} className="btn-sell">
+            <button onClick={() => setSellPickerOpen(true)} className="btn-sell">
               <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
             </button>
             <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
@@ -452,6 +458,17 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           }}
         />
       )}
+
+      <Modal open={sellPickerOpen} onClose={() => setSellPickerOpen(false)} title={t("dashboard.sellVehicle")}>
+        <VehicleSearchField
+          value=""
+          onChange={(vehicleId) => {
+            if (!vehicleId) return;
+            setSellPickerOpen(false);
+            onNavigate("vehicle", { vehicleId, tab: "sale" });
+          }}
+        />
+      </Modal>
     </div>
   );
 }

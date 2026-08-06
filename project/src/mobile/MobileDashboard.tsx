@@ -1,26 +1,32 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  BarChart3, Bell, ClipboardCheck, FileText, HandCoins,
+  BarChart3, Bell, Bike, ClipboardCheck, FileText, HandCoins,
   History, LogOut, Minus, Pencil, Plus, PlusCircle,
   Receipt, ScrollText, ShieldCheck, UserCircle, UserCog,
   Users, Wallet, Warehouse,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Spinner, Card, Sheet } from "./ui/primitives";
-import { formatINR } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchInvestments, fetchProfitDistributions } from "@/lib/queries";
+import { Spinner, Card, Sheet, MoreButton } from "./ui/primitives";
+import { formatINR, formatINRRange } from "@/lib/format";
+import { computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicles, fetchFinancialSummaries, fetchInvestments, fetchProfitDistributions, fetchAppSettings } from "@/lib/queries";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import { useAuth } from "@/lib/useAuth";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import type { Vehicle, VehicleFinancialSummary, Investment, ProfitDistribution, Partner } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Investment, ProfitDistribution, Partner, AppSettings } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
 
-export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) {
+export function MobileDashboard({ onNavigate, selectedVehicleId }: {
+  onNavigate: MobileNavigate;
+  selectedVehicleId?: string | null;
+}) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<"overview" | null>(null);
   const { signOut } = useAuth();
@@ -30,23 +36,34 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
     let cancelled = false;
     (async () => {
       try {
-        const [v, s, inv, dist] = await Promise.all([
+        const [v, s, inv, dist, st] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchInvestments(),
           fetchProfitDistributions(),
+          fetchAppSettings(),
         ]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
         setInvestments(inv);
         setDistributions(dist);
+        setSettings(st);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const selectedVehicle = useMemo(
+    () => (selectedVehicleId ? vehicles.find((v) => v.id === selectedVehicleId) ?? null : null),
+    [vehicles, selectedVehicleId],
+  );
+  const selectedSummary = useMemo(
+    () => (selectedVehicleId ? summaries.find((s) => s.vehicle_id === selectedVehicleId) ?? null : null),
+    [summaries, selectedVehicleId],
+  );
 
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
@@ -60,7 +77,7 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
       0,
     );
     const totalInvested = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
     const paidToPartners = distributions.reduce((s, d) => s + d.amount_paid, 0);
     const now = new Date();
@@ -111,27 +128,38 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         </div>
       </div>
 
-      {/* Tappable summary tile — opens combined This Month + Financial Overview sheet */}
+      {/* Tappable summary tile — vehicle-specific once Bottom Bar V2 has a vehicle selected,
+          otherwise opens the combined This Month + Financial Overview sheet */}
       <div className="px-4 -mt-4">
-        <Card className="p-5 active:opacity-80 cursor-pointer" onClick={() => setPanel("overview")}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-[13px] font-medium text-mobile-text-secondary">{t("mobileDashboard.totalAmountInvested")}</p>
-                <p className="text-[13px] font-semibold text-mobile-text shrink-0">{formatINR(stats.totalInvested)}</p>
+        {selectedVehicle ? (
+          <SelectedVehicleCard
+            vehicle={selectedVehicle}
+            summary={selectedSummary}
+            marginLow={settings?.estimated_profit_margin_low_pct ?? 10}
+            marginHigh={settings?.estimated_profit_margin_high_pct ?? 30}
+            onClick={() => onNavigate("vehicle", { vehicleId: selectedVehicle.id })}
+          />
+        ) : (
+          <Card className="p-5 active:opacity-80 cursor-pointer" onClick={() => setPanel("overview")}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[13px] font-medium text-mobile-text-secondary">{t("mobileDashboard.totalAmountInvested")}</p>
+                  <p className="text-[13px] font-semibold text-mobile-text shrink-0">{formatINR(stats.totalInvested)}</p>
+                </div>
+                <p className={`flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 ${remainingPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+                  {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
+                  {formatINR(Math.abs(remaining))}
+                </p>
+                <div className="flex items-baseline justify-between gap-2 mt-1">
+                  <p className="text-xs text-mobile-text-muted">{t("financePage.totalPurchaseExpenses")}</p>
+                  <p className="text-xs font-semibold text-mobile-text-secondary shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
+                </div>
               </div>
-              <p className={`flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 ${remainingPositive ? "text-mobile-success" : "text-mobile-error"}`}>
-                {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
-                {formatINR(Math.abs(remaining))}
-              </p>
-              <div className="flex items-baseline justify-between gap-2 mt-1">
-                <p className="text-xs text-mobile-text-muted">{t("financePage.totalPurchaseExpenses")}</p>
-                <p className="text-xs font-semibold text-mobile-text-secondary shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
-              </div>
+              <Wallet size={18} className="text-mobile-text-muted mt-1 shrink-0" />
             </div>
-            <Wallet size={18} className="text-mobile-text-muted mt-1 shrink-0" />
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
       {/* Quick Actions ── Vehicle */}
@@ -141,10 +169,10 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         </p>
         <div className="grid grid-cols-3 gap-3">
           <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
-          <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale")} />
-          <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense")} />
-          <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document")} />
-          <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection")} />
+          <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+          <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+          <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+          <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
           <QuickAction icon={<Pencil size={22} />} tone="warning-soft" label={t("mobileDashboard.manageVehicle")} onClick={() => onNavigate("manage-vehicles")} />
         </div>
       </div>
@@ -161,18 +189,18 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
         </div>
       </div>
 
-      {/* Quick Actions ── More */}
+      {/* Quick Actions ── More: smaller icon-only buttons in 4-column grid, no background */}
       <div className="px-4 pt-4 pb-8">
         <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
           {t("mobileDashboard.sectionMore")}
         </p>
-        <div className="grid grid-cols-3 gap-3">
-          <QuickAction icon={<UserCircle size={22} />} tone="purple" label={t("nav.parties")} onClick={() => onNavigate("parties")} />
-          <QuickAction icon={<Users size={22} />} tone="purple-80" label={t("nav.partners")} onClick={() => onNavigate("partners")} />
-          <QuickAction icon={<UserCog size={22} />} tone="purple-60" label={t("nav.team")} onClick={() => onNavigate("team")} />
-          <QuickAction icon={<ShieldCheck size={22} />} tone="purple-40" label={t("nav.policies")} onClick={() => onNavigate("policies")} />
-          <QuickAction icon={<History size={22} />} tone="purple-25" label={t("nav.history")} onClick={() => onNavigate("history")} />
-          <QuickAction icon={<ScrollText size={22} />} tone="purple-15" label={t("nav.audit")} onClick={() => onNavigate("audit")} />
+        <div className="grid grid-cols-4 gap-2">
+          <MoreButton icon={<UserCircle size={22} />} color="text-mobile-primary" label={t("nav.parties")} onClick={() => onNavigate("parties")} disabled={!!selectedVehicleId} />
+          <MoreButton icon={<Users size={22} />} color="text-mobile-success" label={t("nav.partners")} onClick={() => onNavigate("partners")} disabled={!!selectedVehicleId} />
+          <MoreButton icon={<UserCog size={22} />} color="text-mobile-navy" label={t("nav.team")} onClick={() => onNavigate("team")} disabled={!!selectedVehicleId} />
+          <MoreButton icon={<ShieldCheck size={22} />} color="text-mobile-warning" label={t("nav.policies")} onClick={() => onNavigate("policies")} />
+          <MoreButton icon={<History size={22} />} color="text-mobile-purple" label={t("nav.history")} onClick={() => onNavigate("history")} />
+          <MoreButton icon={<ScrollText size={22} />} color="text-mobile-text-secondary" label={t("nav.audit")} onClick={() => onNavigate("audit")} />
         </div>
       </div>
 
@@ -239,6 +267,59 @@ function QuickAction({ icon, label, tone, onClick }: {
       <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tones[tone]}`}>{icon}</span>
       <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
     </button>
+  );
+}
+
+/**
+ * Replaces the aggregate financial tile once Bottom Bar V2 has a vehicle selected — the
+ * dealer asked for the whole dashboard to "become specific to that vehicle" rather than
+ * just preselecting it inside each quick action.
+ */
+function SelectedVehicleCard({ vehicle, summary, marginLow, marginHigh, onClick }: {
+  vehicle: Vehicle;
+  summary: VehicleFinancialSummary | null;
+  marginLow: number;
+  marginHigh: number;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const isSold = SOLD_STATUSES.includes(vehicle.current_status);
+  const estRange = computeEstimatedProfitRange(summary?.total_vehicle_cost ?? 0, marginLow, marginHigh);
+  const profitPositive = (summary?.gross_profit ?? 0) >= 0;
+
+  return (
+    <Card className="p-5 active:opacity-80 cursor-pointer" onClick={onClick}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-mobile-text-secondary">{t("mobileDashboard.selectedVehicle")}</p>
+          <p className="font-poppins text-xl font-bold text-mobile-text mt-1 truncate">
+            {[vehicle.manufacturer, vehicle.model].filter(Boolean).join(" ") || vehicle.stock_number}
+          </p>
+          <p className="text-xs text-mobile-text-muted font-mono mt-0.5">
+            {vehicle.registration_number ?? vehicle.stock_number}
+          </p>
+          <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-mobile-border">
+            <div>
+              <p className="text-[10px] text-mobile-text-muted uppercase">{t("mobileInventory.totalCost")}</p>
+              <p className="text-sm font-medium text-mobile-text">{formatINR(summary?.total_vehicle_cost ?? 0)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-mobile-text-muted uppercase">{isSold ? t("mobileInventory.profit") : t("mobileInventory.estProfit")}</p>
+              {isSold ? (
+                <p className={`text-sm font-semibold ${profitPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+                  {formatINR(summary?.gross_profit)}
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-mobile-success whitespace-nowrap">
+                  {formatINRRange(estRange.low, estRange.high, { compact: true })}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        <Bike size={18} className="text-mobile-text-muted mt-1 shrink-0" />
+      </div>
+    </Card>
   );
 }
 

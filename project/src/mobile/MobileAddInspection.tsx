@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Card, Field, Button } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
 import { SCORE_WEIGHTS } from "@/lib/constants";
@@ -81,7 +81,7 @@ export function MobileAddInspection({ vehicleId: initialVehicleId, onNavigate, o
     <div>
       <TopBar title={t("mobileInspection.addTitle")} onBack={onBack} />
       <div className="p-4 space-y-4 pb-28">
-        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+        <MobileVehicleSearch value={vehicleId} onChange={(id) => setVehicleId(id)} label={t("mobileAdd.selectVehicle")} />
 
         {vehicleId && (
           <>

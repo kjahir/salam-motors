@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, FileText, Images, Paperclip, X } from "lucide-react";
+import { AlertTriangle, Camera, Check, FileText, Images, Paperclip, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TopBar, Spinner, Card, Field, Button } from "./ui/primitives";
-import { VehicleSelectField } from "./ui/VehicleSelectField";
+import { MobileVehicleSearch } from "./ui/MobileVehicleSearch";
 import { PartyPickerField } from "@/components/PartyPickerField";
 import { useToast } from "@/components/ui/useToast";
 import { useMultiFileUpload } from "@/hooks/useMultiFileUpload";
 import { useAuth } from "@/lib/useAuth";
 import type { UploadedFile } from "@/lib/uploadedFile";
-import { computeCostBreakdown, computePartnerFunding } from "@/lib/calc";
-import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies } from "@/lib/queries";
+import { computeCostBreakdown, computePartnerFunding, computeEstimatedProfitRange } from "@/lib/calc";
+import { formatINR, formatINRRange } from "@/lib/format";
+import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
 import { completeSale } from "@/lib/sale";
 import { evaluateVehicleCompliance, acknowledgeViolation, isHardBlocking } from "@/lib/compliance";
 import { PAYMENT_METHODS } from "@/lib/constants";
-import type { Partner, VehicleWithRelations, CompliancePolicy } from "@/lib/types";
+import type { Partner, VehicleWithRelations, CompliancePolicy, AppSettings } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 // Full-screen "Record Sale" page. This owns the compliance acknowledge-and-proceed logic
@@ -32,6 +33,7 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(Boolean(vehicleId));
   const [form, setForm] = useState({ buyer_party_id: "", sale_price: "", discount: "0", buyer_charges: "0", payment_method: "UPI", notes: "" });
   const [proofFiles, setProofFiles] = useState<UploadedFile[]>([]);
@@ -56,11 +58,12 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
     setLoading(true);
     setForm({ buyer_party_id: "", sale_price: "", discount: "0", buyer_charges: "0", payment_method: "UPI", notes: "" });
     setProofFiles([]);
-    Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies()]).then(([v, p, pol]) => {
+    Promise.all([fetchVehicleFull(vehicleId), fetchPartners(), fetchCompliancePolicies(), fetchAppSettings()]).then(([v, p, pol, st]) => {
       if (cancelled) return;
       setVehicle(v);
       setPartners(p);
       setPolicies(pol);
+      setSettings(st);
       setLoading(false);
     });
     return () => {
@@ -71,6 +74,12 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
   const cost = useMemo(() => computeCostBreakdown(vehicle?.purchase, vehicle?.expenses ?? []), [vehicle]);
   const funding = useMemo(() => computePartnerFunding(vehicle?.investments ?? []), [vehicle]);
   const complianceViolations = useMemo(() => (vehicle ? evaluateVehicleCompliance(vehicle, policies) : []), [vehicle, policies]);
+  const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+  const estRange = useMemo(
+    () => computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh),
+    [cost, marginLow, marginHigh],
+  );
 
   const isBelowCost = Number(form.sale_price) > 0 && (Number(form.sale_price) + Number(form.buyer_charges || 0) - Number(form.discount || 0)) < cost.totalVehicleCost;
   // Hard block: only auto_only violations stop the sale outright; manual-resolution
@@ -130,7 +139,7 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
     <div>
       <TopBar title={t("mobileVehicle.recordSale")} onBack={onBack} />
       <div className="p-4 space-y-4 pb-28">
-        <VehicleSelectField value={vehicleId} onChange={setVehicleId} />
+        <MobileVehicleSearch value={vehicleId} onChange={(id) => setVehicleId(id)} label={t("mobileAdd.selectVehicle")} />
 
         {vehicleId && (loading || !vehicle) && (
           <div className="flex items-center justify-center py-10"><Spinner size={28} /></div>
@@ -140,6 +149,39 @@ export function MobileAddSale({ vehicleId: initialVehicleId, onNavigate, onBack 
           <Card className="p-4">
             <h3 className="text-sm font-poppins font-semibold text-mobile-text">{t("mobileVehicle.saleCompleted")}</h3>
           </Card>
+        )}
+
+        {vehicleId && !loading && vehicle && !vehicle.sale && (
+          <>
+            <Card className="p-4">
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">{t("vehicleDetail.costSheetTitle")}</h3>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <MobileSpec label={t("vehicleDetail.purchaseCost")} value={formatINR(cost.purchaseCost)} />
+                <MobileSpec label={t("vehicleDetail.refurbishment")} value={formatINR(cost.refurbishmentCost)} />
+                <MobileSpec label={t("vehicleDetail.holdingCost")} value={formatINR(cost.holdingCost)} />
+                <MobileSpec label={t("vehicleDetail.logisticsCost")} value={formatINR(cost.logisticsCost)} />
+                <MobileSpec label={t("vehicleDetail.docsSelling")} value={formatINR(cost.documentationSellingCost)} />
+                <MobileSpec label={t("vehicleDetail.otherCost")} value={formatINR(cost.otherCost)} />
+              </div>
+              <div className="flex items-center justify-between pt-3 border-t border-mobile-border">
+                <span className="text-sm font-semibold text-mobile-text">{t("vehicleDetail.totalVehicleCost")}</span>
+                <span className="text-base font-poppins font-bold text-mobile-text">{formatINR(cost.totalVehicleCost)}</span>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <h3 className="text-sm font-poppins font-semibold text-mobile-text mb-3">{t("vehicleDetail.saleProjectionTitle")}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <MobileSpec label={t("vehicleDetail.askingPrice")} value={formatINR(vehicle.asking_price)} />
+                <MobileSpec label={t("vehicleDetail.minimumPrice")} value={formatINR(vehicle.minimum_price)} />
+              </div>
+              <div className="mt-3 pt-3 border-t border-mobile-border">
+                <p className="text-xs text-mobile-text-muted">{t("vehicleDetail.estimatedProfitRange")}</p>
+                <p className="text-base font-poppins font-bold text-mobile-success mt-0.5">{formatINRRange(estRange.low, estRange.high)}</p>
+                <p className="text-xs text-mobile-text-muted mt-1">{marginLow}%–{marginHigh}% {t("vehicleDetail.ofTotalCost")}</p>
+              </div>
+            </Card>
+          </>
         )}
 
         {vehicleId && !loading && vehicle && !vehicle.sale && hardBlockingViolations.length > 0 && (
@@ -227,7 +269,7 @@ function PaymentProofField({ vehicleId, value, onChange }: {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const { uploading, libraryRef, fileRef, openLibrary, openFile, handleLibraryChange, handleFileChange, removeAt } =
+  const { uploading, cameraRef, libraryRef, fileRef, openCamera, openLibrary, openFile, handleCameraChange, handleLibraryChange, handleFileChange, removeAt } =
     useMultiFileUpload({ bucket: "finance-proofs", pathPrefix: `sale-payments/${vehicleId}`, value, onChange });
 
   useEffect(() => {
@@ -250,6 +292,7 @@ function PaymentProofField({ vehicleId, value, onChange }: {
 
   return (
     <Field label={t("mobileVehicle.paymentProof")}>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple onChange={handleCameraChange} className="hidden" />
       <input ref={libraryRef} type="file" accept="image/*" multiple onChange={handleLibraryChange} className="hidden" />
       <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={handleFileChange} className="hidden" />
 
@@ -276,6 +319,9 @@ function PaymentProofField({ vehicleId, value, onChange }: {
 
         {menuOpen && (
           <div className="absolute left-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-mobile-border bg-white py-1 shadow-mobile-lg animate-fade-in">
+            <button type="button" onClick={() => pick(openCamera)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-mobile-text active:bg-mobile-bg">
+              <Camera size={16} className="text-mobile-text-secondary" /> {t("uploads.camera")}
+            </button>
             <button
               type="button"
               onClick={() => pick(openLibrary)}
@@ -312,5 +358,16 @@ function PaymentProofField({ vehicleId, value, onChange }: {
         </ul>
       )}
     </Field>
+  );
+}
+
+/** Label/value pair for the Cost Sheet and Sale Projection cards — mobile counterpart of
+ *  VehicleDetail.tsx's desktop `Spec` helper, same content, mobile tokens. */
+function MobileSpec({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <p className="text-xs text-mobile-text-muted">{label}</p>
+      <p className="text-sm font-medium text-mobile-text mt-0.5 break-words">{value || "—"}</p>
+    </div>
   );
 }

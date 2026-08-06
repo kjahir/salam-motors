@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, TrendingUp, ShoppingCart, Bike, ArrowUpDown, Wallet, Receipt, Users } from "lucide-react";
-import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs, Button } from "./ui/primitives";
-import { formatINR, formatDate, daysSince } from "@/lib/format";
+import { Search, TrendingUp, ShoppingCart, ArrowUpDown, Wallet, Receipt, Users } from "lucide-react";
+import { TopBar, Input, Card, EmptyState, SegmentedTabs, Button } from "./ui/primitives";
+import { formatINR, formatDate } from "@/lib/format";
 import {
   fetchAllPurchases,
   fetchAllSales,
-  fetchVehicles,
   fetchFinancialSummaries,
   fetchInvestments,
   fetchAllExpenses,
@@ -27,16 +26,20 @@ import type {
 } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
-type ReportTab = "investments" | "purchases" | "expenses" | "inventory" | "sales" | "settlements";
+type ReportTab = "investments" | "purchases" | "expenses" | "sales" | "settlements";
 type SortDir = "desc" | "asc";
 
 const PAGE_SIZE = 10;
 
-export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNavigate; onBack?: () => void }) {
-  const [tab, setTab] = useState<ReportTab>("inventory");
+export function MobileReports({ onNavigate, onBack, vehicleFilter }: {
+  onNavigate: MobileNavigate;
+  onBack?: () => void;
+  /** Bottom Bar V2's selected vehicle, if any — narrows every tab to just that vehicle's rows. */
+  vehicleFilter?: string | null;
+}) {
+  const [tab, setTab] = useState<ReportTab>("purchases");
   const [purchases, setPurchases] = useState<(Purchase & { vehicle: Vehicle | null; seller: Party | null })[]>([]);
   const [sales, setSales] = useState<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [investments, setInvestments] = useState<(Investment & { vehicle?: Vehicle | null; partner?: Partner | null })[]>([]);
   const [expenses, setExpenses] = useState<(Expense & { vehicle?: Vehicle | null; partner?: Partner | null })[]>([]);
@@ -52,10 +55,9 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
 
   useEffect(() => {
     (async () => {
-      const [p, s, v, sm, inv, exp, dist] = await Promise.all([
+      const [p, s, sm, inv, exp, dist] = await Promise.all([
         fetchAllPurchases(),
         fetchAllSales(),
-        fetchVehicles(),
         fetchFinancialSummaries(),
         fetchInvestments(),
         fetchAllExpenses(),
@@ -63,7 +65,6 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
       ]);
       setPurchases(p);
       setSales(s);
-      setVehicles(v);
       setSummaries(sm);
       setInvestments(inv);
       setExpenses(exp);
@@ -80,9 +81,11 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
 
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (v: Vehicle | null | undefined) =>
-      !q || [v?.stock_number, v?.registration_number, v?.manufacturer, v?.model].filter(Boolean).join(" ").toLowerCase().includes(q);
-  }, [search]);
+    return (v: Vehicle | null | undefined) => {
+      if (vehicleFilter && v?.id !== vehicleFilter) return false;
+      return !q || [v?.stock_number, v?.registration_number, v?.manufacturer, v?.model].filter(Boolean).join(" ").toLowerCase().includes(q);
+    };
+  }, [search, vehicleFilter]);
 
   const dirFactor = sortDir === "desc" ? -1 : 1;
 
@@ -112,13 +115,6 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
     () => distributions.filter((d) => matches(d.vehicle)),
     [distributions, matches],
   );
-  const inventoryRows = useMemo(
-    () =>
-      vehicles
-        .filter((v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status) && isWithinDateRange(v.onboarded_at, dateRange) && matches(v))
-        .sort((a, b) => dirFactor * (+new Date(a.onboarded_at) - +new Date(b.onboarded_at))),
-    [vehicles, dateRange, matches, dirFactor],
-  );
 
   if (loading) {
     return (
@@ -138,7 +134,6 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
         </div>
         <SegmentedTabs
           tabs={[
-            { key: "inventory", label: t("mobileReports.tabs.inventory") },
             { key: "investments", label: t("financePage.tabs.investments") },
             { key: "purchases", label: t("mobileReports.tabs.purchases") },
             { key: "expenses", label: t("financePage.tabs.expenses") },
@@ -177,7 +172,10 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
               limit={limit}
               onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
               render={(p) => (
-                <Card key={p.id} className="p-3.5">
+                // Purchase is 1:1 with the vehicle (a single purchase record onboards it),
+                // so there's nothing to highlight on arrival — the purchase section of
+                // Update Vehicle is just the one form for that vehicle.
+                <Card key={p.id} className="p-3.5" onClick={() => onNavigate("update-vehicle", { vehicleId: p.vehicle_id })}>
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-mobile-text truncate">{p.vehicle?.manufacturer} {p.vehicle?.model}</p>
@@ -196,44 +194,6 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
             )}
           </>
         )}
-        {tab === "inventory" && (
-          <>
-            <ListSection
-              empty={{ icon: <Bike size={20} />, title: t("mobileReports.noVehicles") }}
-              rows={inventoryRows.slice(0, limit)}
-              total={inventoryRows.length}
-              limit={limit}
-              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
-              render={(v) => {
-                const s = summaryMap.get(v.id);
-                const days = daysSince(v.onboarded_at);
-                return (
-                  // The only route into a vehicle's own screens from this tab - the mobile
-                  // shell has no Inventory tab, so this list is where a dealer picks a
-                  // vehicle out of the whole book of stock.
-                  <Card key={v.id} className="p-3.5" onClick={() => onNavigate("vehicle", { vehicleId: v.id })}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-mobile-text truncate">{v.manufacturer} {v.model}</p>
-                        <p className="text-xs text-mobile-text-muted font-mono">{vehicleRef(v)}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-semibold text-mobile-text">{formatINR(s?.total_vehicle_cost ?? 0)}</p>
-                        <Tag color={days >= 60 ? "error" : days >= 30 ? "warning" : "neutral"}>{days}d</Tag>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              }}
-            />
-            {inventoryRows.length > 0 && (
-              <TotalFooter
-                label={t("mobileReports.totalWithCount", { count: inventoryRows.length })}
-                value={formatINR(inventoryRows.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0))}
-              />
-            )}
-          </>
-        )}
         {tab === "sales" && (
           <>
             <ListSection
@@ -246,7 +206,11 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
                 const s = sale.vehicle_id ? summaryMap.get(sale.vehicle_id) : undefined;
                 const profit = s?.gross_profit ?? null;
                 return (
-                  <Card key={sale.id} className="p-3.5">
+                  <Card
+                    key={sale.id}
+                    className="p-3.5"
+                    onClick={() => sale.vehicle_id && onNavigate("vehicle", { vehicleId: sale.vehicle_id, tab: "sale" })}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-mobile-text truncate">{sale.vehicle?.manufacturer} {sale.vehicle?.model}</p>
@@ -309,7 +273,11 @@ export function MobileReports({ onNavigate, onBack }: { onNavigate: MobileNaviga
               limit={limit}
               onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
               render={(e) => (
-                <Card key={e.id} className="p-3.5">
+                <Card
+                  key={e.id}
+                  className="p-3.5"
+                  onClick={() => e.vehicle_id && onNavigate("add-expense", { vehicleId: e.vehicle_id, highlightRecordId: e.id })}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-mobile-text truncate">{e.category}</p>

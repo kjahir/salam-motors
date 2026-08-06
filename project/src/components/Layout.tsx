@@ -35,7 +35,6 @@ export type PageKey =
   | "quick-add-expense"
   | "quick-add-document"
   | "quick-add-inspection"
-  | "quick-add-sale"
   | "view-vehicle"
   | "vehicle"
   | "parties"
