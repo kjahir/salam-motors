@@ -155,7 +155,7 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
         <Card className="p-3">
           <p className="text-[10px] text-mobile-text-muted uppercase">{isSold ? t("mobileVehicle.profit") : t("mobileVehicle.estProfit")}</p>
           <p className={`text-base font-poppins font-bold mt-1 ${profit ? (profit.grossProfit >= 0 ? "text-mobile-success" : "text-mobile-error") : "text-mobile-success"}`}>
-            {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: true })}
+            {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: false })}
           </p>
         </Card>
       </div>

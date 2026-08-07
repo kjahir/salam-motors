@@ -21,7 +21,7 @@ import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
 import { vehicleRef } from "@/lib/vehicleLabel";
-import { computeEstimatedProfitRange } from "@/lib/calc";
+import { computeEstimatedProfitRange, isApproved } from "@/lib/calc";
 import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import {
   fetchVehicles,
@@ -32,6 +32,7 @@ import {
   fetchAppSettings,
   updateAppSettings,
   fetchProfitDistributions,
+  fetchAllExpenses,
 } from "@/lib/queries";
 import { syncAllVehiclesCompliance } from "@/lib/compliance";
 import type {
@@ -43,6 +44,7 @@ import type {
   AppSettings,
   Partner,
   ProfitDistribution,
+  Expense,
 } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
@@ -57,6 +59,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [expenses, setExpenses] = useState<(Expense & { vehicle?: Vehicle | null })[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [editingMargin, setEditingMargin] = useState(false);
   /** Which headline tile's detail popup is open. */
@@ -70,7 +73,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, inv, st, dist] = await Promise.all([
+        const [v, s, a, c, inv, st, dist, exp] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
@@ -78,6 +81,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           fetchInvestments(),
           fetchAppSettings(),
           fetchProfitDistributions(),
+          fetchAllExpenses(),
         ]);
         if (cancelled) return;
         setVehicles(v);
@@ -87,6 +91,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setInvestments(inv);
         setSettings(st);
         setDistributions(dist);
+        setExpenses(exp);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : t("dashboard.failedToLoad"));
       } finally {
@@ -124,8 +129,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const totalAsking = inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0);
 
-    // All-time (not just current stock) — for the Financial Overview widget
-    const totalCostAllTime = summaries.reduce((s, x) => s + x.total_vehicle_cost, 0);
+    // Purchase & expenses for the Financial Overview widget: current stock only —
+    // once a vehicle sells, its cost is realised (reflected in profit), not tied-up capital.
+    const totalCostAllTime = summaries
+      .filter((x) => x.current_status !== "SOLD" && x.current_status !== "DELIVERED")
+      .reduce((s, x) => s + x.total_vehicle_cost, 0);
     const totalSalesAllTime = summaries.reduce((s, x) => s + x.sale_price, 0);
     const totalProfitAllTime = summaries.reduce((s, x) => s + (x.gross_profit ?? 0), 0);
     // Same figures the mobile dashboard's aggregate tile shows, kept in step with it.
@@ -146,6 +154,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       const gp = summaryMap.get(v.id)?.gross_profit;
       return s + (gp ?? 0);
     }, 0);
+    const salesThisMonth = soldThisMonth.reduce((s, v) => s + (summaryMap.get(v.id)?.sale_price ?? 0), 0);
+    const purchaseThisMonth = boughtThisMonth.reduce((s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0), 0);
+    const isThisMonth = (iso: string) => {
+      const d = new Date(iso);
+      const now = new Date();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    };
+    const expenseThisMonth = expenses
+      .filter((e) => isApproved(e) && isThisMonth(e.expense_date))
+      .reduce((s, e) => s + e.amount, 0);
 
     const stockWithDays = inStock.map((v) => ({ v, days: daysSince(v.onboarded_at) }));
     const aged30 = stockWithDays.filter((x) => x.days >= 30).length;
@@ -175,6 +193,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       boughtThisMonth: boughtThisMonth.length,
       soldThisMonth: soldThisMonth.length,
       realisedProfitThisMonth,
+      salesThisMonth,
+      purchaseThisMonth,
+      expenseThisMonth,
       aged30,
       aged45,
       aged60: aged60Count,
@@ -187,7 +208,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       complianceMap,
       openAlertList: openAlerts.slice(0, 5),
     };
-  }, [vehicles, summaries, alerts, complianceStatuses, investments, settings, distributions]);
+  }, [vehicles, summaries, alerts, complianceStatuses, investments, settings, distributions, expenses]);
 
   if (loading) {
     return (
@@ -250,8 +271,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         />
         <HeadlineTile
           label={t("dashboard.financialOverview")}
-          value={`${stats.remaining >= 0 ? "+" : "−"}${formatINR(Math.abs(stats.remaining), { compact: true })}`}
-          hint={t("dashboard.investedHint", { value: formatINR(stats.totalInvestment, { compact: true }) })}
+          value={`${stats.remaining >= 0 ? "+" : "−"}${formatINR(Math.abs(stats.remaining), { compact: false })}`}
+          hint={t("dashboard.investedHint", { value: formatINR(stats.totalInvestment, { compact: false }) })}
           icon={<Wallet size={24} />}
           color={stats.remaining >= 0 ? "amber" : "red"}
           onClick={() => setPanel("finance")}
@@ -375,12 +396,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           />
           <DetailRow
             label={t("dashboard.totalInventoryCost")}
-            value={formatINR(stats.totalCost, { compact: true })}
-            hint={t("dashboard.askingValue", { value: formatINR(stats.totalAsking, { compact: true }) })}
+            value={formatINR(stats.totalCost, { compact: false })}
+            hint={t("dashboard.askingValue", { value: formatINR(stats.totalAsking, { compact: false }) })}
           />
           <DetailRow
             label={t("dashboard.estimatedProfit")}
-            value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
+            value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: false })}
             hint={
               <span className="inline-flex items-center gap-1">
                 {t("dashboard.marginHint", { low: stats.marginLow, high: stats.marginHigh })} <Pencil size={11} className="opacity-60" />
@@ -401,13 +422,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <DetailRow label={t("dashboard.soldThisMonth")} value={String(stats.soldThisMonth)} valueClass="text-emerald-600" />
           <DetailRow
             label={t("dashboard.realisedProfitMonth")}
-            value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
+            value={formatINR(stats.realisedProfitThisMonth, { compact: false })}
             valueClass={stats.realisedProfitThisMonth >= 0 ? "text-emerald-600" : "text-red-600"}
             onClick={() => {
               setPanel(null);
               onNavigate("finance");
             }}
           />
+          <DetailRow label={t("dashboard.salesThisMonth")} value={formatINR(stats.salesThisMonth, { compact: false })} />
+          <DetailRow label={t("dashboard.purchaseThisMonth")} value={formatINR(stats.purchaseThisMonth, { compact: false })} />
+          <DetailRow label={t("dashboard.expenseThisMonth")} value={formatINR(stats.expenseThisMonth, { compact: false })} />
         </div>
       </Modal>
 
@@ -415,16 +439,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           section — kept in sync so the two surfaces tell the dealer the same story. */}
       <Modal open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
         <div className="space-y-1">
-          <DetailRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: true })} />
+          <DetailRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: false })} />
+          <DetailRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.totalCostAllTime, { compact: false })} />
+          <DetailRow label={t("mobileDashboard.inStock")} value={formatINR(stats.totalCost, { compact: false })} />          
+          <DetailRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.totalSalesAllTime, { compact: false })} />          
+          <DetailRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners, { compact: false })} />          
           <DetailRow
             label={t("dashboard.totalProfit")}
-            value={formatINR(stats.totalProfitAllTime, { compact: true })}
+            value={formatINR(stats.totalProfitAllTime, { compact: false })}
             valueClass={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
-          />
-          <DetailRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners, { compact: true })} />
-          <DetailRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.totalCostAllTime, { compact: true })} />
-          <DetailRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.totalSalesAllTime, { compact: true })} />
-          <DetailRow label={t("mobileDashboard.inStock")} value={formatINR(stats.totalCost, { compact: true })} />
+          />          
         </div>
       </Modal>
 
@@ -507,8 +531,8 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
 
         <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
           <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">{t("dashboard.estimatedProfitPreview")}</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1">{formatINRRange(previewLow, previewHigh, { compact: true })}</p>
-          <p className="text-xs text-emerald-600 mt-0.5">{t("dashboard.acrossCurrentStockCost", { value: formatINR(totalCost, { compact: true }) })}</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">{formatINRRange(previewLow, previewHigh, { compact: false })}</p>
+          <p className="text-xs text-emerald-600 mt-0.5">{t("dashboard.acrossCurrentStockCost", { value: formatINR(totalCost, { compact: false }) })}</p>
         </div>
 
         <div className="px-1 py-2">

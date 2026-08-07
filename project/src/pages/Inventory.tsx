@@ -300,7 +300,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(s?.total_vehicle_cost ?? 0)}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(v.asking_price)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-600 whitespace-nowrap">{formatINRRange(estRange.low, estRange.high, { compact: true })}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-600 whitespace-nowrap">{formatINRRange(estRange.low, estRange.high, { compact: false })}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{formatINR(s?.total_invested ?? 0)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(v.onboarded_at)}</td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>

@@ -152,7 +152,7 @@ export function MobileInventory({ onNavigate, manageMode, onBack, vehicleFilter 
                       </p>
                     ) : (
                       <p className="text-sm font-semibold text-mobile-success whitespace-nowrap">
-                        {formatINRRange(estRange.low, estRange.high, { compact: true })}
+                        {formatINRRange(estRange.low, estRange.high, { compact: false })}
                       </p>
                     )}
                   </div>
