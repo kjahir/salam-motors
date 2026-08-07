@@ -1,6 +1,5 @@
 
 backup 
-supabase db dump --db-url "postgresql://postgres.zhapnnvlypdmwfdsiprv:yFyP4C2cLJqLOnIs@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres" --data-only -f salam-motors-prod-data.sql 
 
 
 
@@ -58,5 +57,4 @@ Delete from auth.sessions
 		   
 
 restore 
-psql "postgresql://postgres.swgxitzcylokelhqlcfe:9Ff6zhJT6Xf0omm5@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres" -f salam-motors-prod-data.sql
 
