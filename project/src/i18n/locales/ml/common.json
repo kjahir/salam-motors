@@ -101,6 +101,7 @@
     "alertsTile": "തുറന്ന അലേർട്ടുകൾ",
     "soldBoughtHint": "വിറ്റു · {{bought}} വാങ്ങി",
     "totalProfitHint": "ആകെ ലാഭം, ഇതുവരെ",
+    "investedHint": "മൊത്തം നിക്ഷേപം: {{value}}",
     "alertsVehiclesHint": "{{count}} വാഹനങ്ങളിൽ",
     "registration": "രജിസ്ട്രേഷൻ"
   },

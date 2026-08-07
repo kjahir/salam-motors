@@ -101,6 +101,7 @@
     "alertsTile": "खुले अलर्ट",
     "soldBoughtHint": "बिके · {{bought}} खरीदे",
     "totalProfitHint": "कुल लाभ, अब तक",
+    "investedHint": "कुल निवेश: {{value}}",
     "alertsVehiclesHint": "{{count}} वाहनों में",
     "registration": "पंजीकरण"
   },

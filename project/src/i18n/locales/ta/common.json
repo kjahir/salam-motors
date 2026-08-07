@@ -101,6 +101,7 @@
     "alertsTile": "திறந்த எச்சரிக்கைகள்",
     "soldBoughtHint": "விற்பனை · {{bought}} வாங்கியது",
     "totalProfitHint": "மொத்த லாபம், இதுவரை",
+    "investedHint": "மொத்த முதலீடு: {{value}}",
     "alertsVehiclesHint": "{{count}} வாகனங்களில்",
     "registration": "பதிவு எண்"
   },
