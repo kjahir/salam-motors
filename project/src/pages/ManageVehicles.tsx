@@ -10,7 +10,7 @@ import { checkRegistrationUnique, fetchVehicles } from "@/lib/queries";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import { AddVehicle } from "@/pages/AddVehicle";
 import { VehicleDetailsForm } from "@/components/VehicleDetailsForm";
-import { emptyVehicleForm, normalizeRegistration, type VehicleFullFormData } from "@/lib/vehicleForm";
+import { emptyVehicleForm, normalizeRegistration, normalizeUpperCase, type VehicleFullFormData } from "@/lib/vehicleForm";
 import { diffRemovedPaths, fileFromPath, type UploadedFile } from "@/lib/uploadedFile";
 import { vehicleLabel } from "@/lib/vehicleLabel";
 import type { Purchase, PurchasePayment, Vehicle } from "@/lib/types";
@@ -171,9 +171,9 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
         .update({
           registration_number: normalizeRegistration(form.registration_number.trim()),
           category: form.category,
-          manufacturer: form.manufacturer.trim(),
-          brand: form.brand.trim() || form.manufacturer.trim(),
-          model: form.model.trim(),
+          manufacturer: normalizeUpperCase(form.manufacturer.trim()),
+          brand: form.brand.trim() || normalizeUpperCase(form.manufacturer.trim()),
+          model: normalizeUpperCase(form.model.trim()),
           variant: form.variant.trim() || null,
           fuel_type: form.fuel_type,
           colour: form.colour.trim() || null,

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Check, AlertTriangle, ChevronDown } from "lucide-react";
 import { Field, Select, Spinner } from "@/components/ui/Primitives";
 import { VEHICLE_CATEGORIES, FUEL_TYPES } from "@/lib/constants";
-import { normalizeRegistration } from "@/lib/vehicleForm";
+import { normalizeRegistration, normalizeUpperCase } from "@/lib/vehicleForm";
 
 export interface VehicleCoreFormData {
   category: string;
@@ -49,10 +49,10 @@ export function VehicleFormFields({ form, update, regChecking, regAvailable, def
           <Select value={form.fuel_type} onChange={(v) => update("fuel_type", v)} options={FUEL_TYPES} />
         </Field>
         <Field label={t("vehicleForm.manufacturer")} required>
-          <input className="input" value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="" />
+          <input className="input" value={form.manufacturer} onChange={(e) => update("manufacturer", normalizeUpperCase(e.target.value))} placeholder="" />
         </Field>
         <Field label={t("vehicleForm.model")} required>
-          <input className="input" value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="" />
+          <input className="input" value={form.model} onChange={(e) => update("model", normalizeUpperCase(e.target.value))} placeholder="" />
         </Field>
         <Field label={t("vehicleForm.registrationNumber")} required hint={t("vehicleForm.registrationHint")} className="sm:col-span-2">
           <div className="relative">

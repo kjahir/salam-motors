@@ -11,7 +11,7 @@ import { checkRegistrationUnique, fetchVehicleFull } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
 import { generateSlug } from "@/lib/calc";
 import { VEHICLE_CATEGORIES, FUEL_TYPES, PAYMENT_METHODS } from "@/lib/constants";
-import { normalizeRegistration } from "@/lib/vehicleForm";
+import { normalizeRegistration, normalizeUpperCase } from "@/lib/vehicleForm";
 import { diffRemovedPaths, type UploadedFile } from "@/lib/uploadedFile";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import type { Vehicle } from "@/lib/types";
@@ -249,9 +249,9 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
       const { error } = await supabase.from("vehicles").update({
         registration_number: normalizeRegistration(form.registration_number.trim()),
         category: form.category,
-        manufacturer: form.manufacturer,
-        brand: form.manufacturer,
-        model: form.model,
+        manufacturer: normalizeUpperCase(form.manufacturer),
+        brand: normalizeUpperCase(form.manufacturer),
+        model: normalizeUpperCase(form.model),
         fuel_type: form.fuel_type,
         colour: form.colour || null,
         manufacture_year: Number(form.manufacture_year) || null,
@@ -351,10 +351,10 @@ export function MobileVehicleForm({ mode, vehicleId, onNavigate, onBack, embedde
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("vehicleForm.manufacturer")} required>
-              <Input value={form.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} placeholder="" />
+              <Input value={form.manufacturer} onChange={(e) => update("manufacturer", normalizeUpperCase(e.target.value))} placeholder="" />
             </Field>
             <Field label={t("vehicleForm.model")} required>
-              <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="" />
+              <Input value={form.model} onChange={(e) => update("model", normalizeUpperCase(e.target.value))} placeholder="" />
             </Field>
           </div>
           <Field label={t("vehicleForm.registrationNumber")} required hint={regAvailable === false ? undefined : t("vehicleForm.mustBeUnique")}>

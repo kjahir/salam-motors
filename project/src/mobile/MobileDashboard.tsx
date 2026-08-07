@@ -141,49 +141,56 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
           />
         ) : (
           <Card
-            className="relative overflow-hidden border-transparent bg-gradient-to-br from-mobile-navy via-mobile-primary to-mobile-secondary p-5 shadow-mobile-md active:opacity-90 cursor-pointer"
+            className="relative overflow-hidden border-transparent bg-gradient-to-br from-mobile-purple via-mobile-primary to-mobile-secondary p-5 shadow-mobile-md active:opacity-90 cursor-pointer"
             onClick={() => setPanel("overview")}
           >
-            {/* Decorative glow — purely cosmetic, keeps the gradient from reading flat. */}
-            <div className="pointer-events-none absolute -right-6 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+            {/* Decorative glow blobs — purely cosmetic, keeps the gradient from reading flat. */}
+            <div className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
+            <div className="pointer-events-none absolute -left-10 -bottom-14 h-32 w-32 rounded-full bg-black/10 blur-2xl" />
             <div className="relative flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[13px] font-medium text-white/70">{t("mobileDashboard.totalAmountInvested")}</p>
+                  <p className="text-[13px] font-medium text-white/75">{t("mobileDashboard.totalAmountInvested")}</p>
                   <p className="text-[13px] font-semibold text-white shrink-0">{formatINR(stats.totalInvested)}</p>
                 </div>
-                <p className={`flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 ${remainingPositive ? "text-white" : "text-mobile-secondary"}`}>
+                <p className="flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 text-white">
                   {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
                   {formatINR(Math.abs(remaining))}
                 </p>
                 <div className="flex items-baseline justify-between gap-2 mt-1">
-                  <p className="text-xs text-white/60">{t("financePage.totalPurchaseExpenses")}</p>
+                  <p className="text-xs text-white/70">{t("financePage.totalPurchaseExpenses")}</p>
                   <p className="text-xs font-semibold text-white/90 shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
                 </div>
               </div>
-              <Wallet size={18} className="text-white/60 mt-1 shrink-0" />
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 shrink-0">
+                <Wallet size={17} className="text-white" />
+              </span>
             </div>
           </Card>
         )}
       </div>
 
-      {/* Quick Actions ── Vehicle + Status, grouped in one elevated white card so the
-          primary actions read as a single hub; More stays plain/borderless below. */}
+      {/* Quick Actions ── Vehicle */}
       <div className="px-4 pt-5">
         <Card className="p-4">
           <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
             {t("mobileDashboard.sectionVehicle")}
           </p>
           <div className="grid grid-cols-3 gap-3">
-            <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
+            <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} disabled={!!selectedVehicleId} />
             <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
             <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
             <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
             <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
             <QuickAction icon={<Pencil size={22} />} tone="warning-soft" label={t("mobileDashboard.manageVehicle")} onClick={() => onNavigate("manage-vehicles")} />
           </div>
+        </Card>
+      </div>
 
-          <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mt-5 mb-2">
+      {/* Quick Actions ── Status */}
+      <div className="px-4 pt-4">
+        <Card className="p-4">
+          <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
             {t("mobileDashboard.sectionStatus")}
           </p>
           <div className="grid grid-cols-3 gap-3">
@@ -239,7 +246,7 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
   );
 }
 
-function QuickAction({ icon, label, tone, onClick }: {
+function QuickAction({ icon, label, tone, onClick, disabled }: {
   icon: ReactNode;
   label: string;
   tone: "primary" | "success" | "secondary" | "navy" | "success-soft" | "warning-soft"
@@ -247,6 +254,7 @@ function QuickAction({ icon, label, tone, onClick }: {
     | "purple" | "purple-80" | "purple-60" | "purple-40" | "purple-25" | "purple-15"
     | "none";
   onClick: () => void;
+  disabled?: boolean;
 }) {
   const tones = {
     primary:      "bg-mobile-primary text-white shadow-mobile-sm",
@@ -268,7 +276,11 @@ function QuickAction({ icon, label, tone, onClick }: {
     none:         "border border-mobile-border bg-mobile-card text-mobile-text-secondary",
   };
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-2 py-2 active:opacity-60">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-2 py-2 active:opacity-60 disabled:opacity-30 disabled:pointer-events-none"
+    >
       <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tones[tone]}`}>{icon}</span>
       <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
     </button>
@@ -290,39 +302,46 @@ function SelectedVehicleCard({ vehicle, summary, marginLow, marginHigh, onClick 
   const { t } = useTranslation();
   const isSold = SOLD_STATUSES.includes(vehicle.current_status);
   const estRange = computeEstimatedProfitRange(summary?.total_vehicle_cost ?? 0, marginLow, marginHigh);
-  const profitPositive = (summary?.gross_profit ?? 0) >= 0;
 
   return (
-    <Card className="p-5 active:opacity-80 cursor-pointer" onClick={onClick}>
-      <div className="flex items-start justify-between gap-3">
+    <Card
+      className="relative overflow-hidden border-transparent bg-gradient-to-br from-mobile-navy via-mobile-purple to-mobile-primary p-5 shadow-mobile-md active:opacity-90 cursor-pointer"
+      onClick={onClick}
+    >
+      {/* Same decorative glow treatment as the aggregate tile, so the two read as one family. */}
+      <div className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
+      <div className="pointer-events-none absolute -left-10 -bottom-14 h-32 w-32 rounded-full bg-black/10 blur-2xl" />
+      <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium text-mobile-text-secondary">{t("mobileDashboard.selectedVehicle")}</p>
-          <p className="font-poppins text-xl font-bold text-mobile-text mt-1 truncate">
+          <p className="text-[13px] font-medium text-white/75">{t("mobileDashboard.selectedVehicle")}</p>
+          <p className="font-poppins text-xl font-bold text-white mt-1 truncate">
             {[vehicle.manufacturer, vehicle.model].filter(Boolean).join(" ") || vehicle.stock_number}
           </p>
-          <p className="text-xs text-mobile-text-muted font-mono mt-0.5">
+          <p className="text-xs text-white/70 font-mono mt-0.5">
             {vehicle.registration_number ?? vehicle.stock_number}
           </p>
-          <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-mobile-border">
+          <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-white/20">
             <div>
-              <p className="text-[10px] text-mobile-text-muted uppercase">{t("mobileInventory.totalCost")}</p>
-              <p className="text-sm font-medium text-mobile-text">{formatINR(summary?.total_vehicle_cost ?? 0)}</p>
+              <p className="text-[10px] text-white/60 uppercase">{t("mobileInventory.totalCost")}</p>
+              <p className="text-sm font-medium text-white">{formatINR(summary?.total_vehicle_cost ?? 0)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-mobile-text-muted uppercase">{isSold ? t("mobileInventory.profit") : t("mobileInventory.estProfit")}</p>
+              <p className="text-[10px] text-white/60 uppercase">{isSold ? t("mobileInventory.profit") : t("mobileInventory.estProfit")}</p>
               {isSold ? (
-                <p className={`text-sm font-semibold ${profitPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+                <p className="text-sm font-semibold text-white">
                   {formatINR(summary?.gross_profit)}
                 </p>
               ) : (
-                <p className="text-sm font-semibold text-mobile-success whitespace-nowrap">
+                <p className="text-sm font-semibold text-white whitespace-nowrap">
                   {formatINRRange(estRange.low, estRange.high, { compact: true })}
                 </p>
               )}
             </div>
           </div>
         </div>
-        <Bike size={18} className="text-mobile-text-muted mt-1 shrink-0" />
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 shrink-0">
+          <Bike size={17} className="text-white" />
+        </span>
       </div>
     </Card>
   );

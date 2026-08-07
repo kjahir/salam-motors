@@ -8,6 +8,14 @@ import type { VehicleCoreFormData } from "@/components/VehicleFormFields";
  */
 export const normalizeRegistration = (value: string): string => value.toUpperCase();
 
+/**
+ * Manufacturer and model are stored uppercase, always, for the same reason as
+ * `normalizeRegistration`: "Honda"/"HONDA"/"honda" would otherwise sit as three different
+ * strings in search, grouping, and the inventory list, purely because of how each dealer
+ * happened to type it in. Applied on input and again at every write.
+ */
+export const normalizeUpperCase = (value: string): string => value.toUpperCase();
+
 /** Vehicle identity + seller + purchase, i.e. everything captured when onboarding a vehicle. */
 export interface VehicleFullFormData extends VehicleCoreFormData {
   seller_party_id: string;
