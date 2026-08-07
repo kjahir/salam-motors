@@ -4,7 +4,7 @@ import type { AssistantScalar, EntityColumn, MetricItem } from "./schema";
 export function formatMetric(item: MetricItem): string {
   const value = item.value;
   if (typeof value !== "number") return String(value);
-  if (item.format === "inr") return formatINR(value, { compact: true });
+  if (item.format === "inr") return formatINR(value, { compact: false });
   if (item.format === "percent") return formatPercent(value);
   if (item.format === "days") return `${formatNumber(value)} days`;
   if (item.format === "number") return formatNumber(value);

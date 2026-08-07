@@ -8,12 +8,12 @@ import {
 import { useTranslation } from "react-i18next";
 import { Spinner, Card, Sheet, MoreButton } from "./ui/primitives";
 import { formatINR, formatINRRange } from "@/lib/format";
-import { computeEstimatedProfitRange } from "@/lib/calc";
-import { fetchVehicles, fetchFinancialSummaries, fetchInvestments, fetchProfitDistributions, fetchAppSettings } from "@/lib/queries";
+import { computeEstimatedProfitRange, isApproved } from "@/lib/calc";
+import { fetchVehicles, fetchFinancialSummaries, fetchInvestments, fetchProfitDistributions, fetchAppSettings, fetchAllExpenses } from "@/lib/queries";
 import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import { useAuth } from "@/lib/useAuth";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import type { Vehicle, VehicleFinancialSummary, Investment, ProfitDistribution, Partner, AppSettings } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Investment, ProfitDistribution, Partner, AppSettings, Expense } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -26,6 +26,7 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
+  const [expenses, setExpenses] = useState<(Expense & { vehicle?: Vehicle | null })[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<"overview" | null>(null);
@@ -36,12 +37,13 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
     let cancelled = false;
     (async () => {
       try {
-        const [v, s, inv, dist, st] = await Promise.all([
+        const [v, s, inv, dist, st, exp] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchInvestments(),
           fetchProfitDistributions(),
           fetchAppSettings(),
+          fetchAllExpenses(),
         ]);
         if (cancelled) return;
         setVehicles(v);
@@ -49,6 +51,7 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
         setInvestments(inv);
         setDistributions(dist);
         setSettings(st);
+        setExpenses(exp);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -72,10 +75,12 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
     const soldValue = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.sale_price ?? 0), 0);
     const inStockValue = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const overallProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
-    const purchaseAndExpenses = vehicles.reduce(
-      (s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0) + (summaryMap.get(v.id)?.total_expense ?? 0),
-      0,
-    );
+    const purchaseAndExpenses = vehicles
+      .filter((v) => v.current_status !== "SOLD" && v.current_status !== "DELIVERED")
+      .reduce(
+        (s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0) + (summaryMap.get(v.id)?.total_expense ?? 0),
+        0,
+      );
     const totalInvested = investments
       .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
@@ -87,6 +92,10 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     };
     const soldThisMonthList = sold.filter((v) => inThisMonth(v.sold_at));
+    const boughtThisMonthList = vehicles.filter((v) => inThisMonth(v.onboarded_at));
+    const expenseThisMonth = expenses
+      .filter((e) => isApproved(e) && inThisMonth(e.expense_date))
+      .reduce((s, e) => s + e.amount, 0);
     return {
       totalInvested,
       paidToPartners,
@@ -95,10 +104,13 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
       inStockValue,
       overallProfit,
       soldThisMonth: soldThisMonthList.length,
-      boughtThisMonth: vehicles.filter((v) => inThisMonth(v.onboarded_at)).length,
+      boughtThisMonth: boughtThisMonthList.length,
       profitThisMonth: soldThisMonthList.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0),
+      salesThisMonth: soldThisMonthList.reduce((s, v) => s + (summaryMap.get(v.id)?.sale_price ?? 0), 0),
+      purchaseThisMonth: boughtThisMonthList.reduce((s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0), 0),
+      expenseThisMonth,
     };
-  }, [vehicles, summaries, investments, distributions]);
+  }, [vehicles, summaries, investments, distributions, expenses]);
 
   if (loading) {
     return (
@@ -153,9 +165,9 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
                   <p className="text-[13px] font-medium text-white/75">{t("mobileDashboard.totalAmountInvested")}</p>
                   <p className="text-[13px] font-semibold text-white shrink-0">{formatINR(stats.totalInvested)}</p>
                 </div>
-                <p className="flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 text-white">
+                <p className="flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 text-white">                  
                   {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
-                  {formatINR(Math.abs(remaining))}
+                  {formatINR(Math.abs(remaining))}                  
                 </p>
                 <div className="flex items-baseline justify-between gap-2 mt-1">
                   <p className="text-xs text-white/70">{t("financePage.totalPurchaseExpenses")}</p>
@@ -228,19 +240,23 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
           value={formatINR(stats.profitThisMonth)}
           valueClass={stats.profitThisMonth >= 0 ? "text-mobile-success" : "text-mobile-error"}
         />
+        <SheetRow label={t("dashboard.salesThisMonth")} value={formatINR(stats.salesThisMonth)} />
+        <SheetRow label={t("dashboard.purchaseThisMonth")} value={formatINR(stats.purchaseThisMonth)} />
+        <SheetRow label={t("dashboard.expenseThisMonth")} value={formatINR(stats.expenseThisMonth)} />
         <p className="text-[11px] font-semibold text-mobile-text-secondary uppercase tracking-wide pt-4 pb-1">
           {t("dashboard.financialOverview")}
         </p>
         <SheetRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvested)} />
+        <SheetRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.purchaseAndExpenses)} />
+        <SheetRow label={t("mobileDashboard.inStock")} value={formatINR(stats.inStockValue)} />        
+        <SheetRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.soldValue)} />
+        <SheetRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners)} />                
         <SheetRow
           label={t("dashboard.totalProfit")}
           value={formatINR(stats.overallProfit)}
           valueClass={plPositive ? "text-mobile-success" : "text-mobile-error"}
         />
-        <SheetRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners)} />
-        <SheetRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.purchaseAndExpenses)} />
-        <SheetRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.soldValue)} />
-        <SheetRow label={t("mobileDashboard.inStock")} value={formatINR(stats.inStockValue)} />
+        
       </Sheet>
     </div>
   );
@@ -333,7 +349,7 @@ function SelectedVehicleCard({ vehicle, summary, marginLow, marginHigh, onClick 
                 </p>
               ) : (
                 <p className="text-sm font-semibold text-white whitespace-nowrap">
-                  {formatINRRange(estRange.low, estRange.high, { compact: true })}
+                  {formatINRRange(estRange.low, estRange.high, { compact: false })}
                 </p>
               )}
             </div>

@@ -258,7 +258,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
         <Card className="p-4">
           <p className="stat-label">{isSold ? t("vehicleDetail.realisedProfit") : t("vehicleDetail.estimatedProfit")}</p>
           <p className={`stat-value mt-1.5 ${profit ? (profit.grossProfit >= 0 ? "text-emerald-600" : "text-red-600") : "text-emerald-600"}`}>
-            {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: true })}
+            {profit ? formatINR(profit.grossProfit) : formatINRRange(estRange.low, estRange.high, { compact: false })}
           </p>
           {!profit && <p className="text-xs text-slate-400 mt-0.5">{t("vehicleDetail.marginOfCost", { low: marginLow, high: marginHigh })}</p>}
         </Card>

@@ -273,9 +273,9 @@ export function Partners({ onNavigate }: PartnersProps) {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard label={t("partnersPage.totalCapitalInvested")} value={formatINR(totalInvestedAll, { compact: true })} icon={<Wallet size={20} />} color="brand" />
-        <StatCard label={t("partnersPage.totalProfitEarned")} value={formatINR(totalProfitAll, { compact: true })} icon={<TrendingUp size={20} />} color="emerald" />
-        <StatCard label={t("partnersPage.balancePayable")} value={formatINR(totalPayableAll, { compact: true })} icon={<IndianRupee size={20} />} color="amber" />
+        <StatCard label={t("partnersPage.totalCapitalInvested")} value={formatINR(totalInvestedAll, { compact: false })} icon={<Wallet size={20} />} color="brand" />
+        <StatCard label={t("partnersPage.totalProfitEarned")} value={formatINR(totalProfitAll, { compact: false })} icon={<TrendingUp size={20} />} color="emerald" />
+        <StatCard label={t("partnersPage.balancePayable")} value={formatINR(totalPayableAll, { compact: false })} icon={<IndianRupee size={20} />} color="amber" />
       </div>
 
       {partnerStats.length === 0 ? (

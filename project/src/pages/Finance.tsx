@@ -29,6 +29,10 @@ interface SortState {
   dir: SortDir;
 }
 
+function isVehicleSold(vehicle: Vehicle | null | undefined): boolean {
+  return vehicle?.current_status === "SOLD" || vehicle?.current_status === "DELIVERED";
+}
+
 function compareValues(a: string | number, b: string | number): number {
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a).localeCompare(String(b));
@@ -120,9 +124,13 @@ export function Finance({ onNavigate }: FinanceProps) {
     const totalInvested = investments
       .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
-    const totalExpenses = expenses.filter(isApproved).reduce((s, e) => s + e.amount, 0);
     const pendingExpenses = expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft");
-    const totalPurchases = purchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
+    // Total Purchase and Expenses tile tracks money still tied up in current stock,
+    // so purchases/expenses for already-sold vehicles are excluded.
+    const unsoldExpenses = expenses.filter((e) => !isVehicleSold(e.vehicle));
+    const unsoldPurchases = purchases.filter((p) => !isVehicleSold(p.vehicle));
+    const totalExpenses = unsoldExpenses.filter(isApproved).reduce((s, e) => s + e.amount, 0);
+    const totalPurchases = unsoldPurchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
     const totalPurchaseAndExpenses = totalPurchases + totalExpenses;
     const totalSales = soldSales.reduce((s, sale) => s + sale.sale_price, 0);
     const totalProfit = distributions.reduce((s, d) => s + d.profit_share, 0);
@@ -226,22 +234,22 @@ export function Finance({ onNavigate }: FinanceProps) {
       <PageHeader title={t("financePage.financeTitle")} description={t("financePage.financeDescription")} icon={<Wallet size={20} />} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label={t("financePage.totalInvested")} value={formatINR(totals.totalInvested, { compact: true })} icon={<IndianRupee size={18} />} color="brand" />
+        <StatCard label={t("financePage.totalInvested")} value={formatINR(totals.totalInvested, { compact: false })} icon={<IndianRupee size={18} />} color="brand" />
         <StatCard
           label={t("financePage.totalPurchaseExpenses")}
-          value={formatINR(totals.totalPurchaseAndExpenses, { compact: true })}
-          hint={t("financePage.purchasesExpensesShort", { purchases: formatINR(totals.totalPurchases, { compact: true }), expenses: formatINR(totals.totalExpenses, { compact: true }) })}
+          value={formatINR(totals.totalPurchaseAndExpenses, { compact: false })}
+          hint={t("financePage.purchasesExpensesShort", { purchases: formatINR(totals.totalPurchases, { compact: false }), expenses: formatINR(totals.totalExpenses, { compact: false }) })}
           icon={<Receipt size={18} />}
           color="slate"
         />
         <StatCard
           label={t("financePage.totalSalesProfit")}
-          value={formatINR(totals.totalSales, { compact: true })}
-          hint={t("financePage.profitHint", { profit: formatINR(totals.totalProfit, { compact: true }) })}
+          value={formatINR(totals.totalSales, { compact: false })}
+          hint={t("financePage.profitHint", { profit: formatINR(totals.totalProfit, { compact: false }) })}
           icon={<TrendingUp size={18} />}
           color="emerald"
         />
-        <StatCard label={t("financePage.payableToPartners")} value={formatINR(totals.totalPayable, { compact: true })} icon={<Wallet size={18} />} color="amber" />
+        <StatCard label={t("financePage.payableToPartners")} value={formatINR(totals.totalPayable, { compact: false })} icon={<Wallet size={18} />} color="amber" />
       </div>
 
       <Card className="p-4 mb-5">
