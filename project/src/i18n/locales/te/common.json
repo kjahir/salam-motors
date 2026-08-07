@@ -101,6 +101,7 @@
     "alertsTile": "తెరిచిన అలర్ట్‌లు",
     "soldBoughtHint": "అమ్మినవి · {{bought}} కొన్నవి",
     "totalProfitHint": "మొత్తం లాభం, ఇప్పటివరకు",
+    "investedHint": "మొత్తం పెట్టుబడి: {{value}}",
     "alertsVehiclesHint": "{{count}} వాహనాల్లో",
     "registration": "రిజిస్ట్రేషన్"
   },

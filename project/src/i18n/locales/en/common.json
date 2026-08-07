@@ -101,6 +101,7 @@
     "alertsTile": "Open Alerts",
     "soldBoughtHint": "sold · {{bought}} bought",
     "totalProfitHint": "Total profit, all time",
+    "investedHint": "Total Invested: {{value}}",
     "alertsVehiclesHint": "across {{count}} vehicle(s)",
     "registration": "Registration"
   },

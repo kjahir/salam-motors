@@ -101,6 +101,7 @@
     "alertsTile": "ತೆರೆದ ಎಚ್ಚರಿಕೆಗಳು",
     "soldBoughtHint": "ಮಾರಾಟ · {{bought}} ಖರೀದಿ",
     "totalProfitHint": "ಒಟ್ಟು ಲಾಭ, ಇಲ್ಲಿಯವರೆಗೆ",
+    "investedHint": "ಒಟ್ಟು ಹೂಡಿಕೆ: {{value}}",
     "alertsVehiclesHint": "{{count}} ವಾಹನಗಳಲ್ಲಿ",
     "registration": "ನೋಂದಣಿ"
   },

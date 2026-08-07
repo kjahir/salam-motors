@@ -31,7 +31,6 @@ import {
   fetchInvestments,
   fetchAppSettings,
   updateAppSettings,
-  fetchPartners,
   fetchProfitDistributions,
 } from "@/lib/queries";
 import { syncAllVehiclesCompliance } from "@/lib/compliance";
@@ -62,7 +61,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [editingMargin, setEditingMargin] = useState(false);
   /** Which headline tile's detail popup is open. */
   const [panel, setPanel] = useState<"stock" | "month" | "finance" | null>(null);
-  const [partners, setPartners] = useState<Partner[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,14 +70,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, inv, st, pt, dist] = await Promise.all([
+        const [v, s, a, c, inv, st, dist] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
           fetchComplianceStatuses(),
           fetchInvestments(),
           fetchAppSettings(),
-          fetchPartners(),
           fetchProfitDistributions(),
         ]);
         if (cancelled) return;
@@ -89,7 +86,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setComplianceStatuses(c);
         setInvestments(inv);
         setSettings(st);
-        setPartners(pt);
         setDistributions(dist);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : t("dashboard.failedToLoad"));
@@ -132,6 +128,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const totalCostAllTime = summaries.reduce((s, x) => s + x.total_vehicle_cost, 0);
     const totalSalesAllTime = summaries.reduce((s, x) => s + x.sale_price, 0);
     const totalProfitAllTime = summaries.reduce((s, x) => s + (x.gross_profit ?? 0), 0);
+    // Same figures the mobile dashboard's aggregate tile shows, kept in step with it.
+    const paidToPartners = distributions.reduce((s, d) => s + d.amount_paid, 0);
+    const remaining = totalInvestment - totalCostAllTime;
     const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
     const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
     const estProfitLow = inStock.reduce((s, v) => {
@@ -167,6 +166,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       totalCostAllTime,
       totalSalesAllTime,
       totalProfitAllTime,
+      paidToPartners,
+      remaining,
       estProfitLow,
       estProfitHigh,
       marginLow,
@@ -186,17 +187,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       complianceMap,
       openAlertList: openAlerts.slice(0, 5),
     };
-  }, [vehicles, summaries, alerts, complianceStatuses, investments, settings]);
-
-  const partnerShares = useMemo(() => {
-    const byPartner = new Map<string, number>();
-    for (const d of distributions) {
-      byPartner.set(d.partner_id, (byPartner.get(d.partner_id) ?? 0) + d.profit_share);
-    }
-    return partners
-      .map((p) => ({ id: p.id, name: p.name, amount: byPartner.get(p.id) ?? 0 }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [partners, distributions]);
+  }, [vehicles, summaries, alerts, complianceStatuses, investments, settings, distributions]);
 
   if (loading) {
     return (
@@ -259,10 +250,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         />
         <HeadlineTile
           label={t("dashboard.financialOverview")}
-          value={formatINR(stats.totalProfitAllTime, { compact: true })}
-          hint={t("dashboard.totalProfitHint")}
+          value={`${stats.remaining >= 0 ? "+" : "−"}${formatINR(Math.abs(stats.remaining), { compact: true })}`}
+          hint={t("dashboard.investedHint", { value: formatINR(stats.totalInvestment, { compact: true }) })}
           icon={<Wallet size={24} />}
-          color={stats.totalProfitAllTime >= 0 ? "amber" : "red"}
+          color={stats.remaining >= 0 ? "amber" : "red"}
           onClick={() => setPanel("finance")}
         />
         <HeadlineTile
@@ -420,26 +411,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </Modal>
 
+      {/* Same rows, in the same order, as the mobile dashboard's Financial Overview
+          section — kept in sync so the two surfaces tell the dealer the same story. */}
       <Modal open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
         <div className="space-y-1">
           <DetailRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: true })} />
-          <DetailRow label={t("dashboard.totalCost")} value={formatINR(stats.totalCostAllTime, { compact: true })} />
-          <DetailRow label={t("dashboard.totalSales")} value={formatINR(stats.totalSalesAllTime, { compact: true })} />
           <DetailRow
             label={t("dashboard.totalProfit")}
             value={formatINR(stats.totalProfitAllTime, { compact: true })}
             valueClass={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
           />
-          <div className="pt-4 mt-3 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("dashboard.profitShareByPartner")}</p>
-            {partnerShares.length === 0 ? (
-              <p className="text-sm text-slate-400">{t("dashboard.noPartners")}</p>
-            ) : (
-              partnerShares.map((ps) => (
-                <DetailRow key={ps.id} label={ps.name} value={formatINR(ps.amount, { compact: true })} valueClass="text-emerald-600" />
-              ))
-            )}
-          </div>
+          <DetailRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners, { compact: true })} />
+          <DetailRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.totalCostAllTime, { compact: true })} />
+          <DetailRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.totalSalesAllTime, { compact: true })} />
+          <DetailRow label={t("mobileDashboard.inStock")} value={formatINR(stats.totalCost, { compact: true })} />
         </div>
       </Modal>
 
