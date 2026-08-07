@@ -144,9 +144,14 @@ interface SheetProps {
    *  give a body that lays out its own scrollable child (a list) real room to expand into,
    *  instead of the sheet shrinking to hug that child's collapsed/empty state. */
   bodyClassName?: string;
+  /** How far up from the true viewport bottom the sheet (and its backdrop) stop, as a
+   *  Tailwind `bottom-*` class. Default "bottom-0" — flush with the screen edge, the usual
+   *  case. Pass e.g. "bottom-20" for a sheet opened from a screen that has a fixed bottom
+   *  nav bar, so the sheet stops above the bar instead of covering it. */
+  bottomClass?: string;
 }
 
-export function Sheet({ open, onClose, title, description, children, footer, compact, bodyClassName = "" }: SheetProps) {
+export function Sheet({ open, onClose, title, description, children, footer, compact, bodyClassName = "", bottomClass = "bottom-0" }: SheetProps) {
   useEffect(() => {
     if (!open) return;
     document.body.style.overflow = "hidden";
@@ -158,7 +163,7 @@ export function Sheet({ open, onClose, title, description, children, footer, com
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className={`fixed inset-x-0 top-0 ${bottomClass} z-50 flex items-end justify-center`}>
       <div className="absolute inset-0 bg-mobile-navy/50" onClick={onClose} />
       <div className="relative w-full max-w-md bg-mobile-card rounded-t-3xl shadow-mobile-lg max-h-[88vh] flex flex-col animate-slide-up">
         <div className={`flex items-start justify-between gap-3 border-b border-mobile-border shrink-0 ${compact ? "px-4 py-2.5" : "p-4"}`}>

@@ -140,53 +140,58 @@ export function MobileDashboard({ onNavigate, selectedVehicleId }: {
             onClick={() => onNavigate("vehicle", { vehicleId: selectedVehicle.id })}
           />
         ) : (
-          <Card className="p-5 active:opacity-80 cursor-pointer" onClick={() => setPanel("overview")}>
-            <div className="flex items-start justify-between gap-3">
+          <Card
+            className="relative overflow-hidden border-transparent bg-gradient-to-br from-mobile-navy via-mobile-primary to-mobile-secondary p-5 shadow-mobile-md active:opacity-90 cursor-pointer"
+            onClick={() => setPanel("overview")}
+          >
+            {/* Decorative glow — purely cosmetic, keeps the gradient from reading flat. */}
+            <div className="pointer-events-none absolute -right-6 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+            <div className="relative flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[13px] font-medium text-mobile-text-secondary">{t("mobileDashboard.totalAmountInvested")}</p>
-                  <p className="text-[13px] font-semibold text-mobile-text shrink-0">{formatINR(stats.totalInvested)}</p>
+                  <p className="text-[13px] font-medium text-white/70">{t("mobileDashboard.totalAmountInvested")}</p>
+                  <p className="text-[13px] font-semibold text-white shrink-0">{formatINR(stats.totalInvested)}</p>
                 </div>
-                <p className={`flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 ${remainingPositive ? "text-mobile-success" : "text-mobile-error"}`}>
+                <p className={`flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 ${remainingPositive ? "text-white" : "text-mobile-secondary"}`}>
                   {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
                   {formatINR(Math.abs(remaining))}
                 </p>
                 <div className="flex items-baseline justify-between gap-2 mt-1">
-                  <p className="text-xs text-mobile-text-muted">{t("financePage.totalPurchaseExpenses")}</p>
-                  <p className="text-xs font-semibold text-mobile-text-secondary shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
+                  <p className="text-xs text-white/60">{t("financePage.totalPurchaseExpenses")}</p>
+                  <p className="text-xs font-semibold text-white/90 shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
                 </div>
               </div>
-              <Wallet size={18} className="text-mobile-text-muted mt-1 shrink-0" />
+              <Wallet size={18} className="text-white/60 mt-1 shrink-0" />
             </div>
           </Card>
         )}
       </div>
 
-      {/* Quick Actions ── Vehicle */}
+      {/* Quick Actions ── Vehicle + Status, grouped in one elevated white card so the
+          primary actions read as a single hub; More stays plain/borderless below. */}
       <div className="px-4 pt-5">
-        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
-          {t("mobileDashboard.sectionVehicle")}
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
-          <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
-          <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
-          <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
-          <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
-          <QuickAction icon={<Pencil size={22} />} tone="warning-soft" label={t("mobileDashboard.manageVehicle")} onClick={() => onNavigate("manage-vehicles")} />
-        </div>
-      </div>
+        <Card className="p-4">
+          <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
+            {t("mobileDashboard.sectionVehicle")}
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} />
+            <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<Pencil size={22} />} tone="warning-soft" label={t("mobileDashboard.manageVehicle")} onClick={() => onNavigate("manage-vehicles")} />
+          </div>
 
-      {/* Quick Actions ── Status */}
-      <div className="px-4 pt-4">
-        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
-          {t("mobileDashboard.sectionStatus")}
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          <QuickAction icon={<Warehouse size={22} />} tone="navy" label={t("nav.inventory")} onClick={() => onNavigate("inventory")} />
-          <QuickAction icon={<BarChart3 size={22} />} tone="navy-70" label={t("nav.reports")} onClick={() => onNavigate("reports")} />
-          <QuickAction icon={<Bell size={22} />} tone="navy-40" label={t("nav.alerts")} onClick={() => onNavigate("alerts")} />
-        </div>
+          <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mt-5 mb-2">
+            {t("mobileDashboard.sectionStatus")}
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <QuickAction icon={<Warehouse size={22} />} tone="navy" label={t("nav.inventory")} onClick={() => onNavigate("inventory")} />
+            <QuickAction icon={<BarChart3 size={22} />} tone="navy-70" label={t("nav.reports")} onClick={() => onNavigate("reports")} />
+            <QuickAction icon={<Bell size={22} />} tone="navy-40" label={t("nav.alerts")} onClick={() => onNavigate("alerts")} />
+          </div>
+        </Card>
       </div>
 
       {/* Quick Actions ── More: smaller icon-only buttons in 4-column grid, no background */}

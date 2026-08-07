@@ -299,20 +299,23 @@ export function MobileApp() {
     <div className="mobile-shell min-h-screen">
       {/* Renders nothing while the subscription is healthy. */}
       <MobileBillingBanner />
-      <div className="pb-20">{renderScreen()}</div>
+      <div className={selectedVehicleId ? "pb-32" : "pb-20"}>{renderScreen()}</div>
 
       {/* Transparent tap-outside-to-dismiss layer: purely functional. */}
       {vehiclePickerOpen && <div className="fixed inset-0 z-20" onClick={() => setVehiclePickerOpen(false)} />}
 
       {showBottomNav && (
         <div className="fixed bottom-0 left-0 right-0 z-30">
-          {/* Vehicle picker sheet */}
+          {/* Vehicle picker sheet — stops above the nav bar (bottom-20) rather than
+              covering it, so the bar (and, if present, the selected-vehicle chip below)
+              stay visible and the sheet reads as opening "from" the vehicle button. */}
           <Sheet
             open={vehiclePickerOpen}
             onClose={() => setVehiclePickerOpen(false)}
             title={t("mobileAdd.selectVehicle")}
             compact
             bodyClassName="flex flex-col min-h-[50vh]"
+            bottomClass={selectedVehicleId ? "bottom-32" : "bottom-20"}
           >
             <MobileVehicleSearch
               value={selectedVehicleId ?? ""}
@@ -326,6 +329,26 @@ export function MobileApp() {
             />
           </Sheet>
 
+          {/* Selected-vehicle chip: its own row above the nav bar (not squeezed inside the
+              vehicle button's own flex column, which is what made the old badge tiny and
+              its close icon nearly untappable). */}
+          {selectedVehicleId && (
+            <div className="flex justify-center px-3 pt-2 pb-1.5 bg-mobile-card border-t border-mobile-border">
+              <div className="flex max-w-[85%] items-center gap-2 rounded-full bg-mobile-primary py-1.5 pl-3 pr-1.5 shadow-mobile-md">
+                <Bike size={14} className="shrink-0 text-white" />
+                <span className="truncate text-xs font-semibold text-white">{selectedVehicleLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedVehicleId(null); setSelectedVehicleLabel(""); }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20 active:bg-white/30"
+                  aria-label={t("mobileAdd.closeMenu")}
+                >
+                  <X size={15} className="text-white" />
+                </button>
+              </div>
+            </div>
+          )}
+
           <nav className="bg-mobile-card border-t border-mobile-border">
             <div className="flex items-stretch max-w-md mx-auto">
               <NavButton
@@ -334,22 +357,13 @@ export function MobileApp() {
                 label={t("nav.dashboard")}
                 onClick={() => navigate("dashboard")}
               />
-              {/* Vehicle context button: opens picker; shows selected vehicle name above when active */}
+              {/* Vehicle context button: opens picker; icon highlights while a vehicle is
+                  selected, the chip above shows which one. */}
               <button
                 onClick={() => setVehiclePickerOpen(true)}
                 className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
                 aria-label={t("nav.vehicle")}
               >
-                {selectedVehicleId && (
-                  <span className="flex items-center gap-0.5 rounded-pill bg-mobile-primary/10 px-2 py-0.5 text-[9px] font-semibold text-mobile-primary leading-tight max-w-[80px] mb-0.5">
-                    <span className="truncate">{selectedVehicleLabel}</span>
-                    <X
-                      size={10}
-                      onClick={(e) => { e.stopPropagation(); setSelectedVehicleId(null); setSelectedVehicleLabel(""); }}
-                      className="shrink-0"
-                    />
-                  </span>
-                )}
                 <span className={`flex h-[30px] w-[30px] items-center justify-center rounded-full transition-colors ${
                   selectedVehicleId ? "bg-mobile-primary text-white" : "bg-mobile-primary/10 text-mobile-primary"
                 }`}>

@@ -303,7 +303,7 @@ export function Partners({ onNavigate }: PartnersProps) {
                       onClick={() => openInvite(p)}
                       className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20 hover:bg-blue-100 hover:ring-blue-600/30 transition-colors"
                     >
-                      <KeyRound size={13} /> Invite to Portal
+                      <KeyRound size={13} /> Invite
                     </button>
                   ) : null}
                   {p.auth_user_id && isOwner && (
