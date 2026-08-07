@@ -1784,6 +1784,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
   if (sale) {
     return (
       <div className="space-y-5">
+        {/* sale-section:saleCompleted */}
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-slate-900 flex items-center gap-2"><CheckCircle2 size={18} className="text-emerald-600" /> Sale Completed</h3>
@@ -1803,6 +1804,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
 
         {isFeatureAvailable(saleEntitlements, "esign_estamp") && <SaleSigningPanel sale={sale} />}
 
+        {/* sale-section:profitDistribution */}
         <Card className="p-5">
           <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2"><TrendingUp size={18} className="text-slate-400" /> Profit Distribution</h3>
           {distributions.length > 0 ? (
@@ -1860,6 +1862,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
 
   return (
     <div className="space-y-5">
+      {/* sale-section:costSheet */}
       <Card className="p-5">
         <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.costSheetTitle")}</h3>
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1876,6 +1879,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
         </div>
       </Card>
 
+      {/* sale-section:saleProjection */}
       <Card className="p-5">
         <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.saleProjectionTitle")}</h3>
         <div className="grid grid-cols-2 gap-4 mb-5">
@@ -1925,6 +1929,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
       )}
 
       {showBuyers && (
+        // sale-section:recordSale
         <Card className="p-5">
           <div className="mb-4">
             <h4 className="font-medium text-slate-800">Record Sale</h4>

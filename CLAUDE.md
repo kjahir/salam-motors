@@ -42,7 +42,7 @@ Defined in `project/tailwind.config.js`. **Use these — never introduce a raw h
 
 ## Primitives — reach for these before writing markup
 
-**Mobile** (`@/mobile/ui/primitives`): `Button` (`primary`|`secondary`|`ghost`|`danger` × `sm`|`md`, has `loading`), `Input`, `Select`, `Field`, `Card`, `Tag` (`primary`|`secondary`|`success`|`error`|`warning`|`neutral`|`navy`), `EmptyState`, `TopBar`, `Sheet`, `SegmentedTabs`, `Spinner`. Plus `FileUploadGrid`, `VehicleSelectField`.
+**Mobile** (`@/mobile/ui/primitives`): `Button` (`primary`|`secondary`|`ghost`|`danger`|`warning` × `sm`|`md`, has `loading`), `Input`, `Select`, `Field`, `Card`, `Tag` (`primary`|`secondary`|`success`|`error`|`warning`|`neutral`|`navy`), `EmptyState`, `TopBar`, `Sheet`, `SegmentedTabs`, `Spinner`. Plus `FileUploadGrid`, `VehicleSelectField`.
 
 **Desktop** (`@/components/ui/`): `Card`, `StatCard`, `EmptyState`, `PageHeader`, `Tabs`, `Field`, `Select`, `Spinner`, `LoadingPage`, `Modal`, `SideNav`, `ScoreRing`, `Lightbox`, `InlineEditableField`, `useToast`, and the badge family — `Badge`, `StatusBadge`, `ScoreBadge`, `AgeingBadge`, `ComplianceBadge`, `VerificationBadge`.
 

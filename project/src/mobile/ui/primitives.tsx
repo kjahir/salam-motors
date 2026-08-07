@@ -11,7 +11,7 @@ export function Spinner({ size = 20 }: { size?: number }) {
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "warning";
   size?: "sm" | "md";
   loading?: boolean;
   children: ReactNode;
@@ -25,6 +25,9 @@ export function Button({ variant = "primary", size = "md", loading, disabled, cl
     secondary: "bg-white text-mobile-text border border-mobile-border active:bg-mobile-bg",
     ghost: "text-mobile-text-secondary active:bg-mobile-bg",
     danger: "bg-mobile-error text-white active:opacity-90",
+    // A solid, unmissable call-to-action for "you must act before you can continue" —
+    // acknowledging a blocking compliance issue, for example. Desktop counterpart: btn-warning.
+    warning: "bg-mobile-warning text-white active:opacity-90 shadow-mobile-sm",
   };
   return (
     <button className={`${base} ${sizes} ${variants[variant]} ${className}`} disabled={disabled || loading} {...rest}>

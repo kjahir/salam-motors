@@ -776,6 +776,8 @@
     "netRevenue": "नेट राजस्व",
     "margin": "मार्जिन",
     "returnOnCost": "लागत पर रिटर्न",
+    "profitDistribution": "लाभ वितरण",
+    "noDistributions": "कोई लाभ वितरण गणना नहीं की गई",
     "saleBlocked": "बिक्री रोकी गई - खुले Critical अलर्ट",
     "resolveBeforeSale": "बिक्री रिकॉर्ड करने से पहले इन्हें हल करें: {{alerts}}",
     "notSold": "अभी नहीं बिका",

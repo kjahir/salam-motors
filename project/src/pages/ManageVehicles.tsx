@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bike, Check, ExternalLink, Plus, ShoppingCart, Spline, X } from "lucide-react";
+import { Bike, Check, ExternalLink, Pencil, Plus, ShoppingCart, Spline, X } from "lucide-react";
 import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/useToast";
@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { checkRegistrationUnique, fetchVehicles } from "@/lib/queries";
 import { syncVehicleAlerts } from "@/lib/compliance";
 import { AddVehicle } from "@/pages/AddVehicle";
+import { VehicleDetail } from "@/pages/VehicleDetail";
 import { VehicleDetailsForm } from "@/components/VehicleDetailsForm";
 import { emptyVehicleForm, normalizeRegistration, normalizeUpperCase, type VehicleFullFormData } from "@/lib/vehicleForm";
 import { diffRemovedPaths, fileFromPath, type UploadedFile } from "@/lib/uploadedFile";
@@ -62,6 +63,7 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
   const [vehicles, setVehicles] = useState<Vehicle[] | null>(null);
   const [vehicleId, setVehicleId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [selling, setSelling] = useState(false);
   const [form, setForm] = useState<VehicleFullFormData>(emptyVehicleForm);
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -288,6 +290,7 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
 
   const startCreate = () => {
     setCreating(true);
+    setSelling(false);
     setVehicleId("");
   };
 
@@ -319,6 +322,7 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
                   value={vehicleId}
                   onChange={(id) => {
                     setCreating(false);
+                    setSelling(false);
                     setVehicleId(id);
                   }}
                   placeholder={t("mobileAdd.chooseVehicle")}
@@ -350,15 +354,26 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
               <Plus size={16} />
             </button>
           )}
-          <button
-            onClick={() => onNavigate("vehicle", { vehicleId, tab: "sale" })}
-            disabled={!vehicleId}
-            className="btn-sell btn-icon"
-            title={t("dashboard.sellVehicle")}
-            aria-label={t("dashboard.sellVehicle")}
-          >
-            <ShoppingCart size={16} />
-          </button>
+          {selling ? (
+            <button
+              onClick={() => setSelling(false)}
+              className="btn-secondary btn-icon"
+              title={t("vehicleDetail.edit")}
+              aria-label={t("vehicleDetail.edit")}
+            >
+              <Pencil size={16} />
+            </button>
+          ) : (
+            <button
+              onClick={() => setSelling(true)}
+              disabled={!vehicleId}
+              className="btn-sell btn-icon"
+              title={t("dashboard.sellVehicle")}
+              aria-label={t("dashboard.sellVehicle")}
+            >
+              <ShoppingCart size={16} />
+            </button>
+          )}
         </div>
       </Card>
 
@@ -379,11 +394,22 @@ export function ManageVehicles({ onNavigate }: { onNavigate: (page: PageKey, par
         </Card>
       )}
 
-      {!creating && vehicleId && loadingVehicle && (
+      {!creating && vehicleId && selling && (
+        <VehicleDetail
+          key={vehicleId}
+          vehicleId={vehicleId}
+          onNavigate={onNavigate}
+          onBack={() => setSelling(false)}
+          initialTab="sale"
+          embedded
+        />
+      )}
+
+      {!creating && vehicleId && !selling && loadingVehicle && (
         <div className="flex items-center justify-center py-12"><Spinner size={28} /></div>
       )}
 
-      {!creating && vehicleId && !loadingVehicle && (
+      {!creating && vehicleId && !selling && !loadingVehicle && (
         <VehicleDetailsForm
           form={form}
           update={update}

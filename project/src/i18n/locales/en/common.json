@@ -776,6 +776,8 @@
     "netRevenue": "Net Revenue",
     "margin": "Margin",
     "returnOnCost": "Return on Cost",
+    "profitDistribution": "Profit Distribution",
+    "noDistributions": "No profit distributions calculated",
     "saleBlocked": "Sale blocked - open Critical alerts",
     "resolveBeforeSale": "Resolve these before recording a sale: {{alerts}}",
     "notSold": "Not Sold Yet",
