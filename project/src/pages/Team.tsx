@@ -6,8 +6,9 @@ import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
+import { DualRangeSlider } from "@/components/ui/DualRangeSlider";
 import { useAuth } from "@/lib/useAuth";
-import { fetchMemberships, fetchAppSettings, updateCompanyPreferences } from "@/lib/queries";
+import { fetchMemberships, fetchAppSettings, updateCompanyPreferences, updateAppSettings } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { ROLES, ROLE_LABELS } from "@/lib/constants";
 import { getAppLanguage, languageOptions } from "@/i18n";
@@ -50,6 +51,8 @@ export function Team() {
     website_url: "",
     google_business_handle: "",
   });
+  const [marginLow, setMarginLow] = useState(10);
+  const [marginHigh, setMarginHigh] = useState(50);
   const [savingCompany, setSavingCompany] = useState(false);
   const { toast } = useToast();
   const { orgId, role: myRole, user } = useAuth();
@@ -77,6 +80,8 @@ export function Team() {
     ]);
     setOrgName(orgRow?.name ?? "");
     setSettings(appSettings);
+    setMarginLow(appSettings.estimated_profit_margin_low_pct);
+    setMarginHigh(appSettings.estimated_profit_margin_high_pct);
     setCompanyForm({
       name: orgRow?.name ?? "",
       preferred_languages: normalizeLanguages(appSettings.preferred_languages ?? [appSettings.preferred_language ?? "en"]),
@@ -107,6 +112,15 @@ export function Team() {
     }));
   };
 
+  const handleMarginLowChange = (v: number) => {
+    setMarginLow(v);
+    if (v > marginHigh) setMarginHigh(v);
+  };
+  const handleMarginHighChange = (v: number) => {
+    setMarginHigh(v);
+    if (v < marginLow) setMarginLow(v);
+  };
+
   const handleSaveCompany = async () => {
     if (!user || !orgId) return;
     setSavingCompany(true);
@@ -120,18 +134,25 @@ export function Team() {
         if (nameError) throw nameError;
       }
       const languages = normalizeLanguages(companyForm.preferred_languages);
-      await updateCompanyPreferences(
-        {
-          preferred_languages: languages,
-          instagram_handle: companyForm.instagram_handle.trim().replace(/^@/, "") || null,
-          twitter_handle: companyForm.twitter_handle.trim().replace(/^@/, "") || null,
-          whatsapp_business_number: companyForm.whatsapp_business_number.trim() || null,
-          website_url: companyForm.website_url.trim() || null,
-          google_business_handle: companyForm.google_business_handle.trim().replace(/^@/, "") || null,
-        },
-        orgId,
-        user.email ?? user.id,
-      );
+      await Promise.all([
+        updateCompanyPreferences(
+          {
+            preferred_languages: languages,
+            instagram_handle: companyForm.instagram_handle.trim().replace(/^@/, "") || null,
+            twitter_handle: companyForm.twitter_handle.trim().replace(/^@/, "") || null,
+            whatsapp_business_number: companyForm.whatsapp_business_number.trim() || null,
+            website_url: companyForm.website_url.trim() || null,
+            google_business_handle: companyForm.google_business_handle.trim().replace(/^@/, "") || null,
+          },
+          orgId,
+          user.email ?? user.id,
+        ),
+        updateAppSettings(
+          { estimated_profit_margin_low_pct: marginLow, estimated_profit_margin_high_pct: marginHigh },
+          orgId,
+          user.email ?? user.id,
+        ),
+      ]);
       // A language that was just switched off must not stay on screen, or the dealer is
       // left reading a language the company no longer offers with no pill to leave it by.
       if (!languages.includes(getAppLanguage(i18n.resolvedLanguage ?? i18n.language))) {
@@ -287,6 +308,15 @@ export function Team() {
                   </label>
                 );
               })}
+            </div>
+          </Field>
+          <Field label={t("teamPage.company.marginRange")} hint={t("teamPage.company.marginRangeHint")}>
+            <div className={`px-1 py-2 ${!canEditCompany ? "opacity-70 pointer-events-none" : ""}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-amber-600 tabular-nums">{t("dashboard.low", { value: marginLow })}</span>
+                <span className="text-sm font-bold text-emerald-600 tabular-nums">{t("dashboard.high", { value: marginHigh })}</span>
+              </div>
+              <DualRangeSlider low={marginLow} high={marginHigh} onLowChange={handleMarginLowChange} onHighChange={handleMarginHighChange} />
             </div>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -141,6 +141,19 @@ describe("computeCostBreakdown", () => {
     expect(result.otherCost).toBe(20); // penalty + other
     expect(result.totalExpense).toBe(550);
   });
+
+  it("rolls a free-typed custom category (not in EXPENSE_CATEGORIES) into otherCost, so the cost sheet's line items still sum to the total", () => {
+    const expenses = [
+      makeExpense({ id: "e1", category: "Spare parts", amount: 100 }),
+      makeExpense({ id: "e2", category: "Custom polish coating", amount: 250 }),
+    ];
+    const result = computeCostBreakdown(null, expenses);
+    expect(result.otherCost).toBe(250);
+    expect(result.totalExpense).toBe(350);
+    const summedBuckets =
+      result.refurbishmentCost + result.holdingCost + result.logisticsCost + result.documentationSellingCost + result.otherCost;
+    expect(summedBuckets).toBe(result.totalExpense);
+  });
 });
 
 describe("computeProfit", () => {

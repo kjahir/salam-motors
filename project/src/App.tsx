@@ -16,6 +16,7 @@ import { ManageVehicles } from "@/pages/ManageVehicles";
 import { QuickAddExpense } from "@/pages/QuickAddExpense";
 import { QuickAddDocument } from "@/pages/QuickAddDocument";
 import { QuickAddInspection } from "@/pages/QuickAddInspection";
+import { QuickAddSale } from "@/pages/QuickAddSale";
 import { QuickViewVehicle } from "@/pages/QuickViewVehicle";
 import { VehicleDetail } from "@/pages/VehicleDetail";
 import { Passport } from "@/pages/Passport";
@@ -46,6 +47,7 @@ const PAGE_KEYS: ReadonlySet<PageKey> = new Set([
   "quick-add-expense",
   "quick-add-document",
   "quick-add-inspection",
+  "quick-add-sale",
   "view-vehicle",
   "vehicle",
   "parties",
@@ -157,6 +159,8 @@ function AppContent() {
         return <QuickAddDocument onNavigate={handleNavigate} />;
       case "quick-add-inspection":
         return <QuickAddInspection onNavigate={handleNavigate} />;
+      case "quick-add-sale":
+        return <QuickAddSale onNavigate={handleNavigate} />;
       case "view-vehicle":
         return <QuickViewVehicle onNavigate={handleNavigate} />;
       case "vehicle":

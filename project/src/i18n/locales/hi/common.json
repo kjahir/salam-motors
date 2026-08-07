@@ -390,6 +390,12 @@
     "saleProjectionTitle": "बिक्री अनुमान",
     "askingPrice": "मांग मूल्य",
     "minimumPrice": "न्यूनतम मूल्य",
+    "minimumSellingPrice": "न्यूनतम बिक्री मूल्य",
+    "maximumSellingPrice": "अधिकतम बिक्री मूल्य",
+    "negotiatePrice": "मोलभाव मूल्य",
+    "recommendedRange": "अनुशंसित मार्जिन {{low}}%-{{high}}%",
+    "applyPrice": "मूल्य लागू करें",
+    "priceApplied": "बिक्री मूल्य लागू किया गया",
     "estimatedProfitRange": "अनुमानित लाभ सीमा",
     "ofTotalCost": "कुल लागत का",
     "salesSummary": "बिक्री सारांश",
@@ -454,6 +460,7 @@
   },
   "policiesPage": {
     "title": "अनुपालन नीतियां",
+    "titleWithDealer": "{{dealer}} की अनुपालन नीतियां",
     "description": "दस्तावेज़ and financial-evidence rules enforced across every vehicle",
     "failedToLoad": "लोड नहीं हुआ policies",
     "failedToLoadShort": "लोड नहीं हुआ",
@@ -1146,7 +1153,9 @@
       "save": "बदलाव सहेजें",
       "saved": "कंपनी विवरण अपडेट किया गया",
       "saveFailed": "कंपनी विवरण अपडेट करने में विफल",
-      "ownerOnlyName": "केवल स्वामी ही डीलरशिप का नाम बदल सकते हैं"
+      "ownerOnlyName": "केवल स्वामी ही डीलरशिप का नाम बदल सकते हैं",
+      "marginRange": "लाभ मार्जिन सीमा",
+      "marginRangeHint": "यह वाहन के बिक्री टैब पर मूल्य पर मोलभाव करते समय दिखाई जाने वाली अनुशंसित मार्जिन सीमा तय करता है। इस सीमा से बाहर भी मूल्य चुना जा सकता है।"
     }
   },
   "saleSigning": {
@@ -1590,6 +1599,7 @@
     "pickVehicleDocument": "दस्तावेज़ दर्ज करने के लिए ऊपर वाहन चुनें।",
     "pickVehicleInspection": "निरीक्षण दर्ज करने के लिए ऊपर वाहन चुनें।",
     "pickVehicleView": "पूरा रिकॉर्ड देखने के लिए ऊपर वाहन चुनें।",
+    "pickVehicleSale": "बिक्री दर्ज करने के लिए ऊपर वाहन चुनें।",
     "categoryRequired": "श्रेणी दर्ज करें",
     "documentTypeRequired": "दस्तावेज़ प्रकार दर्ज करें",
     "categoryPlaceholder": "श्रेणी चुनें या लिखें",

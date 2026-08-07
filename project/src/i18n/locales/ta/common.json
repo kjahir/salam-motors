@@ -390,6 +390,12 @@
     "saleProjectionTitle": "விற்பனை மதிப்பீடு",
     "askingPrice": "கேட்கும் விலை",
     "minimumPrice": "குறைந்தபட்ச விலை",
+    "minimumSellingPrice": "குறைந்தபட்ச விற்பனை விலை",
+    "maximumSellingPrice": "அதிகபட்ச விற்பனை விலை",
+    "negotiatePrice": "பேரம் விலை",
+    "recommendedRange": "பரிந்துரைக்கப்பட்ட மார்ஜின் {{low}}%-{{high}}%",
+    "applyPrice": "விலையைப் பயன்படுத்து",
+    "priceApplied": "விற்பனை விலை பயன்படுத்தப்பட்டது",
     "estimatedProfitRange": "மதிப்பிடப்பட்ட லாப வரம்பு",
     "ofTotalCost": "மொத்த செலவில்",
     "salesSummary": "விற்பனை சுருக்கம்",
@@ -454,6 +460,7 @@
   },
   "policiesPage": {
     "title": "இணக்கக் கொள்கைகள்",
+    "titleWithDealer": "{{dealer}} இன் இணக்கக் கொள்கைகள்",
     "description": "ஆவணம் and financial-evidence rules enforced across every vehicle",
     "failedToLoad": "ஏற்ற முடியவில்லை policies",
     "failedToLoadShort": "ஏற்ற முடியவில்லை",
@@ -1146,7 +1153,9 @@
       "save": "மாற்றங்களைச் சேமி",
       "saved": "நிறுவன விவரங்கள் புதுப்பிக்கப்பட்டன",
       "saveFailed": "நிறுவன விவரங்களை புதுப்பிக்க முடியவில்லை",
-      "ownerOnlyName": "உரிமையாளர் மட்டுமே டீலர்ஷிப் பெயரை மாற்ற முடியும்"
+      "ownerOnlyName": "உரிமையாளர் மட்டுமே டீலர்ஷிப் பெயரை மாற்ற முடியும்",
+      "marginRange": "லாப மார்ஜின் வரம்பு",
+      "marginRangeHint": "இது வாகனத்தின் விற்பனை தாவலில் விலை பேரம் பேசும்போது காட்டப்படும் பரிந்துரைக்கப்பட்ட மார்ஜின் வரம்பை அமைக்கிறது. இந்த வரம்புக்கு வெளியேயும் விலையைத் தேர்ந்தெடுக்கலாம்."
     }
   },
   "saleSigning": {
@@ -1590,6 +1599,7 @@
     "pickVehicleDocument": "ஆவணங்களைப் பதிவு செய்ய மேலே வாகனத்தைத் தேர்ந்தெடுக்கவும்.",
     "pickVehicleInspection": "சோதனையைப் பதிவு செய்ய மேலே வாகனத்தைத் தேர்ந்தெடுக்கவும்.",
     "pickVehicleView": "முழு பதிவைக் காண மேலே வாகனத்தைத் தேர்ந்தெடுக்கவும்.",
+    "pickVehicleSale": "விற்பனையைப் பதிவு செய்ய மேலே வாகனத்தைத் தேர்ந்தெடுக்கவும்.",
     "categoryRequired": "வகையை உள்ளிடவும்",
     "documentTypeRequired": "ஆவண வகையை உள்ளிடவும்",
     "categoryPlaceholder": "வகையைத் தேர்ந்தெடு அல்லது தட்டச்சு செய்",

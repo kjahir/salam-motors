@@ -99,6 +99,12 @@
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700;
   }
+  /* A solid, unmissable call-to-action for "you must act before you can continue" —
+     acknowledging a blocking compliance issue, for example. Distinct from btn-secondary's
+     neutral outline so it doesn't read as just another optional action. */
+  .btn-warning {
+    @apply btn bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 shadow-sm;
+  }
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
   }

@@ -42,14 +42,28 @@ export async function fetchAppSettings(): Promise<AppSettings> {
   return data as AppSettings;
 }
 
+/**
+ * `app_settings` is one row per org. Like `updateCompanyPreferences` below, this used to
+ * update with no filter at all and lean entirely on RLS to hit the right row - which made
+ * a save that changed nothing (e.g. the RLS `with check` on `org_update_app_settings`
+ * silently excluding a row that the caller wasn't owner/manager on) indistinguishable from
+ * a save that succeeded, since PostgREST answers a zero-row UPDATE with the same empty 204
+ * as a one-row UPDATE. The org filter is now explicit, and `select()` makes the affected
+ * row observable so a no-op is reported as the failure it is instead of quietly resetting
+ * on the next reload.
+ */
 export async function updateAppSettings(
   patch: Pick<AppSettings, "estimated_profit_margin_low_pct" | "estimated_profit_margin_high_pct">,
+  orgId: string,
   updatedBy: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("app_settings")
-    .update({ ...patch, updated_by: updatedBy });
-  if (error) throw error;
+    .update({ ...patch, updated_by: updatedBy, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .select("org_id");
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Profit margin settings were not updated - you may not have permission to change them.");
 }
 
 /**
@@ -82,7 +96,7 @@ export async function updateCompanyPreferences(
     })
     .eq("org_id", orgId)
     .select("org_id");
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("Company settings were not updated - you may not have permission to change them.");
 }
 

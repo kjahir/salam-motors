@@ -15,7 +15,7 @@ import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Modal } from "@/components/ui/Modal";
-import { VehicleSearchField } from "@/components/VehicleSearchField";
+import { DualRangeSlider } from "@/components/ui/DualRangeSlider";
 import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
@@ -62,10 +62,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [editingMargin, setEditingMargin] = useState(false);
   /** Which headline tile's detail popup is open. */
   const [panel, setPanel] = useState<"stock" | "month" | "finance" | null>(null);
-  /** "Sell Vehicle" has no vehicle in context yet — this picks one, then hands off to the
-   *  vehicle's own Sale tab (the one canonical Record Sale design, also reached from
-   *  ManageVehicles and the vehicle page itself). */
-  const [sellPickerOpen, setSellPickerOpen] = useState(false);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +133,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const totalSalesAllTime = summaries.reduce((s, x) => s + x.sale_price, 0);
     const totalProfitAllTime = summaries.reduce((s, x) => s + (x.gross_profit ?? 0), 0);
     const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
-    const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+    const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
     const estProfitLow = inStock.reduce((s, v) => {
       const cost = summaryMap.get(v.id)?.total_vehicle_cost ?? 0;
       return s + computeEstimatedProfitRange(cost, marginLow, marginHigh).low;
@@ -232,7 +228,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         actions={
           <>
             <LanguageSwitcher preferredLanguages={settings?.preferred_languages ?? null} />
-            <button onClick={() => setSellPickerOpen(true)} className="btn-sell">
+            <button onClick={() => onNavigate("quick-add-sale")} className="btn-sell">
               <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
             </button>
             <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
@@ -458,17 +454,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           }}
         />
       )}
-
-      <Modal open={sellPickerOpen} onClose={() => setSellPickerOpen(false)} title={t("dashboard.sellVehicle")}>
-        <VehicleSearchField
-          value=""
-          onChange={(vehicleId) => {
-            if (!vehicleId) return;
-            setSellPickerOpen(false);
-            onNavigate("vehicle", { vehicleId, tab: "sale" });
-          }}
-        />
-      </Modal>
     </div>
   );
 }
@@ -484,7 +469,7 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   const [high, setHigh] = useState(settings.estimated_profit_margin_high_pct);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, orgId } = useAuth();
 
   const handleLowChange = (v: number) => {
     setLow(v);
@@ -499,10 +484,12 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   const previewHigh = totalCost * (high / 100);
 
   const handleSave = async () => {
+    if (!orgId) return;
     setSaving(true);
     try {
       await updateAppSettings(
         { estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high },
+        orgId,
         user?.email ?? "Unknown",
       );
       toast(t("dashboard.marginUpdated"), "success");
@@ -548,47 +535,6 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
         </div>
       </div>
     </Modal>
-  );
-}
-
-function DualRangeSlider({ low, high, onLowChange, onHighChange, min = 0, max = 100 }: {
-  low: number;
-  high: number;
-  onLowChange: (value: number) => void;
-  onHighChange: (value: number) => void;
-  min?: number;
-  max?: number;
-}) {
-  const thumbClass =
-    "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer " +
-    "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:shadow [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-none";
-
-  return (
-    <div className="relative h-6 flex items-center">
-      <div className="absolute inset-x-0 h-1.5 rounded-full bg-slate-200" />
-      <div
-        className="absolute h-1.5 rounded-full bg-emerald-400"
-        style={{ left: `${low}%`, right: `${100 - high}%` }}
-      />
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={low}
-        onChange={(e) => onLowChange(Number(e.target.value))}
-        className={`absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:border-amber-500 [&::-moz-range-thumb]:border-amber-500 ${thumbClass}`}
-      />
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={high}
-        onChange={(e) => onHighChange(Number(e.target.value))}
-        className={`absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:border-emerald-600 [&::-moz-range-thumb]:border-emerald-600 ${thumbClass}`}
-      />
-    </div>
   );
 }
 

@@ -390,6 +390,12 @@
     "saleProjectionTitle": "Sale Projection",
     "askingPrice": "Asking Price",
     "minimumPrice": "Minimum Price",
+    "minimumSellingPrice": "Minimum Selling Price",
+    "maximumSellingPrice": "Maximum Selling Price",
+    "negotiatePrice": "Negotiate Price",
+    "recommendedRange": "{{low}}%-{{high}}% recommended margin",
+    "applyPrice": "Apply Price",
+    "priceApplied": "Selling price applied",
     "estimatedProfitRange": "Estimated Profit Range",
     "ofTotalCost": "of total cost",
     "salesSummary": "Sales Summary",
@@ -454,6 +460,7 @@
   },
   "policiesPage": {
     "title": "Compliance Policies",
+    "titleWithDealer": "Compliance Policies of {{dealer}}",
     "description": "Document and financial-evidence rules enforced across every vehicle",
     "failedToLoad": "Failed to load policies",
     "failedToLoadShort": "Failed to load",
@@ -1146,7 +1153,9 @@
       "save": "Save changes",
       "saved": "Company details updated",
       "saveFailed": "Failed to update company details",
-      "ownerOnlyName": "Only the owner can rename the dealership"
+      "ownerOnlyName": "Only the owner can rename the dealership",
+      "marginRange": "Profit Margin Range",
+      "marginRangeHint": "Sets the recommended margin band shown when negotiating a sale price on a vehicle's Sale tab. Dealers can still choose a price outside this range."
     }
   },
   "saleSigning": {
@@ -1590,6 +1599,7 @@
     "pickVehicleDocument": "Choose a vehicle above to record its documents.",
     "pickVehicleInspection": "Choose a vehicle above to record an inspection.",
     "pickVehicleView": "Choose a vehicle above to see its full record.",
+    "pickVehicleSale": "Choose a vehicle above to record its sale.",
     "categoryRequired": "Enter a category",
     "documentTypeRequired": "Enter a document type",
     "categoryPlaceholder": "Select or type a category",

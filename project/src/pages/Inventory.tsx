@@ -72,7 +72,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
   const complianceMap = useMemo(() => new Map(complianceStatuses.map((c) => [c.vehicle_id, c])), [complianceStatuses]);
   const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
-  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
 
   const filtered = useMemo(() => {
     const soldStatuses = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];

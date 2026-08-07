@@ -77,8 +77,9 @@ export function Policies() {
   const [submitting, setSubmitting] = useState(false);
   const [loadingDefaults, setLoadingDefaults] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, orgName } = useAuth();
   const { t } = useTranslation();
+  const pageTitle = orgName ? t("policiesPage.titleWithDealer", { dealer: orgName }) : t("policiesPage.title");
 
   const translateStatic = useCallback((value: string) => t("status." + value, { defaultValue: value }), [t]);
   const translateCategory = useCallback((category: string) => t("status." + COMPLIANCE_CATEGORY_LABELS[category], { defaultValue: COMPLIANCE_CATEGORY_LABELS[category] }), [t]);
@@ -235,7 +236,7 @@ export function Policies() {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title={t("policiesPage.title")} />
+        <PageHeader title={pageTitle} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -244,7 +245,7 @@ export function Policies() {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title={t("policiesPage.title")} />
+        <PageHeader title={pageTitle} />
         <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("policiesPage.failedToLoadShort")} description={error} /></Card>
       </div>
     );
@@ -253,7 +254,7 @@ export function Policies() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <PageHeader
-        title={t("policiesPage.title")}
+        title={pageTitle}
         description={t("policiesPage.description")}
         icon={<ShieldCheck size={20} />}
         actions={

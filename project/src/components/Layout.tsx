@@ -20,6 +20,7 @@ import {
   Receipt,
   FileText,
   ClipboardCheck,
+  ShoppingCart,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { usePermissions } from "@/lib/usePermissions";
@@ -35,6 +36,7 @@ export type PageKey =
   | "quick-add-expense"
   | "quick-add-document"
   | "quick-add-inspection"
+  | "quick-add-sale"
   | "view-vehicle"
   | "vehicle"
   | "parties"
@@ -53,14 +55,17 @@ export type PageKey =
 // dropdown at the top (src/components/VehicleSelectField.tsx), the desktop counterpart to
 // the mobile "+" icon row's targets (src/mobile/MobileApp.tsx's ADD_TARGETS).
 //
-// "View Vehicle" and "Make Sales" are deliberately absent: viewing a vehicle is what
-// clicking an Inventory row does, and selling starts from the Sell Vehicle button on the
-// Dashboard and on the vehicle itself.
+// "View Vehicle" is deliberately absent: viewing a vehicle is what clicking an Inventory
+// row does. "Make Sales" (quick-add-sale) picks a vehicle and drops straight into that
+// vehicle's own Sale tab (src/pages/QuickAddSale.tsx embeds VehicleDetail with
+// initialTab="sale") — the same canonical Record Sale design also reached via the Sell
+// Vehicle button on the Dashboard and on the vehicle page itself.
 const VEHICLE_GROUP: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
   { key: "manage-vehicles", labelKey: "nav.manageVehicles", icon: <PlusCircle size={15} /> },
   { key: "quick-add-expense", labelKey: "vehicleDetail.expenses", icon: <Receipt size={15} /> },
   { key: "quick-add-document", labelKey: "vehicleDetail.documents", icon: <FileText size={15} /> },
   { key: "quick-add-inspection", labelKey: "vehicleDetail.inspection", icon: <ClipboardCheck size={15} /> },
+  { key: "quick-add-sale", labelKey: "dashboard.sellVehicle", icon: <ShoppingCart size={15} /> },
 ];
 
 export interface NavigateParams {

@@ -150,7 +150,7 @@ export function VehicleDetail({ vehicleId, onNavigate, onBack, initialTab, openE
   const profit = useMemo(() => computeProfit(vehicle?.sale, cost), [vehicle, cost]);
   const funding = useMemo(() => computePartnerFunding(vehicle?.investments ?? []), [vehicle]);
   const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
-  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
   const estRange = useMemo(
     () => computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh),
     [cost, marginLow, marginHigh],
@@ -1699,6 +1699,10 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
   const { t } = useTranslation();
   const [showBuyers, setShowBuyers] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  // Where the dealer is opening negotiation, as a margin % over total cost — starts at the
+  // midpoint of the configured recommended range but is draggable across the full 0-100
+  // slider, so it can go beyond that range in either direction.
+  const [negotiateMarginPct, setNegotiateMarginPct] = useState(() => Math.round((marginLow + marginHigh) / 2));
   const [form, setForm] = useState({
     buyer_party_id: "",
     sale_price: "",
@@ -1843,7 +1847,16 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
     );
   }
 
-  const estRange = computeEstimatedProfitRange(cost.totalVehicleCost, marginLow, marginHigh);
+  const minPrice = cost.totalVehicleCost * (1 + marginLow / 100);
+  const maxPrice = cost.totalVehicleCost * (1 + marginHigh / 100);
+  const negotiatedSellingPrice = cost.totalVehicleCost * (1 + negotiateMarginPct / 100);
+  const negotiatedProfit = cost.totalVehicleCost * (negotiateMarginPct / 100);
+
+  const handleApplyPrice = () => {
+    setForm((f) => ({ ...f, sale_price: String(Math.round(negotiatedSellingPrice)) }));
+    setShowBuyers(true);
+    toast(t("vehicleDetail.priceApplied"), "success");
+  };
 
   return (
     <div className="space-y-5">
@@ -1865,13 +1878,29 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
 
       <Card className="p-5">
         <h3 className="font-semibold text-slate-900 mb-4">{t("vehicleDetail.saleProjectionTitle")}</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <Spec label={t("vehicleDetail.askingPrice")} value={formatINR(vehicle.asking_price)} />
-          <Spec label={t("vehicleDetail.minimumPrice")} value={formatINR(vehicle.minimum_price)} />
-          <div>
-            <p className="text-xs text-slate-500">{t("vehicleDetail.estimatedProfitRange")}</p>
-            <p className="text-sm font-bold mt-0.5 text-emerald-600">{formatINRRange(estRange.low, estRange.high)}</p>
-            <p className="text-xs text-slate-400 mt-1">{marginLow}%–{marginHigh}% {t("vehicleDetail.ofTotalCost")}</p>
+        <div className="grid grid-cols-2 gap-4 mb-5">
+          <Spec label={t("vehicleDetail.minimumSellingPrice")} value={formatINR(minPrice)} />
+          <Spec label={t("vehicleDetail.maximumSellingPrice")} value={formatINR(maxPrice)} />
+        </div>
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-slate-800">{t("vehicleDetail.negotiatePrice")}</span>
+            <span className="rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-sm font-bold text-orange-600 tabular-nums">{negotiateMarginPct}%</span>
+          </div>
+          <NegotiateSlider value={negotiateMarginPct} onChange={setNegotiateMarginPct} bandLow={marginLow} bandHigh={marginHigh} />
+          <p className="text-xs text-slate-400 mt-1.5">{t("vehicleDetail.recommendedRange", { low: marginLow, high: marginHigh })}</p>
+          <div className="flex flex-wrap items-center justify-between gap-4 mt-4 rounded-lg bg-brand-50 border border-brand-200 p-4">
+            <div>
+              <p className="text-xs font-medium text-brand-700">{t("vehicleDetail.sellingPrice")}</p>
+              <p className="text-lg font-bold text-brand-900 mt-0.5">{formatINR(negotiatedSellingPrice)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-brand-700">{t("vehicleDetail.profit")}</p>
+              <p className="text-lg font-bold text-emerald-700 mt-0.5">{formatINR(negotiatedProfit)}</p>
+            </div>
+            <button type="button" onClick={handleApplyPrice} className="btn-primary btn-sm">
+              <CheckCircle2 size={14} /> {t("vehicleDetail.applyPrice")}
+            </button>
           </div>
         </div>
       </Card>
@@ -1909,7 +1938,7 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
                   {t("vehicleDetail.nonBlockingIssues", { count: manualViolations.length, list: manualViolations.map((v) => v.name).join(", ") })}
                 </p>
                 {unacknowledgedManual.length > 0 ? (
-                  <button type="button" onClick={handleAcknowledgeAll} disabled={acknowledging} className="btn-secondary btn-sm">
+                  <button type="button" onClick={handleAcknowledgeAll} disabled={acknowledging} className="btn-warning btn-sm">
                     {acknowledging ? <Spinner size={12} /> : null} {t("vehicleDetail.acknowledgeAndProceed")}
                   </button>
                 ) : (
@@ -1951,6 +1980,39 @@ function SaleTab({ vehicle, cost, profit, funding, partners, marginLow, marginHi
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+// A single-thumb 0-100 slider for the negotiate-margin tool: the solid emerald band marks
+// the org's configured recommended range (Team -> Company), but the thumb can be dragged
+// past either edge of it, since a dealer must be able to negotiate outside that range too.
+// The thumb is orange rather than brand blue so this one control reads as "live and
+// adjustable" against the static Spec fields around it.
+function NegotiateSlider({ value, onChange, bandLow, bandHigh, min = 0, max = 100 }: {
+  value: number;
+  onChange: (value: number) => void;
+  bandLow: number;
+  bandHigh: number;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <div className="relative h-8 flex items-center">
+      <div className="absolute inset-x-0 h-2.5 rounded-full bg-slate-200" />
+      <div
+        className="absolute h-2.5 rounded-full bg-emerald-500"
+        style={{ left: `${bandLow}%`, right: `${100 - bandHigh}%` }}
+      />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="absolute inset-x-0 w-full appearance-none bg-transparent cursor-grab active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-md [&::-webkit-slider-thumb]:bg-orange-600 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-md [&::-moz-range-thumb]:bg-orange-600 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:shadow [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:border-solid"
+      />
     </div>
   );
 }
