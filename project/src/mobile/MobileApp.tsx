@@ -268,7 +268,7 @@ export function MobileApp() {
       case "add-inspection":
         return <MobileAddInspection vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("inspection")} />;
       case "add-sale":
-        return <MobileAddSale vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={genericBack("sale")} />;
+        return <MobileAddSale vehicleId={vehicleId ?? undefined} onBack={genericBack("sale")} />;
       case "view-vehicle":
         return <MobileViewVehicle vehicleId={vehicleId ?? undefined} onNavigate={navigate} onBack={() => navigate("inventory")} />;
       case "more":

@@ -7,14 +7,14 @@ import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
-import { computeCostBreakdown, computeProfit, computeOverallScore, documentCompleteness, computeEstimatedProfitRange } from "@/lib/calc";
-import { fetchVehicleFull, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
+import { computeCostBreakdown, computePartnerFunding, computeProfit, computeOverallScore, documentCompleteness, computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicleFull, fetchPartners, fetchCompliancePolicies, fetchAppSettings } from "@/lib/queries";
 import { evaluateVehicleCompliance, findViolatingRecordIds, acknowledgeViolation, isHardBlocking, type ComplianceViolation } from "@/lib/compliance";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { FileUploadGrid } from "./ui/FileUploadGrid";
 import { SEVERITY_RANK } from "@/lib/constants";
 import type { UploadedFile } from "@/lib/uploadedFile";
-import type { VehicleWithRelations, InspectionItem, CompliancePolicy, AppSettings } from "@/lib/types";
+import type { VehicleWithRelations, InspectionItem, CompliancePolicy, AppSettings, Partner } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 import { MobileDocumentsTab } from "./MobileDocumentsTab";
 import { MobileExpensesTab } from "./MobileExpensesTab";
@@ -31,6 +31,7 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
   highlightPolicyId?: string;
 }) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
+  const [partners, setPartners] = useState<Partner[]>([]);
   const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,13 +53,15 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [v, pol, st] = await Promise.all([
+      const [v, p, pol, st] = await Promise.all([
         fetchVehicleFull(vehicleId),
+        fetchPartners(),
         fetchCompliancePolicies(),
         fetchAppSettings(),
       ]);
       if (cancelled) return;
       setVehicle(v);
+      setPartners(p);
       setPolicies(pol);
       setSettings(st);
       setLoading(false);
@@ -69,6 +72,7 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
   }, [vehicleId]);
 
   const cost = useMemo(() => computeCostBreakdown(vehicle?.purchase, vehicle?.expenses ?? []), [vehicle]);
+  const funding = useMemo(() => computePartnerFunding(vehicle?.investments ?? []), [vehicle]);
   const profit = useMemo(() => computeProfit(vehicle?.sale, cost), [vehicle, cost]);
   const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
   const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
@@ -112,7 +116,7 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
           <>
             {!isSold && (
               <button
-                onClick={() => onNavigate("add-sale", { vehicleId })}
+                onClick={() => setTab("sale")}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-mobile-primary active:bg-mobile-bg"
                 aria-label={t("dashboard.sellVehicle")}
               >
@@ -187,9 +191,14 @@ export function MobileVehicleDetail({ vehicleId, onNavigate, onBack, initialTab,
         {tab === "sale" && (
           <MobileSaleTab
             vehicle={vehicle}
+            cost={cost}
+            funding={funding}
+            partners={partners}
             profit={profit}
+            marginLow={marginLow}
+            marginHigh={marginHigh}
             complianceViolations={complianceViolations}
-            onNavigate={onNavigate}
+            onChanged={reload}
           />
         )}
       </div>

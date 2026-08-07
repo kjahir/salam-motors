@@ -776,6 +776,8 @@
     "netRevenue": "நிகர வருவாய்",
     "margin": "மார்ஜின்",
     "returnOnCost": "செலவில் வருமானம்",
+    "profitDistribution": "லாப விநியோகம்",
+    "noDistributions": "லாப விநியோகங்கள் கணக்கிடப்படவில்லை",
     "saleBlocked": "விற்பனை தடுக்கப்பட்டது - திறந்த Critical எச்சரிக்கைகள்",
     "resolveBeforeSale": "விற்பனை பதிவு செய்வதற்கு முன் இவற்றை தீர்க்கவும்: {{alerts}}",
     "notSold": "இன்னும் விற்கப்படவில்லை",

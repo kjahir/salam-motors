@@ -776,6 +776,8 @@
     "netRevenue": "నికర ఆదాయం",
     "margin": "మార్జిన్",
     "returnOnCost": "వ్యయంపై రాబడి",
+    "profitDistribution": "లాభ పంపిణీ",
+    "noDistributions": "లాభ పంపిణీలు లెక్కించబడలేదు",
     "saleBlocked": "అమ్మకం నిరోధించబడింది - ఓపెన్ క్రిటికల్ అలర్ట్‌లు",
     "resolveBeforeSale": "అమ్మకం నమోదు చేసే ముందు వీటిని పరిష్కరించండి: {{alerts}}",
     "notSold": "ఇంకా అమ్మలేదు",

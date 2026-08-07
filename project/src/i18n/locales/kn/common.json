@@ -776,6 +776,8 @@
     "netRevenue": "ನಿವ್ವಳ ಆದಾಯ",
     "margin": "ಮಾರ್ಜಿನ್",
     "returnOnCost": "ವೆಚ್ಚದ ಮೇಲಿನ ಆದಾಯ",
+    "profitDistribution": "ಲಾಭ ಹಂಚಿಕೆ",
+    "noDistributions": "ಯಾವುದೇ ಲಾಭ ಹಂಚಿಕೆ ಲೆಕ್ಕಹಾಕಿಲ್ಲ",
     "saleBlocked": "ಮಾರಾಟ ತಡೆಹಿಡಿಯಲಾಗಿದೆ - ಗಂಭೀರ ಅಲರ್ಟ್‌ಗಳು ಬಾಕಿ ಇವೆ",
     "resolveBeforeSale": "ಮಾರಾಟ ದಾಖಲಿಸುವ ಮೊದಲು ಇವುಗಳನ್ನು ಪರಿಹರಿಸಿ: {{alerts}}",
     "notSold": "ಇನ್ನೂ ಮಾರಾಟವಾಗಿಲ್ಲ",

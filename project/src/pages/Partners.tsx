@@ -643,12 +643,12 @@ function SettlementQueueTable({ distributions, selectedIds, selectedPartnerId, o
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex items-center justify-between p-4 border-b border-slate-100">
+      <div className="flex flex-col gap-3 p-4 border-b border-slate-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-900">{t("partnersPage.settlementQueueTitle")}</h3>
           <p className="text-xs text-slate-500 mt-0.5">{t("partnersPage.multiSelectHint")}</p>
         </div>
-        <button onClick={onSettleSelected} disabled={selectedIds.size < 2} className="btn-primary btn-sm">
+        <button onClick={onSettleSelected} disabled={selectedIds.size < 2} className="btn-primary btn-sm sm:shrink-0">
           <Banknote size={14} /> {t("partnersPage.settleSelected", { count: selectedIds.size })}
         </button>
       </div>
@@ -661,11 +661,13 @@ function SettlementQueueTable({ distributions, selectedIds, selectedPartnerId, o
               <tr className="text-left text-xs text-slate-600">
                 <th className="px-4 py-3 w-8"></th>
                 <th className="px-4 py-3 font-medium">{t("financePage.columns.partner")}</th>
-                <th className="px-4 py-3 font-medium">{t("financePage.columns.vehicle")}</th>
-                <th className="px-4 py-3 font-medium text-right">{t("financePage.columns.principal")}</th>
-                <th className="px-4 py-3 font-medium text-right">{t("financePage.columns.profit")}</th>
-                <th className="px-4 py-3 font-medium text-right">{t("financePage.columns.total")}</th>
-                <th className="px-4 py-3 font-medium text-right">{t("financePage.columns.paid")}</th>
+                {/* Principal/Profit/Total/Paid are context for the Balance figure that
+                    actually drives the Settle decision — hidden below sm so the row still
+                    fits without horizontal scroll; Balance and Status always show. */}
+                <th className="hidden sm:table-cell px-4 py-3 font-medium text-right">{t("financePage.columns.principal")}</th>
+                <th className="hidden sm:table-cell px-4 py-3 font-medium text-right">{t("financePage.columns.profit")}</th>
+                <th className="hidden sm:table-cell px-4 py-3 font-medium text-right">{t("financePage.columns.total")}</th>
+                <th className="hidden sm:table-cell px-4 py-3 font-medium text-right">{t("financePage.columns.paid")}</th>
                 <th className="px-4 py-3 font-medium text-right">{t("partnersPage.balance")}</th>
                 <th className="px-4 py-3 font-medium">{t("financePage.columns.status")}</th>
                 <th className="px-4 py-3"></th>
@@ -685,18 +687,18 @@ function SettlementQueueTable({ distributions, selectedIds, selectedPartnerId, o
                         className="h-4 w-4 rounded border-slate-300"
                       />
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{d.partner?.name ?? "—"}</td>
                     <td className="px-4 py-3">
+                      <p className="font-medium text-slate-900">{d.partner?.name ?? "—"}</p>
                       {d.vehicle_id ? (
-                        <button onClick={() => onNavigate("vehicle", { vehicleId: d.vehicle_id })} className="text-left text-brand-600 hover:text-brand-700">
+                        <button onClick={() => onNavigate("vehicle", { vehicleId: d.vehicle_id })} className="text-left text-xs text-brand-600 hover:text-brand-700">
                           {vehicleRef(d.vehicle)}
                         </button>
-                      ) : "—"}
+                      ) : <span className="text-xs text-slate-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-right">{formatINR(d.principal_return)}</td>
-                    <td className="px-4 py-3 text-right text-emerald-600 font-medium">{formatINR(d.profit_share)}</td>
-                    <td className="px-4 py-3 text-right font-bold">{formatINR(d.total_entitlement)}</td>
-                    <td className="px-4 py-3 text-right">{formatINR(d.amount_paid)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-right">{formatINR(d.principal_return)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-right text-emerald-600 font-medium">{formatINR(d.profit_share)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-right font-bold">{formatINR(d.total_entitlement)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-right">{formatINR(d.amount_paid)}</td>
                     <td className="px-4 py-3 text-right text-amber-600 font-medium">{formatINR(d.balance_payable)}</td>
                     <td className="px-4 py-3"><Badge color={d.status === "Partially paid" ? "amber" : "slate"}>{trStatus(d.status)}</Badge></td>
                     <td className="px-4 py-3 text-right">
