@@ -256,7 +256,7 @@ export function MobileSaleContent({ vehicle, cost, funding, partners, profit, ma
           <Card className="p-4 space-y-4">
             <PartyPickerField partyType="buyer" value={form.buyer_party_id} onChange={(v) => setForm((f) => ({ ...f, buyer_party_id: v }))} />
             <Field label={t("mobileVehicle.salePrice")} required>
-              <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="79000" />
+              <input className="mobile-input-scale w-full rounded-xl border border-mobile-border bg-white px-3.5 py-2.5" type="number" value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} placeholder="" />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("mobileVehicle.discount")}>
