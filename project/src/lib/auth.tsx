@@ -13,11 +13,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeRef = useRef(true);
 
   const loadAccess = async (userId: string) => {
-    const [{ data: membershipRow }, { data: partnerRow }] = await Promise.all([
+    const [membershipResult, partnerResult] = await Promise.all([
       supabase.from("memberships").select("*").eq("user_id", userId).eq("status", "active").maybeSingle(),
       supabase.from("partners").select("*").eq("auth_user_id", userId).is("deleted_at", null).maybeSingle(),
     ]);
     if (!activeRef.current) return;
+
+    let membershipRow = membershipResult.data;
+    const partnerRow = partnerResult.data;
+
+    if (!membershipRow && !partnerRow) {
+      // No active membership yet - the user may have a pending team invite
+      // that was never accepted (invite emails don't auto-activate access).
+      const { data: accepted } = await supabase.rpc("accept_own_invite");
+      if (accepted && activeRef.current) {
+        const { data: refreshed } = await supabase
+          .from("memberships").select("*").eq("user_id", userId).eq("status", "active").maybeSingle();
+        membershipRow = refreshed;
+      }
+    }
+    if (!activeRef.current) return;
+
     setMembership((membershipRow as Membership) ?? null);
     setPartner((partnerRow as Partner) ?? null);
 

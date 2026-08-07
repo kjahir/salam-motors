@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/useToast";
@@ -21,6 +22,7 @@ export function DeleteVehicleModal({ vehicle, open, onClose, onDeleted }: Delete
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const blocked = BLOCKED_STATUSES.includes(vehicle.current_status);
   const canDelete = !blocked && confirmText.trim() === vehicle.stock_number;
@@ -40,17 +42,17 @@ export function DeleteVehicleModal({ vehicle, open, onClose, onDeleted }: Delete
           entity_type: "vehicle",
           entity_id: vehicle.id,
           action: "deleted",
-          performed_by: user?.email ?? "Unknown",
-          reason: `Deleted ${vehicle.stock_number}: ${vehicle.manufacturer} ${vehicle.model}`,
+          performed_by: user?.email ?? t("auth.user"),
+          reason: t("deleteVehicle.reason", { stock: vehicle.stock_number, vehicle: `${vehicle.manufacturer} ${vehicle.model}` }),
         })
         .then(({ error: auditErr }) => {
           if (auditErr) console.error("Failed to log vehicle deletion", auditErr);
         });
-      toast(`${vehicle.stock_number} deleted`, "success");
+      toast(t("deleteVehicle.deleted", { stock: vehicle.stock_number }), "success");
       onDeleted();
       onClose();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to delete vehicle", "error");
+      toast(e instanceof Error ? e.message : t("deleteVehicle.failed"), "error");
     } finally {
       setDeleting(false);
     }
@@ -60,15 +62,15 @@ export function DeleteVehicleModal({ vehicle, open, onClose, onDeleted }: Delete
     <Modal
       open={open}
       onClose={onClose}
-      title={`Delete ${vehicle.stock_number}`}
+      title={t("deleteVehicle.title", { stock: vehicle.stock_number })}
       footer={
         blocked ? (
-          <button onClick={onClose} className="btn-secondary">Close</button>
+          <button onClick={onClose} className="btn-secondary">{t("deleteVehicle.close")}</button>
         ) : (
           <>
-            <button onClick={onClose} className="btn-secondary">Cancel</button>
+            <button onClick={onClose} className="btn-secondary">{t("deleteVehicle.cancel")}</button>
             <button onClick={handleDelete} disabled={!canDelete || deleting} className="btn-primary bg-red-600 hover:bg-red-700 disabled:opacity-50">
-              {deleting ? <Spinner size={14} /> : null} Delete Permanently
+              {deleting ? <Spinner size={14} /> : null} {t("deleteVehicle.deletePermanently")}
             </button>
           </>
         )
@@ -77,23 +79,17 @@ export function DeleteVehicleModal({ vehicle, open, onClose, onDeleted }: Delete
       {blocked ? (
         <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 p-4">
           <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-800">
-            {vehicle.stock_number} is marked <strong>{vehicle.current_status}</strong> and has completed sale records.
-            It can't be deleted — this preserves the sale, profit-distribution, and financial history.
-          </p>
+          <p className="text-sm text-amber-800">{t("deleteVehicle.blockedMessage", { stock: vehicle.stock_number, status: t("status." + vehicle.current_status, { defaultValue: vehicle.current_status }) })}</p>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 p-4">
             <AlertTriangle size={18} className="text-red-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-800">
-              This permanently deletes the vehicle and everything linked to it — purchase, expenses, investments,
-              inspections, documents, listing, and status history. This cannot be undone.
-            </p>
+            <p className="text-sm text-red-800">{t("deleteVehicle.warning")}</p>
           </div>
           <div>
             <label className="label">
-              Type <span className="font-mono font-semibold">{vehicle.stock_number}</span> to confirm
+              <Trans i18nKey="deleteVehicle.confirmLabel" values={{ stock: vehicle.stock_number }} components={{ stock: <span className="font-mono font-semibold" /> }} />
             </label>
             <input
               className="input"

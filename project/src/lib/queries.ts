@@ -30,6 +30,10 @@ import type {
   VehicleMedia,
   AppSettings,
   Membership,
+  AssistantAuditTurn,
+  AssistantAuditToolCall,
+  AssistantTraceEvent,
+  VehicleAdPost,
 } from "./types";
 
 export async function fetchAppSettings(): Promise<AppSettings> {
@@ -38,21 +42,77 @@ export async function fetchAppSettings(): Promise<AppSettings> {
   return data as AppSettings;
 }
 
+/**
+ * `app_settings` is one row per org. Like `updateCompanyPreferences` below, this used to
+ * update with no filter at all and lean entirely on RLS to hit the right row - which made
+ * a save that changed nothing (e.g. the RLS `with check` on `org_update_app_settings`
+ * silently excluding a row that the caller wasn't owner/manager on) indistinguishable from
+ * a save that succeeded, since PostgREST answers a zero-row UPDATE with the same empty 204
+ * as a one-row UPDATE. The org filter is now explicit, and `select()` makes the affected
+ * row observable so a no-op is reported as the failure it is instead of quietly resetting
+ * on the next reload.
+ */
 export async function updateAppSettings(
   patch: Pick<AppSettings, "estimated_profit_margin_low_pct" | "estimated_profit_margin_high_pct">,
+  orgId: string,
   updatedBy: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("app_settings")
-    .update({ ...patch, updated_by: updatedBy });
+    .update({ ...patch, updated_by: updatedBy, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .select("org_id");
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Profit margin settings were not updated - you may not have permission to change them.");
+}
+
+/**
+ * `app_settings` is one row per org, so this used to update with no filter at all and
+ * lean entirely on RLS to hit the right row. That made a save that changed nothing
+ * indistinguishable from a save that succeeded: PostgREST answers a zero-row UPDATE with
+ * the same empty 204 as a one-row UPDATE, so a row the caller could read but not write
+ * came back as "saved" and the old value reappeared on reload. The org filter is now
+ * explicit, and `select()` makes the affected row observable so a no-op can be reported
+ * as the failure it is.
+ *
+ * `preferred_language` is derived here rather than passed in: it is the legacy single
+ * "company's own language" column, and keeping it equal to the first non-English entry of
+ * `preferred_languages` means the two can never disagree.
+ */
+export async function updateCompanyPreferences(
+  patch: Pick<AppSettings, "preferred_languages" | "instagram_handle" | "twitter_handle" | "whatsapp_business_number" | "website_url" | "google_business_handle">,
+  orgId: string,
+  updatedBy: string,
+): Promise<void> {
+  const languages = patch.preferred_languages?.length ? patch.preferred_languages : ["en"];
+  const { data, error } = await supabase
+    .from("app_settings")
+    .update({
+      ...patch,
+      preferred_languages: languages,
+      preferred_language: languages.find((code) => code !== "en") ?? "en",
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("org_id", orgId)
+    .select("org_id");
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Company settings were not updated - you may not have permission to change them.");
+}
+
+export async function fetchVehicleAdPosts(vehicleId: string): Promise<VehicleAdPost[]> {
+  const { data, error } = await supabase
+    .from("vehicle_ad_posts")
+    .select("*")
+    .eq("vehicle_id", vehicleId);
   if (error) throw error;
+  return (data ?? []) as VehicleAdPost[];
 }
 
 export async function fetchPublicPassport(slug: string): Promise<PublicPassport | null> {
+  if (slug.length === 0 || slug.length > 100 || slug.trim() !== slug) return null;
   const { data, error } = await supabase
-    .from("vehicle_passport_public")
-    .select("*")
-    .eq("public_slug", slug)
+    .rpc("get_public_vehicle_passport", { p_public_slug: slug })
     .maybeSingle();
   if (error) throw error;
   return data as PublicPassport | null;
@@ -167,7 +227,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
       .eq("vehicle_id", vehicleId),
     supabase
       .from("profit_distributions")
-      .select("*, partner:partners(*)")
+      .select("*, partner:partners(*), payments:profit_settlement_payments(*)")
       .eq("vehicle_id", vehicleId),
     supabase
       .from("vehicle_status_history")
@@ -249,7 +309,7 @@ export async function fetchVehicleFull(vehicleId: string): Promise<VehicleWithRe
     documents: documentsRes.data as VehicleDocument[],
     sale: sale ? { ...sale, buyer, payments: salePayments } : null,
     profit_share_allocations: allocationsRes.data as (ProfitShareAllocation & { partner: Partner | null })[],
-    profit_distributions: distributionsRes.data as (ProfitDistribution & { partner: Partner | null })[],
+    profit_distributions: distributionsRes.data as (ProfitDistribution & { partner: Partner | null; payments: ProfitSettlementPayment[] })[],
     status_history: statusHistoryRes.data as VehicleStatusHistory[],
     alerts: alertsRes.data as Alert[],
     listing: listingRes.data as Listing | null,
@@ -358,14 +418,82 @@ export async function fetchProfitDistributions(): Promise<
   return (data ?? []) as (ProfitDistribution & { partner: Partner | null; vehicle: Vehicle | null; payments: ProfitSettlementPayment[] })[];
 }
 
-export async function fetchAuditLogs(): Promise<AuditLog[]> {
-  const { data, error } = await supabase
+export interface AuditLogFilters {
+  /**
+   * Every `entity_type` spelling that counts as the selected entity. App-code inserts use
+   * the singular ("vehicle"); the generic audit trigger uses the table name ("vehicles").
+   */
+  entityTypes?: string[];
+  action?: string;
+  actor?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface AuditLogPage {
+  rows: AuditLog[];
+  count: number;
+}
+
+export async function fetchAuditLogs(
+  filters: AuditLogFilters = {},
+  page = 0,
+  pageSize = 50,
+): Promise<AuditLogPage> {
+  let query = supabase
     .from("audit_logs")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("performed_at", { ascending: false })
-    .limit(50);
+    .range(page * pageSize, page * pageSize + pageSize - 1);
+  if (filters.entityTypes?.length) query = query.in("entity_type", filters.entityTypes);
+  if (filters.action) query = query.eq("action", filters.action);
+  if (filters.actor) query = query.ilike("performed_by", `%${filters.actor}%`);
+  if (filters.dateFrom) query = query.gte("performed_at", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("performed_at", filters.dateTo);
+  const { data, error, count } = await query;
   if (error) throw error;
-  return data ?? [];
+  return { rows: data ?? [], count: count ?? 0 };
+}
+
+export async function fetchAssistantTurns(
+  orgId: string,
+  page = 0,
+  pageSize = 25,
+): Promise<AssistantAuditTurn[]> {
+  const { data, error } = await supabase.rpc("admin_list_assistant_turns", {
+    p_org_id: orgId,
+    p_limit: pageSize,
+    p_offset: page * pageSize,
+  });
+  if (error) throw error;
+  return (data ?? []) as AssistantAuditTurn[];
+}
+
+export async function fetchAssistantTraceForRun(
+  runId: string,
+): Promise<AssistantTraceEvent[]> {
+  const { data, error } = await supabase
+    .from("assistant_trace_events")
+    .select("id, run_id, workflow_step, category, event_key, status, summary, details_redacted, duration_ms, occurred_at")
+    .eq("run_id", runId)
+    .order("occurred_at", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AssistantTraceEvent[];
+}
+
+export async function fetchAssistantToolCallsForRun(
+  runId: string,
+): Promise<AssistantAuditToolCall[]> {
+  const { data, error } = await supabase
+    .from("assistant_tool_calls")
+    .select(
+      "id, tool_name, status, risk_level, arguments_redacted, result_redacted, error_code, error_message, started_at, completed_at, created_at",
+    )
+    .eq("run_id", runId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AssistantAuditToolCall[];
 }
 
 export async function fetchMechanics(): Promise<Party[]> {

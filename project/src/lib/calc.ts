@@ -24,7 +24,12 @@ const REFURB_CATEGORIES = new Set(["Spare parts", "Mechanic labour", "Service", 
 const HOLDING_CATEGORIES = new Set(["Yard rent"]);
 const LOGISTICS_CATEGORIES = new Set(["Transportation", "Fuel", "Test ride"]);
 const DOCS_SELLING_CATEGORIES = new Set(["Document transfer", "Insurance", "PUC", "Advertisement", "Broker commission"]);
-const OTHER_CATEGORIES = new Set(["Penalty or fine", "Other"]);
+// Everything not in the four buckets above rolls into "Other" — including "Penalty or
+// fine", the literal "Other" category, and any free-typed custom category (the expense
+// entry combobox lets a dealer type a category that isn't in EXPENSE_CATEGORIES). Without
+// this catch-all, a custom-category expense was counted in totalVehicleCost but silently
+// missing from every line item in the cost sheet.
+const KNOWN_CATEGORIES = new Set([...REFURB_CATEGORIES, ...HOLDING_CATEGORIES, ...LOGISTICS_CATEGORIES, ...DOCS_SELLING_CATEGORIES]);
 
 export function isApproved(e: Expense): boolean {
   return e.approval_status === "Approved" || e.approval_status === "Paid";
@@ -40,7 +45,7 @@ export function computeCostBreakdown(
   const holdingCost = sumByCategory(approved, HOLDING_CATEGORIES);
   const logisticsCost = sumByCategory(approved, LOGISTICS_CATEGORIES);
   const documentationSellingCost = sumByCategory(approved, DOCS_SELLING_CATEGORIES);
-  const otherCost = sumByCategory(approved, OTHER_CATEGORIES);
+  const otherCost = approved.filter((e) => !KNOWN_CATEGORIES.has(e.category)).reduce((s, e) => s + e.amount, 0);
   const totalExpense = approved.reduce((s, e) => s + e.amount, 0);
   const totalVehicleCost = purchaseCost + totalExpense;
   return {

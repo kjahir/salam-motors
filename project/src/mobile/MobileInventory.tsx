@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Bike, PlusCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs } from "./ui/primitives";
 import { formatINR, formatINRRange, daysSince } from "@/lib/format";
 import { computeEstimatedProfitRange } from "@/lib/calc";
@@ -16,7 +17,14 @@ function complianceTagColor(maxSeverityRank: number): "success" | "warning" | "e
   return "success";
 }
 
-export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) {
+export function MobileInventory({ onNavigate, manageMode, onBack, vehicleFilter }: {
+  onNavigate: MobileNavigate;
+  /** When true: shows only in-stock, changes title to Manage Vehicle, adds back button. */
+  manageMode?: boolean;
+  onBack?: () => void;
+  /** Bottom Bar V2's selected vehicle, if any — narrows the list to just that vehicle. */
+  vehicleFilter?: string | null;
+}) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
@@ -24,6 +32,9 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"in-stock" | "sold">("in-stock");
+  const { t } = useTranslation();
+
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value.replace(/_/g, " ") });
 
   useEffect(() => {
     let cancelled = false;
@@ -50,8 +61,10 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
   const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
 
   const filtered = useMemo(() => {
+    if (vehicleFilter) return vehicles.filter((v) => v.id === vehicleFilter);
+    const activeFilter = manageMode ? "in-stock" : filter;
     return vehicles
-      .filter((v) => (filter === "sold" ? SOLD_STATUSES.includes(v.current_status) : !SOLD_STATUSES.includes(v.current_status)))
+      .filter((v) => (activeFilter === "sold" ? SOLD_STATUSES.includes(v.current_status) : !SOLD_STATUSES.includes(v.current_status)))
       .filter((v) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
@@ -62,25 +75,29 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
           .includes(q);
       })
       .sort((a, b) => daysSince(b.onboarded_at) - daysSince(a.onboarded_at));
-  }, [vehicles, filter, search]);
+  }, [vehicles, filter, manageMode, search, vehicleFilter]);
 
   return (
     <div>
-      <TopBar title="Inventory" />
-      <div className="p-4 space-y-3">
-        <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search stock #, reg, model..." className="pl-10" />
+      <TopBar title={manageMode ? t("mobileDashboard.manageVehicle") : t("mobileInventory.title")} onBack={onBack} />
+      {!vehicleFilter && (
+        <div className="p-4 space-y-3">
+          <div className="relative">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("mobileInventory.searchPlaceholder")} className="pl-10" />
+          </div>
+          {!manageMode && (
+            <SegmentedTabs
+              tabs={[
+                { key: "in-stock", label: t("mobileInventory.inStock") },
+                { key: "sold", label: t("mobileInventory.sold") },
+              ]}
+              active={filter}
+              onChange={(k) => setFilter(k as "in-stock" | "sold")}
+            />
+          )}
         </div>
-        <SegmentedTabs
-          tabs={[
-            { key: "in-stock", label: "In Stock" },
-            { key: "sold", label: "Sold" },
-          ]}
-          active={filter}
-          onChange={(k) => setFilter(k as "in-stock" | "sold")}
-        />
-      </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16"><Spinner size={26} /></div>
@@ -89,11 +106,11 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
           <Card className="p-5">
             <EmptyState
               icon={<Bike size={20} />}
-              title="No vehicles found"
-              description={filter === "in-stock" ? "Try a different search, or add a vehicle." : "No sold vehicles match this search."}
+              title={t("mobileInventory.noVehicles")}
+              description={filter === "in-stock" ? t("mobileInventory.inStockEmpty") : t("mobileInventory.soldEmpty")}
               action={filter === "in-stock" ? (
                 <button onClick={() => onNavigate("add-vehicle")} className="inline-flex items-center gap-1.5 text-sm font-medium text-mobile-primary">
-                  <PlusCircle size={15} /> Add Vehicle
+                  <PlusCircle size={15} /> {t("mobileInventory.addVehicle")}
                 </button>
               ) : undefined}
             />
@@ -111,24 +128,24 @@ export function MobileInventory({ onNavigate }: { onNavigate: MobileNavigate }) 
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-mobile-text truncate">{v.manufacturer} {v.model}</p>
-                    <p className="text-xs text-mobile-text-muted font-mono">{v.stock_number} · {v.registration_number ?? "No reg"}</p>
+                    <p className="text-xs text-mobile-text-muted font-mono">{v.stock_number} · {v.registration_number ?? t("mobileInventory.noReg")}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <Tag color={SOLD_STATUSES.includes(v.current_status) ? "success" : days >= 60 ? "error" : days >= 30 ? "warning" : "neutral"}>
-                      {SOLD_STATUSES.includes(v.current_status) ? v.current_status.replace(/_/g, " ") : `${days}d`}
+                      {SOLD_STATUSES.includes(v.current_status) ? trStatus(v.current_status) : `${days}d`}
                     </Tag>
                     <Tag color={complianceTagColor(compliance?.max_severity_rank ?? 0)}>
-                      {(compliance?.violation_count ?? 0) > 0 ? `${compliance!.violation_count} issue${compliance!.violation_count > 1 ? "s" : ""}` : "Compliant"}
+                      {(compliance?.violation_count ?? 0) > 0 ? t("mobileInventory.issueCount", { count: compliance!.violation_count }) : t("mobileInventory.compliant")}
                     </Tag>
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-mobile-border">
                   <div>
-                    <p className="text-[10px] text-mobile-text-muted uppercase">Total Cost</p>
+                    <p className="text-[10px] text-mobile-text-muted uppercase"> {t("mobileInventory.totalCost")}</p>
                     <p className="text-sm font-medium text-mobile-text">{formatINR(s?.total_vehicle_cost ?? 0)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] text-mobile-text-muted uppercase">{SOLD_STATUSES.includes(v.current_status) ? "Profit" : "Est. Profit"}</p>
+                    <p className="text-[10px] text-mobile-text-muted uppercase">{SOLD_STATUSES.includes(v.current_status) ? t("mobileInventory.profit") : t("mobileInventory.estProfit")}</p>
                     {SOLD_STATUSES.includes(v.current_status) ? (
                       <p className={`text-sm font-semibold ${(s?.gross_profit ?? 0) >= 0 ? "text-mobile-success" : "text-mobile-error"}`}>
                         {formatINR(s?.gross_profit)}

@@ -1,46 +1,45 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bike,
   Wallet,
   TrendingUp,
-  IndianRupee,
+  BellRing,
   AlertTriangle,
-  CheckCircle2,
-  Wrench,
-  Clock,
   ArrowRight,
-  FileWarning,
-  ShieldAlert,
   Activity,
   Pencil,
+  ShoppingCart,
 } from "lucide-react";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
-import { Card, StatCard, EmptyState } from "@/components/ui/Card";
+import { Card, EmptyState } from "@/components/ui/Card";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Modal } from "@/components/ui/Modal";
-import { Badge, StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
+import { DualRangeSlider } from "@/components/ui/DualRangeSlider";
+import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import { computeEstimatedProfitRange } from "@/lib/calc";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import {
   fetchVehicles,
   fetchFinancialSummaries,
   fetchAlerts,
   fetchComplianceStatuses,
-  fetchCompliancePolicies,
   fetchInvestments,
   fetchAppSettings,
   updateAppSettings,
   fetchPartners,
   fetchProfitDistributions,
 } from "@/lib/queries";
-import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
+import { syncAllVehiclesCompliance } from "@/lib/compliance";
 import type {
   Vehicle,
   VehicleFinancialSummary,
   Alert,
   VehicleComplianceStatus,
-  CompliancePolicy,
   Investment,
   AppSettings,
   Partner,
@@ -53,14 +52,16 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
+  const { t } = useTranslation();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
   const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
-  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [editingMargin, setEditingMargin] = useState(false);
+  /** Which headline tile's detail popup is open. */
+  const [panel, setPanel] = useState<"stock" | "month" | "finance" | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,12 +72,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     (async () => {
       try {
         await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p, inv, st, pt, dist] = await Promise.all([
+        const [v, s, a, c, inv, st, pt, dist] = await Promise.all([
           fetchVehicles(),
           fetchFinancialSummaries(),
           fetchAlerts(),
           fetchComplianceStatuses(),
-          fetchCompliancePolicies(),
           fetchInvestments(),
           fetchAppSettings(),
           fetchPartners(),
@@ -87,13 +87,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         setSummaries(s);
         setAlerts(a);
         setComplianceStatuses(c);
-        setPolicies(p);
         setInvestments(inv);
         setSettings(st);
         setPartners(pt);
         setDistributions(dist);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
+        if (!cancelled) setError(e instanceof Error ? e.message : t("dashboard.failedToLoad"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -101,9 +100,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
-  const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
 
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
@@ -125,7 +123,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     });
 
     const totalInvestment = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
     const totalCost = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
     const totalAsking = inStock.reduce((s, v) => s + (v.asking_price ?? 0), 0);
@@ -135,7 +133,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const totalSalesAllTime = summaries.reduce((s, x) => s + x.sale_price, 0);
     const totalProfitAllTime = summaries.reduce((s, x) => s + (x.gross_profit ?? 0), 0);
     const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
-    const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+    const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
     const estProfitLow = inStock.reduce((s, v) => {
       const cost = summaryMap.get(v.id)?.total_vehicle_cost ?? 0;
       return s + computeEstimatedProfitRange(cost, marginLow, marginHigh).low;
@@ -203,7 +201,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Dashboard" description="Business overview and key metrics" />
+        <PageHeader title={t("dashboard.title")} description={t("dashboard.description")} />
         <div className="flex items-center justify-center py-20">
           <Spinner size={32} />
         </div>
@@ -214,9 +212,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Dashboard" />
+        <PageHeader title={t("dashboard.title")} />
         <Card className="p-6">
-          <EmptyState icon={<AlertTriangle size={24} />} title="Failed to load dashboard" description={error} />
+          <EmptyState icon={<AlertTriangle size={24} />} title={t("dashboard.failedToLoad")} description={error} />
         </Card>
       </div>
     );
@@ -225,115 +223,72 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
-        title="Dashboard"
-        description="Business overview and key metrics"
+        title={t("dashboard.title")}
+        description={t("dashboard.description")}
         actions={
-          <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
-            <Bike size={16} /> Onboard Vehicle
-          </button>
+          <>
+            <LanguageSwitcher preferredLanguages={settings?.preferred_languages ?? null} />
+            <button onClick={() => onNavigate("quick-add-sale")} className="btn-sell">
+              <ShoppingCart size={16} /> {t("dashboard.sellVehicle")}
+            </button>
+            <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
+              <Bike size={16} /> {t("dashboard.onboardVehicle")}
+            </button>
+          </>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Left: As of Today + This Month, stacked */}
-        <div className="lg:col-span-2 space-y-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">As of Today</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StatCard
-                label="Vehicles in Stock"
-                value={stats.inStockCount}
-                icon={<Bike size={20} />}
-                color="brand"
-                hint={`${stats.readyForSale} ready for sale · ${stats.underRepair} under repair`}
-                onClick={() => onNavigate("inventory")}
-              />
-              <StatCard
-                label="Total Inventory Cost"
-                value={formatINR(stats.totalCost, { compact: true })}
-                icon={<Wallet size={20} />}
-                color="slate"
-                hint={`Asking value ${formatINR(stats.totalAsking, { compact: true })}`}
-              />
-              <StatCard
-                label="Estimated Profit"
-                value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
-                icon={<TrendingUp size={20} />}
-                color="emerald"
-                hint={
-                  <span className="inline-flex items-center gap-1">
-                    {stats.marginLow}%–{stats.marginHigh}% margin over cost <Pencil size={11} className="opacity-60" />
-                  </span>
-                }
-                onClick={() => setEditingMargin(true)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">This Month</h3>
-              <button onClick={() => onNavigate("finance")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-                View all <ArrowRight size={14} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StatCard label="Bought This Month" value={stats.boughtThisMonth} icon={<Bike size={18} />} color="brand" />
-              <StatCard label="Sold This Month" value={stats.soldThisMonth} icon={<CheckCircle2 size={18} />} color="emerald" />
-              <StatCard
-                label="Realised Profit (Month)"
-                value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
-                icon={<IndianRupee size={18} />}
-                color="emerald"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Financial Overview, spanning the height of both rows on the left */}
-        <Card className="p-5 h-full">
-          <h3 className="font-semibold text-slate-900 mb-4">Financial Overview</h3>
-          <div className="space-y-3">
-            <FinancialStatRow label="Total Invested" value={formatINR(stats.totalInvestment, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow label="Total Cost" value={formatINR(stats.totalCostAllTime, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow label="Total Sales" value={formatINR(stats.totalSalesAllTime, { compact: true })} color="text-slate-900" />
-            <FinancialStatRow
-              label="Total Profit"
-              value={formatINR(stats.totalProfitAllTime, { compact: true })}
-              color={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
-            />
-          </div>
-          <div className="pt-4 mt-4 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Profit Share by Partner</p>
-            {partnerShares.length === 0 ? (
-              <p className="text-sm text-slate-400">No partners configured yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {partnerShares.map((p) => (
-                  <FinancialStatRow key={p.id} label={p.name} value={formatINR(p.amount, { compact: true })} color="text-emerald-600" />
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
+      {/* Four headline tiles. Each one carries a single number worth reacting to; the
+          supporting figures live behind a click so the page reads in one glance. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <HeadlineTile
+          label={t("dashboard.stockTile")}
+          value={String(stats.inStockCount)}
+          hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
+          icon={<Bike size={24} />}
+          color="brand"
+          onClick={() => setPanel("stock")}
+        />
+        <HeadlineTile
+          label={t("dashboard.thisMonth")}
+          value={String(stats.soldThisMonth)}
+          hint={t("dashboard.soldBoughtHint", { bought: stats.boughtThisMonth })}
+          icon={<TrendingUp size={24} />}
+          color="emerald"
+          onClick={() => setPanel("month")}
+        />
+        <HeadlineTile
+          label={t("dashboard.financialOverview")}
+          value={formatINR(stats.totalProfitAllTime, { compact: true })}
+          hint={t("dashboard.totalProfitHint")}
+          icon={<Wallet size={24} />}
+          color={stats.totalProfitAllTime >= 0 ? "amber" : "red"}
+          onClick={() => setPanel("finance")}
+        />
+        <HeadlineTile
+          label={t("dashboard.alertsTile")}
+          value={String(stats.openAlerts)}
+          hint={t("dashboard.alertsVehiclesHint", { count: stats.openAlertVehicleCount })}
+          icon={<BellRing size={24} />}
+          color={stats.openAlerts > 0 ? "red" : "slate"}
+          onClick={() => onNavigate("alerts")}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Inventory ageing */}
-        <Card className="p-5 lg:col-span-2">
+      {/* Inventory ageing — kept as a table, per its own request */}
+      <div>
+        <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900">Inventory Ageing</h3>
+            <h3 className="font-semibold text-slate-900">{t("dashboard.inventoryAgeing")}</h3>
             <button onClick={() => onNavigate("inventory")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-              View all <ArrowRight size={14} />
+              {t("dashboard.viewAll")} <ArrowRight size={14} />
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <AgeingStat label="0–29 days" count={stats.inStockCount - stats.aged30} color="emerald" />
-            <AgeingStat label="30–44 days" count={stats.aged30 - stats.aged45} color="amber" />
-            <AgeingStat label="45–59 days" count={stats.aged45 - stats.aged60} color="orange" />
-            <AgeingStat label="60+ days" count={stats.aged60} color="red" />
+            <AgeingStat label={t("dashboard.ageing0")} count={stats.inStockCount - stats.aged30} color="emerald" />
+            <AgeingStat label={t("dashboard.ageing30")} count={stats.aged30 - stats.aged45} color="amber" />
+            <AgeingStat label={t("dashboard.ageing45")} count={stats.aged45 - stats.aged60} color="orange" />
+            <AgeingStat label={t("dashboard.ageing60")} count={stats.aged60} color="red" />
           </div>
           <div className="space-y-2">
             {stats.inStock
@@ -351,7 +306,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       {v.manufacturer} {v.model}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {v.stock_number} · {formatINR(stats.summaryMap.get(v.id)?.total_vehicle_cost ?? 0)}
+                      {vehicleRef(v)} · {formatINR(stats.summaryMap.get(v.id)?.total_vehicle_cost ?? 0)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 ml-3">
@@ -366,88 +321,28 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               ))}
           </div>
         </Card>
-
-        {/* Open alerts */}
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900">
-              Recent Alerts List ({stats.openAlerts} open alert{stats.openAlerts !== 1 ? "s" : ""} from {stats.openAlertVehicleCount} vehicle{stats.openAlertVehicleCount !== 1 ? "s" : ""})
-            </h3>
-            <button onClick={() => onNavigate("alerts")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-              All <ArrowRight size={14} />
-            </button>
-          </div>
-          {stats.openAlertList.length === 0 ? (
-            <EmptyState icon={<CheckCircle2 size={20} />} title="No open alerts" />
-          ) : (
-            <div className="space-y-3">
-              {stats.openAlertList.map((a) => {
-                const sevColor =
-                  a.severity === "Critical" ? "red" : a.severity === "High" ? "orange" : a.severity === "Warning" ? "amber" : "slate";
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => onNavigate("vehicle", { vehicleId: a.vehicle_id, ...resolveAlertDestination(a.policy_id ? policyMap.get(a.policy_id) : undefined), highlightPolicyId: a.policy_id ?? undefined })}
-                    className="flex items-start gap-3 w-full text-left p-3 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    <div
-                      className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                        sevColor === "red"
-                          ? "bg-red-50 text-red-600"
-                          : sevColor === "orange"
-                            ? "bg-orange-50 text-orange-600"
-                            : sevColor === "amber"
-                              ? "bg-amber-50 text-amber-600"
-                              : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {a.alert_type === "Ageing" ? (
-                        <Clock size={14} />
-                      ) : a.alert_type === "Document" ? (
-                        <FileWarning size={14} />
-                      ) : a.alert_type === "Repair" ? (
-                        <Wrench size={14} />
-                      ) : a.alert_type === "Compliance" ? (
-                        <ShieldAlert size={14} />
-                      ) : (
-                        <AlertTriangle size={14} />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 truncate">{a.title}</p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {a.vehicle?.stock_number} · {a.vehicle?.manufacturer} {a.vehicle?.model}
-                      </p>
-                    </div>
-                    <Badge color={sevColor as "red" | "orange" | "amber" | "slate"}>{a.severity}</Badge>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </Card>
       </div>
 
       {/* Recent activity / vehicles */}
       <Card className="p-5 mt-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-            <Activity size={18} className="text-slate-400" /> Recently Onboarded
+            <Activity size={18} className="text-slate-400" /> {t("dashboard.recentlyOnboarded")}
           </h3>
           <button onClick={() => onNavigate("inventory")} className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-            View inventory <ArrowRight size={14} />
+            {t("dashboard.viewInventory")} <ArrowRight size={14} />
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                <th className="pb-2 font-medium">Stock #</th>
-                <th className="pb-2 font-medium">Vehicle</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium text-right">Cost</th>
-                <th className="pb-2 font-medium text-right">Asking</th>
-                <th className="pb-2 font-medium">Onboarded</th>
+                <th className="pb-2 font-medium">{t("dashboard.registration")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.vehicle")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.status")}</th>
+                <th className="pb-2 font-medium text-right">{t("dashboard.cost")}</th>
+                <th className="pb-2 font-medium text-right">{t("dashboard.asking")}</th>
+                <th className="pb-2 font-medium">{t("dashboard.onboarded")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -459,7 +354,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     onClick={() => onNavigate("vehicle", { vehicleId: v.id })}
                     className="cursor-pointer hover:bg-slate-50"
                   >
-                    <td className="py-2.5 font-mono text-xs text-slate-600">{v.stock_number}</td>
+                    <td className="py-2.5 font-mono text-xs text-slate-600">{vehicleRef(v)}</td>
                     <td className="py-2.5">
                       <span className="font-medium text-slate-900">{v.manufacturer} {v.model}</span>
                       <span className="text-slate-400 ml-1">· {v.manufacture_year}</span>
@@ -475,6 +370,78 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </table>
         </div>
       </Card>
+
+      <Modal open={panel === "stock"} onClose={() => setPanel(null)} title={t("dashboard.asOfToday")}>
+        <div className="space-y-1">
+          <DetailRow
+            label={t("dashboard.vehiclesInStock")}
+            value={String(stats.inStockCount)}
+            hint={t("dashboard.readyUnderRepair", { ready: stats.readyForSale, repair: stats.underRepair })}
+            onClick={() => {
+              setPanel(null);
+              onNavigate("inventory");
+            }}
+          />
+          <DetailRow
+            label={t("dashboard.totalInventoryCost")}
+            value={formatINR(stats.totalCost, { compact: true })}
+            hint={t("dashboard.askingValue", { value: formatINR(stats.totalAsking, { compact: true }) })}
+          />
+          <DetailRow
+            label={t("dashboard.estimatedProfit")}
+            value={formatINRRange(stats.estProfitLow, stats.estProfitHigh, { compact: true })}
+            hint={
+              <span className="inline-flex items-center gap-1">
+                {t("dashboard.marginHint", { low: stats.marginLow, high: stats.marginHigh })} <Pencil size={11} className="opacity-60" />
+              </span>
+            }
+            valueClass="text-emerald-600"
+            onClick={() => {
+              setPanel(null);
+              setEditingMargin(true);
+            }}
+          />
+        </div>
+      </Modal>
+
+      <Modal open={panel === "month"} onClose={() => setPanel(null)} title={t("dashboard.thisMonth")}>
+        <div className="space-y-1">
+          <DetailRow label={t("dashboard.boughtThisMonth")} value={String(stats.boughtThisMonth)} />
+          <DetailRow label={t("dashboard.soldThisMonth")} value={String(stats.soldThisMonth)} valueClass="text-emerald-600" />
+          <DetailRow
+            label={t("dashboard.realisedProfitMonth")}
+            value={formatINR(stats.realisedProfitThisMonth, { compact: true })}
+            valueClass={stats.realisedProfitThisMonth >= 0 ? "text-emerald-600" : "text-red-600"}
+            onClick={() => {
+              setPanel(null);
+              onNavigate("finance");
+            }}
+          />
+        </div>
+      </Modal>
+
+      <Modal open={panel === "finance"} onClose={() => setPanel(null)} title={t("dashboard.financialOverview")}>
+        <div className="space-y-1">
+          <DetailRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvestment, { compact: true })} />
+          <DetailRow label={t("dashboard.totalCost")} value={formatINR(stats.totalCostAllTime, { compact: true })} />
+          <DetailRow label={t("dashboard.totalSales")} value={formatINR(stats.totalSalesAllTime, { compact: true })} />
+          <DetailRow
+            label={t("dashboard.totalProfit")}
+            value={formatINR(stats.totalProfitAllTime, { compact: true })}
+            valueClass={stats.totalProfitAllTime >= 0 ? "text-emerald-600" : "text-red-600"}
+          />
+          <div className="pt-4 mt-3 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("dashboard.profitShareByPartner")}</p>
+            {partnerShares.length === 0 ? (
+              <p className="text-sm text-slate-400">{t("dashboard.noPartners")}</p>
+            ) : (
+              partnerShares.map((ps) => (
+                <DetailRow key={ps.id} label={ps.name} value={formatINR(ps.amount, { compact: true })} valueClass="text-emerald-600" />
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {editingMargin && settings && (
         <EstimatedProfitMarginModal
@@ -497,11 +464,12 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (settings: AppSettings) => void;
 }) {
+  const { t } = useTranslation();
   const [low, setLow] = useState(settings.estimated_profit_margin_low_pct);
   const [high, setHigh] = useState(settings.estimated_profit_margin_high_pct);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, orgId } = useAuth();
 
   const handleLowChange = (v: number) => {
     setLow(v);
@@ -516,16 +484,18 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   const previewHigh = totalCost * (high / 100);
 
   const handleSave = async () => {
+    if (!orgId) return;
     setSaving(true);
     try {
       await updateAppSettings(
         { estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high },
+        orgId,
         user?.email ?? "Unknown",
       );
-      toast("Estimated profit margin updated", "success");
+      toast(t("dashboard.marginUpdated"), "success");
       onSaved({ ...settings, estimated_profit_margin_low_pct: low, estimated_profit_margin_high_pct: high });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update margin", "error");
+      toast(e instanceof Error ? e.message : t("dashboard.failedUpdateMargin"), "error");
     } finally {
       setSaving(false);
     }
@@ -535,32 +505,31 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
     <Modal
       open
       onClose={onClose}
-      title="Estimated Profit Margin"
+      title={t("dashboard.marginModalTitle")}
       footer={
         <>
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={onClose} className="btn-secondary">{t("dashboard.cancel")}</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary disabled:opacity-50">
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("dashboard.saving") : t("dashboard.save")}
           </button>
         </>
       }
     >
       <div className="space-y-5">
         <p className="text-sm text-slate-600">
-          Estimated Profit = current in-stock cost × margin. Drag the sliders to preview instantly — saving applies
-          the new range across Dashboard, Inventory, and Vehicle Detail.
+          {t("dashboard.marginHelp")}
         </p>
 
         <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
-          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Estimated Profit Preview</p>
+          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">{t("dashboard.estimatedProfitPreview")}</p>
           <p className="text-xl font-bold text-emerald-700 mt-1">{formatINRRange(previewLow, previewHigh, { compact: true })}</p>
-          <p className="text-xs text-emerald-600 mt-0.5">Across current in-stock cost of {formatINR(totalCost, { compact: true })}</p>
+          <p className="text-xs text-emerald-600 mt-0.5">{t("dashboard.acrossCurrentStockCost", { value: formatINR(totalCost, { compact: true }) })}</p>
         </div>
 
         <div className="px-1 py-2">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-amber-600 tabular-nums">Low {low}%</span>
-            <span className="text-sm font-bold text-emerald-600 tabular-nums">High {high}%</span>
+            <span className="text-sm font-bold text-amber-600 tabular-nums">{t("dashboard.low", { value: low })}</span>
+            <span className="text-sm font-bold text-emerald-600 tabular-nums">{t("dashboard.high", { value: high })}</span>
           </div>
           <DualRangeSlider low={low} high={high} onLowChange={handleLowChange} onHighChange={handleHighChange} />
         </div>
@@ -569,53 +538,90 @@ function EstimatedProfitMarginModal({ settings, totalCost, onClose, onSaved }: {
   );
 }
 
-function DualRangeSlider({ low, high, onLowChange, onHighChange, min = 0, max = 100 }: {
-  low: number;
-  high: number;
-  onLowChange: (value: number) => void;
-  onHighChange: (value: number) => void;
-  min?: number;
-  max?: number;
-}) {
-  const thumbClass =
-    "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer " +
-    "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:shadow [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-none";
+// A dashboard headline: one number big enough to read across the room, with the
+// supporting figures a click away rather than crowding the page. Each tile owns a colour
+// so the four read as four different things at a glance rather than one grey row.
+const TILE_THEMES = {
+  brand: {
+    card: "border-brand-200 bg-gradient-to-br from-brand-50 via-white to-white hover:border-brand-300",
+    icon: "bg-brand-600 text-white shadow-sm",
+    value: "text-brand-700",
+    label: "text-brand-600",
+  },
+  emerald: {
+    card: "border-accent-200 bg-gradient-to-br from-accent-50 via-white to-white hover:border-accent-300",
+    icon: "bg-accent-600 text-white shadow-sm",
+    value: "text-accent-700",
+    label: "text-accent-600",
+  },
+  amber: {
+    card: "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white hover:border-amber-300",
+    icon: "bg-amber-500 text-white shadow-sm",
+    value: "text-amber-700",
+    label: "text-amber-600",
+  },
+  red: {
+    card: "border-red-200 bg-gradient-to-br from-red-50 via-white to-white hover:border-red-300",
+    icon: "bg-red-600 text-white shadow-sm",
+    value: "text-red-700",
+    label: "text-red-600",
+  },
+  slate: {
+    card: "border-slate-200 bg-gradient-to-br from-slate-50 via-white to-white hover:border-slate-300",
+    icon: "bg-slate-600 text-white shadow-sm",
+    value: "text-slate-800",
+    label: "text-slate-500",
+  },
+} as const;
 
+function HeadlineTile({ label, value, hint, icon, color, onClick }: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: ReactNode;
+  color: keyof typeof TILE_THEMES;
+  onClick: () => void;
+}) {
+  const theme = TILE_THEMES[color];
   return (
-    <div className="relative h-6 flex items-center">
-      <div className="absolute inset-x-0 h-1.5 rounded-full bg-slate-200" />
-      <div
-        className="absolute h-1.5 rounded-full bg-emerald-400"
-        style={{ left: `${low}%`, right: `${100 - high}%` }}
-      />
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={low}
-        onChange={(e) => onLowChange(Number(e.target.value))}
-        className={`absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:border-amber-500 [&::-moz-range-thumb]:border-amber-500 ${thumbClass}`}
-      />
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={high}
-        onChange={(e) => onHighChange(Number(e.target.value))}
-        className={`absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:border-emerald-600 [&::-moz-range-thumb]:border-emerald-600 ${thumbClass}`}
-      />
-    </div>
+    <button
+      onClick={onClick}
+      className={`card card-hover w-full p-5 text-left transition-all ${theme.card}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-xs font-semibold uppercase tracking-wide ${theme.label}`}>{label}</p>
+          <p className={`mt-2 text-3xl font-bold tracking-tight truncate ${theme.value}`}>{value}</p>
+          {hint && <p className="mt-1.5 text-xs text-slate-500 truncate">{hint}</p>}
+        </div>
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${theme.icon}`}>{icon}</div>
+      </div>
+    </button>
   );
 }
 
-function FinancialStatRow({ label, value, color }: { label: string; value: string; color: string }) {
+/** One supporting figure inside a tile's popup; clickable when it leads somewhere. */
+function DetailRow({ label, value, hint, valueClass = "text-slate-900", onClick }: {
+  label: string;
+  value: string;
+  hint?: ReactNode;
+  valueClass?: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
+      <div className="min-w-0">
+        <p className="text-sm text-slate-600">{label}</p>
+        {hint && <p className="text-xs text-slate-400 mt-0.5">{hint}</p>}
+      </div>
+      <p className={`text-base font-bold shrink-0 ${valueClass}`}>{value}</p>
+    </>
+  );
+  if (!onClick) return <div className="flex items-center justify-between gap-3 py-2.5">{content}</div>;
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-sm text-slate-500 truncate">{label}</p>
-      <p className={`text-sm font-bold shrink-0 ${color}`}>{value}</p>
-    </div>
+    <button onClick={onClick} className="flex w-full items-center justify-between gap-3 rounded-lg py-2.5 px-2 -mx-2 text-left transition-colors hover:bg-slate-50">
+      {content}
+    </button>
   );
 }
 

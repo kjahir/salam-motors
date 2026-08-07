@@ -7,6 +7,9 @@ export interface UploadedFile {
 
 export const isImageName = (name: string) => /\.(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(name);
 
+/** Rehydrate a stored storage path into an UploadedFile for editing UIs. */
+export const fileFromPath = (path: string): UploadedFile => ({ path, name: path.split("/").pop() ?? path });
+
 /** Paths that were on the record when it was opened for editing, so a save can tell what to delete from storage. */
 export const diffRemovedPaths = (original: string[], current: UploadedFile[]) => {
   const currentPaths = new Set(current.map((f) => f.path));

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, Bike, PlusCircle, AlertTriangle, Download, X, Pencil, Trash2, Bell, Share2 } from "lucide-react";
 import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
@@ -19,6 +20,7 @@ interface InventoryProps {
 type AgeingFilter = "all" | "normal" | "attention" | "high" | "breach";
 
 export function Inventory({ onNavigate }: InventoryProps) {
+  const { t } = useTranslation();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -36,7 +38,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [v, s, p, a, c, st] = await Promise.all([
         fetchVehicles(),
@@ -57,20 +59,20 @@ export function Inventory({ onNavigate }: InventoryProps) {
       }
       setOpenAlertCounts(counts);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load inventory");
+      setError(e instanceof Error ? e.message : t("inventory.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
   const complianceMap = useMemo(() => new Map(complianceStatuses.map((c) => [c.vehicle_id, c])), [complianceStatuses]);
   const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
-  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
+  const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
 
   const filtered = useMemo(() => {
     const soldStatuses = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
@@ -145,7 +147,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Inventory" />
+        <PageHeader title={t("inventory.title")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -154,8 +156,8 @@ export function Inventory({ onNavigate }: InventoryProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Inventory" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("inventory.title")} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("inventory.failedToLoadShort")} description={error} /></Card>
       </div>
     );
   }
@@ -163,15 +165,15 @@ export function Inventory({ onNavigate }: InventoryProps) {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
-        title="Inventory"
-        description={`${filtered.length} vehicle${filtered.length !== 1 ? "s" : ""}`}
+        title={t("inventory.title")}
+        description={t("inventory.vehicleCount", { count: filtered.length })}
         actions={
           <>
             <button onClick={handleExport} className="btn-secondary">
-              <Download size={16} /> Export
+              <Download size={16} /> {t("inventory.export")}
             </button>
             <button onClick={() => onNavigate("add-vehicle")} className="btn-primary">
-              <PlusCircle size={16} /> Add Vehicle
+              <PlusCircle size={16} /> {t("inventory.addVehicle")}
             </button>
           </>
         }
@@ -185,7 +187,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search stock #, registration, model, chassis..."
+              placeholder={t("inventory.searchPlaceholder")}
               className="input pl-9"
             />
           </div>
@@ -193,24 +195,24 @@ export function Inventory({ onNavigate }: InventoryProps) {
             <Select
               value={statusFilter}
               onChange={setStatusFilter}
-              options={[{ value: "all", label: "All statuses" }, ...VEHICLE_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))]}
+              options={[{ value: "all", label: t("inventory.allStatuses") }, ...VEHICLE_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))]}
               className="w-auto min-w-[140px]"
             />
             <Select
               value={categoryFilter}
               onChange={setCategoryFilter}
-              options={[{ value: "all", label: "All categories" }, ...VEHICLE_CATEGORIES]}
+              options={[{ value: "all", label: t("inventory.allCategories") }, ...VEHICLE_CATEGORIES]}
               className="w-auto min-w-[130px]"
             />
             <Select
               value={ageingFilter}
               onChange={(v) => setAgeingFilter(v as AgeingFilter)}
               options={[
-                { value: "all", label: "All ageing" },
-                { value: "normal", label: "Normal (0-29d)" },
-                { value: "attention", label: "Attention (30-44d)" },
-                { value: "high", label: "High (45-59d)" },
-                { value: "breach", label: "Breach (60d+)" },
+                { value: "all", label: t("inventory.allAgeing") },
+                { value: "normal", label: t("inventory.normalAgeing") },
+                { value: "attention", label: t("inventory.attentionAgeing") },
+                { value: "high", label: t("inventory.highAgeing") },
+                { value: "breach", label: t("inventory.breachAgeing") },
               ]}
               className="w-auto min-w-[140px]"
             />
@@ -218,7 +220,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
               onClick={() => setShowSold(!showSold)}
               className={`btn ${showSold ? "bg-brand-600 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
             >
-              {showSold ? "Showing sold" : "In stock only"}
+              {showSold ? t("inventory.showingSold") : t("inventory.inStockOnly")}
             </button>
             {activeFilterCount > 0 && (
               <button
@@ -231,7 +233,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                 }}
                 className="btn-ghost btn-sm"
               >
-                <X size={14} /> Clear ({activeFilterCount})
+                <X size={14} /> {t("inventory.clear", { count: activeFilterCount })}
               </button>
             )}
           </div>
@@ -243,9 +245,9 @@ export function Inventory({ onNavigate }: InventoryProps) {
         <Card className="p-6">
           <EmptyState
             icon={<Bike size={24} />}
-            title="No vehicles found"
-            description="Try adjusting filters or onboard a new vehicle."
-            action={<button onClick={() => onNavigate("add-vehicle")} className="btn-primary"><PlusCircle size={16} /> Add Vehicle</button>}
+            title={t("inventory.emptyTitle")}
+            description={t("inventory.emptyDescription")}
+            action={<button onClick={() => onNavigate("add-vehicle")} className="btn-primary"><PlusCircle size={16} /> {t("inventory.addVehicle")}</button>}
           />
         </Card>
       ) : (
@@ -254,17 +256,17 @@ export function Inventory({ onNavigate }: InventoryProps) {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr className="text-left text-xs text-slate-600">
-                  <th className="px-4 py-3 font-medium">Vehicle</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Ageing</th>
-                  <th className="px-4 py-3 font-medium">Compliance</th>
-                  <th className="px-4 py-3 font-medium text-right">Total Cost</th>
-                  <th className="px-4 py-3 font-medium text-right">Asking</th>
-                  <th className="px-4 py-3 font-medium text-right">Est. Profit</th>
-                  <th className="px-4 py-3 font-medium text-right">Invested</th>
-                  <th className="px-4 py-3 font-medium">Onboarded</th>
-                  <th className="px-4 py-3 font-medium text-right">View</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  <th className="px-4 py-3 font-medium">{t("inventory.vehicle")}</th>
+                  <th className="px-4 py-3 font-medium">{t("inventory.status")}</th>
+                  <th className="px-4 py-3 font-medium">{t("inventory.ageing")}</th>
+                  <th className="px-4 py-3 font-medium">{t("inventory.compliance")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("inventory.totalCost")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("inventory.asking")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("inventory.estimatedProfit")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("inventory.invested")}</th>
+                  <th className="px-4 py-3 font-medium">{t("inventory.onboarded")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("inventory.view")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("inventory.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -280,7 +282,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                     >
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{v.manufacturer} {v.model}</div>
-                        <div className="text-xs text-slate-500 font-mono">{v.stock_number} · {v.registration_number ?? "No reg"}</div>
+                        <div className="text-xs text-slate-500 font-mono">{v.stock_number} · {v.registration_number ?? t("inventory.noRegistration")}</div>
                       </td>
                       <td className="px-4 py-3"><StatusBadge status={v.current_status} /></td>
                       <td className="px-4 py-3">
@@ -303,7 +305,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(v.onboarded_at)}</td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => onNavigate("alerts")} className="relative text-slate-400 hover:text-amber-600 p-1.5" title="View alerts">
+                          <button onClick={() => onNavigate("alerts")} className="relative text-slate-400 hover:text-amber-600 p-1.5" title={t("inventory.viewAlerts")}>
                             <Bell size={14} />
                             {(openAlertCounts.get(v.id) ?? 0) > 0 && (
                               <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-semibold text-white">
@@ -311,17 +313,17 @@ export function Inventory({ onNavigate }: InventoryProps) {
                               </span>
                             )}
                           </button>
-                          <button onClick={() => onNavigate("passport", { vehicleId: v.id })} className="text-slate-400 hover:text-brand-600 p-1.5" title="View passport">
+                          <button onClick={() => onNavigate("passport", { vehicleId: v.id })} className="text-slate-400 hover:text-brand-600 p-1.5" title={t("inventory.viewPassport")}>
                             <Share2 size={14} />
                           </button>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setEditingVehicle(v)} className="text-slate-400 hover:text-brand-600 p-1.5" title="Edit vehicle">
+                          <button onClick={() => setEditingVehicle(v)} className="text-slate-400 hover:text-brand-600 p-1.5" title={t("inventory.editVehicle")}>
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => setDeletingVehicle(v)} className="text-slate-400 hover:text-red-600 p-1.5" title="Delete vehicle">
+                          <button onClick={() => setDeletingVehicle(v)} className="text-slate-400 hover:text-red-600 p-1.5" title={t("inventory.deleteVehicle")}>
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -337,7 +339,7 @@ export function Inventory({ onNavigate }: InventoryProps) {
 
       {partners.length > 0 && (
         <p className="text-xs text-slate-400 mt-4 text-center">
-          {partners.length} partner{partners.length !== 1 ? "s" : ""} configured · Click any vehicle to view full details
+          {t("inventory.partnerFooter", { count: partners.length })}
         </p>
       )}
 

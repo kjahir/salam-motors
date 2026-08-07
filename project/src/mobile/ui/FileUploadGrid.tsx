@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Camera, Image as ImageIcon, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, Image as ImageIcon, Paperclip, Upload, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "./primitives";
 import { Lightbox, type LightboxItem } from "@/components/ui/Lightbox";
 import { useMultiFileUpload } from "@/hooks/useMultiFileUpload";
@@ -19,6 +20,7 @@ interface FileUploadGridProps {
 function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket: string; onClick: () => void; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(file.previewUrl ?? null);
   const isImage = isImageName(file.name);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (file.previewUrl) {
@@ -44,7 +46,7 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
           onRemove();
         }}
         className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-mobile-navy/70 text-white"
-        aria-label={`Remove ${file.name}`}
+        aria-label={t("uploads.remove", { name: file.name })}
       >
         <X size={12} />
       </button>
@@ -61,8 +63,29 @@ function Thumb({ file, bucket, onClick, onRemove }: { file: UploadedFile; bucket
 
 export function FileUploadGrid({ bucket, pathPrefix, value, onChange, hint, maxSizeMB = 10, fileAccept = "image/*,.pdf,.doc,.docx" }: FileUploadGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
   const { uploading, cameraRef, libraryRef, fileRef, openCamera, openLibrary, openFile, handleCameraChange, handleLibraryChange, handleFileChange, removeAt } =
     useMultiFileUpload({ bucket, pathPrefix, value, onChange, maxSizeMB });
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const dismiss = (e: MouseEvent | TouchEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("touchstart", dismiss);
+    return () => {
+      document.removeEventListener("mousedown", dismiss);
+      document.removeEventListener("touchstart", dismiss);
+    };
+  }, [menuOpen]);
+
+  const pick = (open: () => void) => {
+    setMenuOpen(false);
+    open();
+  };
 
   const lightboxItems: LightboxItem[] = value.map((f) => ({
     name: f.name,
@@ -90,31 +113,34 @@ export function FileUploadGrid({ bucket, pathPrefix, value, onChange, hint, maxS
         </div>
       )}
 
-      <div className="flex gap-1.5">
+      <div ref={menuRef} className="relative inline-block">
         <button
           type="button"
-          onClick={openCamera}
+          onClick={() => setMenuOpen((o) => !o)}
           disabled={uploading}
-          className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-mobile-border bg-white px-2 py-2 text-xs font-medium text-mobile-text active:bg-mobile-bg disabled:opacity-50"
+          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
+            value.length > 0
+              ? "border-mobile-success bg-mobile-success-bg text-mobile-success"
+              : "border-mobile-border bg-white text-mobile-text-secondary"
+          }`}
         >
-          {uploading ? <Spinner size={13} /> : <Camera size={13} />} Camera
+          {uploading ? <Spinner size={13} /> : <Paperclip size={13} />}
+          {value.length > 0 ? `${value.length} ${t("uploads.attached")}` : t("uploads.addAttachment")}
         </button>
-        <button
-          type="button"
-          onClick={openLibrary}
-          disabled={uploading}
-          className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-mobile-border bg-white px-2 py-2 text-xs font-medium text-mobile-text active:bg-mobile-bg disabled:opacity-50"
-        >
-          {uploading ? <Spinner size={13} /> : <ImageIcon size={13} />} Library
-        </button>
-        <button
-          type="button"
-          onClick={openFile}
-          disabled={uploading}
-          className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-mobile-border bg-white px-2 py-2 text-xs font-medium text-mobile-text active:bg-mobile-bg disabled:opacity-50"
-        >
-          {uploading ? <Spinner size={13} /> : <Upload size={13} />} File
-        </button>
+
+        {menuOpen && (
+          <div className="absolute left-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-xl border border-mobile-border bg-white py-1 shadow-mobile-lg animate-fade-in">
+            <button type="button" onClick={() => pick(openCamera)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-mobile-text active:bg-mobile-bg">
+              <Camera size={15} className="text-mobile-text-secondary" /> {t("uploads.camera")}
+            </button>
+            <button type="button" onClick={() => pick(openLibrary)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-mobile-text active:bg-mobile-bg">
+              <ImageIcon size={15} className="text-mobile-text-secondary" /> {t("uploads.photoLibrary")}
+            </button>
+            <button type="button" onClick={() => pick(openFile)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-mobile-text active:bg-mobile-bg">
+              <Upload size={15} className="text-mobile-text-secondary" /> {t("uploads.file")}
+            </button>
+          </div>
+        )}
       </div>
 
       {lightboxIndex !== null && (

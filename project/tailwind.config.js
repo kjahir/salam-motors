@@ -23,6 +23,7 @@ export default {
           'error-bg': '#FDF1F1',
           warning: '#F0AD2E',
           'warning-bg': '#FFF5DF',
+          purple: '#7C3AED',
           text: '#0B1626',
           'text-secondary': '#4B5563',
           'text-muted': '#6B7280',

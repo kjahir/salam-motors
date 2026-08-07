@@ -1,82 +1,41 @@
 import { useEffect, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
-import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
+import { useTranslation } from "react-i18next";
+import { Check, CheckCircle2, ChevronRight } from "lucide-react";
+import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
-import { PAYMENT_METHODS } from "@/lib/constants";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { canWrite } from "@/lib/entitlements";
 import { checkRegistrationUnique } from "@/lib/queries";
 import { createVehicle } from "@/lib/vehicle";
-import { PartyPickerField } from "@/components/PartyPickerField";
-import { VehicleFormFields, type VehicleCoreFormData } from "@/components/VehicleFormFields";
-import { FileUploadGrid } from "@/components/FileUploadGrid";
+import { VehicleDetailsForm } from "@/components/VehicleDetailsForm";
+import { emptyVehicleForm, type VehicleFullFormData } from "@/lib/vehicleForm";
 import type { UploadedFile } from "@/lib/uploadedFile";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface AddVehicleProps {
   onNavigate: (page: PageKey, params?: NavigateParams) => void;
+  /** Rendered inside Manage Vehicles, which owns the page heading. */
+  embedded?: boolean;
+  /** Lets the host page react to a successful onboard (e.g. select the new vehicle). */
+  onCreated?: (vehicleId: string) => void;
 }
 
-interface FormData extends VehicleCoreFormData {
-  seller_party_id: string;
-  purchase_price: string;
-  broker_commission: string;
-  other_fee: string;
-  payment_method: string;
-  payment_reference: string;
-  handover_location: string;
-  odometer_at_purchase: string;
-  keys_received: boolean;
-  documents_received: boolean;
-  notes: string;
-}
-
-const initialForm: FormData = {
-  registration_number: "",
-  category: "Motorcycle",
-  manufacturer: "",
-  brand: "",
-  model: "",
-  variant: "",
-  fuel_type: "Petrol",
-  colour: "",
-  manufacture_year: String(new Date().getFullYear() - 2),
-  registration_date: "",
-  chassis_number: "",
-  engine_number: "",
-  odometer: "",
-  owner_count: "1",
-  registration_city: "",
-  registration_state: "",
-  current_location: "Central Yard",
-  asking_price: "",
-  minimum_price: "",
-  seller_party_id: "",
-  purchase_price: "",
-  broker_commission: "0",
-  other_fee: "0",
-  payment_method: "UPI",
-  payment_reference: "",
-  handover_location: "",
-  odometer_at_purchase: "",
-  keys_received: true,
-  documents_received: false,
-  notes: "",
-};
-
-export function AddVehicle({ onNavigate }: AddVehicleProps) {
-  const [form, setForm] = useState<FormData>(initialForm);
+export function AddVehicle({ onNavigate, embedded, onCreated }: AddVehicleProps) {
+  const { t } = useTranslation();
+  const [form, setForm] = useState<VehicleFullFormData>(emptyVehicleForm);
   const [regChecking, setRegChecking] = useState(false);
   const [regAvailable, setRegAvailable] = useState<boolean | null>(null);
-  const [showMorePurchase, setShowMorePurchase] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [paymentProofs, setPaymentProofs] = useState<UploadedFile[]>([]);
   const [uploadSessionId, setUploadSessionId] = useState(() => crypto.randomUUID());
   const { toast } = useToast();
   const { user } = useAuth();
+  const { entitlements } = useEntitlements();
 
-  const update = <K extends keyof FormData>(key: K, value: FormData[K]) => {
+  const update = <K extends keyof VehicleFullFormData>(key: K, value: VehicleFullFormData[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
   };
 
@@ -111,7 +70,7 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
 
   const handleCreate = async () => {
     if (!isValid) {
-      toast("Please complete all required fields before submitting", "error");
+      toast(t("vehicleForm.requiredMissing"), "error");
       return;
     }
     setSubmitting(true);
@@ -121,12 +80,13 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
         user?.email ?? "Unknown",
       );
       setCreatedId(v.id);
-      toast(`${v.stock_number} onboarded successfully`, "success");
+      toast(t("vehicleForm.onboardSuccess", { stock: v.stock_number }), "success");
+      onCreated?.(v.id);
     } catch (e) {
       toast(
         e instanceof Error
-          ? `${e.message} — the vehicle was not created and any partial changes were rolled back.`
-          : "Failed to create vehicle. Any partial changes were rolled back.",
+          ? t("vehicleForm.errorRollback", { message: e.message })
+          : t("vehicleForm.createFailedRollback"),
         "error",
       );
     } finally {
@@ -136,29 +96,29 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
 
   if (createdId) {
     return (
-      <div className="p-6 max-w-2xl mx-auto">
+      <div className={embedded ? "max-w-2xl mx-auto" : "p-6 max-w-2xl mx-auto"}>
         <Card className="p-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
             <CheckCircle2 size={28} />
           </div>
-          <h2 className="text-xl font-bold text-slate-900">Vehicle Onboarded</h2>
+          <h2 className="text-xl font-bold text-slate-900">{t("vehicleForm.vehicleOnboarded")}</h2>
           <p className="text-sm text-slate-500 mt-1">
-            The vehicle has been created with its purchase and seller records.
+            {t("vehicleForm.createdDescription")}
           </p>
           <div className="flex items-center justify-center gap-3 mt-6">
             <button onClick={() => onNavigate("vehicle", { vehicleId: createdId })} className="btn-primary">
-              View Vehicle Details <ChevronRight size={16} />
+              {t("vehicleForm.viewVehicleDetails")} <ChevronRight size={16} />
             </button>
             <button
               onClick={() => {
-                setForm(initialForm);
+                setForm(emptyVehicleForm());
                 setCreatedId(null);
                 setPaymentProofs([]);
                 setUploadSessionId(crypto.randomUUID());
               }}
               className="btn-secondary"
             >
-              Onboard Another
+              {t("vehicleForm.onboardAnother")}
             </button>
           </div>
         </Card>
@@ -166,90 +126,43 @@ export function AddVehicle({ onNavigate }: AddVehicleProps) {
     );
   }
 
+  // The database rejects the insert outright when the subscription has
+  // lapsed, so filling in the whole onboarding form would end in a failure
+  // at submit. Say so up front instead.
+  if (!canWrite(entitlements)) {
+    return (
+      <div className={embedded ? "space-y-5" : "p-6 max-w-2xl mx-auto space-y-5"}>
+        {!embedded && <PageHeader title={t("vehicleForm.onboardTitle")} />}
+        <Card className="p-6">
+          <h2 className="text-base font-semibold text-slate-900">
+            {t("billing.banner.read_only.title")}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            {t("billing.banner.read_only.body")}
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-5">
-      <PageHeader title="Onboard Vehicle" description="Capture the essentials now — the rest can be filled in later" />
+    <div className={embedded ? "space-y-5" : "p-6 max-w-3xl mx-auto space-y-5"}>
+      {!embedded && <PageHeader title={t("vehicleForm.onboardTitle")} description={t("vehicleForm.description")} />}
 
-      <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 mb-4">Vehicle Identity</h3>
-        <VehicleFormFields form={form} update={update} regChecking={regChecking} regAvailable={regAvailable} />
-      </Card>
-
-      <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 mb-4">Seller</h3>
-        <PartyPickerField partyType="seller" value={form.seller_party_id} onChange={(v) => update("seller_party_id", v)} />
-      </Card>
-
-      <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 mb-4">Purchase</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Purchase Price (₹)" required>
-            <input className="input" type="number" value={form.purchase_price} onChange={(e) => update("purchase_price", e.target.value)} placeholder="62000" />
-          </Field>
-          <Field label="Broker Commission (₹)">
-            <input className="input" type="number" value={form.broker_commission} onChange={(e) => update("broker_commission", e.target.value)} />
-          </Field>
-        </div>
-
-        <div className="border border-slate-200 rounded-lg mt-4">
-          <button
-            type="button"
-            onClick={() => setShowMorePurchase((o) => !o)}
-            className="flex items-center justify-between w-full p-4 text-left"
-          >
-            <div>
-              <p className="text-sm font-medium text-slate-900">More purchase details</p>
-              <p className="text-xs text-slate-500 mt-0.5">Optional — fill in now or add later from the vehicle's detail page</p>
-            </div>
-            <ChevronDown size={18} className={`text-slate-400 transition-transform shrink-0 ${showMorePurchase ? "rotate-180" : ""}`} />
-          </button>
-          {showMorePurchase && (
-            <div className="px-4 pb-4 border-t border-slate-100 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Other Fees (₹)">
-                <input className="input" type="number" value={form.other_fee} onChange={(e) => update("other_fee", e.target.value)} />
-              </Field>
-              <Field label="Payment Method">
-                <Select value={form.payment_method} onChange={(v) => update("payment_method", v)} options={PAYMENT_METHODS} />
-              </Field>
-              <Field label="Payment Reference">
-                <input className="input" value={form.payment_reference} onChange={(e) => update("payment_reference", e.target.value)} placeholder="UPI/XXXX" />
-              </Field>
-              <div className="sm:col-span-2">
-                <FileUploadGrid
-                  bucket="finance-proofs"
-                  pathPrefix={`purchase-payments/${uploadSessionId}`}
-                  value={paymentProofs}
-                  onChange={setPaymentProofs}
-                  label="Payment Proof"
-                  hint="Add one screenshot per transaction — useful for partial payments, broker fees, or other charges paid separately."
-                />
-              </div>
-              <Field label="Handover Location">
-                <input className="input" value={form.handover_location} onChange={(e) => update("handover_location", e.target.value)} placeholder="Chennai" />
-              </Field>
-              <Field label="Odometer at Purchase">
-                <input className="input" type="number" value={form.odometer_at_purchase} onChange={(e) => update("odometer_at_purchase", e.target.value)} />
-              </Field>
-              <div className="flex items-center gap-6 pt-6">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.keys_received} onChange={(e) => update("keys_received", e.target.checked)} className="rounded border-slate-300" />
-                  Keys received
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.documents_received} onChange={(e) => update("documents_received", e.target.checked)} className="rounded border-slate-300" />
-                  Documents received
-                </label>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end mt-6 pt-4 border-t border-slate-200">
+      <VehicleDetailsForm
+        form={form}
+        update={update}
+        regChecking={regChecking}
+        regAvailable={regAvailable}
+        paymentProofs={paymentProofs}
+        onPaymentProofsChange={setPaymentProofs}
+        uploadPathPrefix={`purchase-payments/${uploadSessionId}`}
+        footer={
           <button onClick={handleCreate} disabled={submitting || !isValid} className="btn-primary">
-            {submitting ? <Spinner size={16} /> : <Check size={16} />} Create Vehicle
+            {submitting ? <Spinner size={16} /> : <Check size={16} />} {t("vehicleForm.createVehicle")}
           </button>
-        </div>
-      </Card>
+        }
+      />
     </div>
   );
 }

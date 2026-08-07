@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bike,
   Users,
@@ -14,15 +15,29 @@ import {
   LayoutDashboard,
   FileBarChart,
   UserCog,
+  ScrollText,
+  CreditCard,
+  Receipt,
+  FileText,
+  ClipboardCheck,
+  ShoppingCart,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { usePermissions } from "@/lib/usePermissions";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 import { ROLE_LABELS } from "@/lib/constants";
 
 export type PageKey =
   | "dashboard"
   | "inventory"
   | "add-vehicle"
+  | "manage-vehicles"
+  | "quick-add-expense"
+  | "quick-add-document"
+  | "quick-add-inspection"
+  | "quick-add-sale"
+  | "view-vehicle"
   | "vehicle"
   | "parties"
   | "partners"
@@ -31,7 +46,27 @@ export type PageKey =
   | "passport"
   | "history"
   | "policies"
-  | "team";
+  | "team"
+  | "audit"
+  | "billing";
+
+// The "Vehicles" group in the sidebar: a pure expand/collapse header (it is not itself a
+// page) over the per-vehicle work screens. Each child is a full page with a vehicle-select
+// dropdown at the top (src/components/VehicleSelectField.tsx), the desktop counterpart to
+// the mobile "+" icon row's targets (src/mobile/MobileApp.tsx's ADD_TARGETS).
+//
+// "View Vehicle" is deliberately absent: viewing a vehicle is what clicking an Inventory
+// row does. "Make Sales" (quick-add-sale) picks a vehicle and drops straight into that
+// vehicle's own Sale tab (src/pages/QuickAddSale.tsx embeds VehicleDetail with
+// initialTab="sale") — the same canonical Record Sale design also reached via the Sell
+// Vehicle button on the Dashboard and on the vehicle page itself.
+const VEHICLE_GROUP: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
+  { key: "manage-vehicles", labelKey: "nav.manageVehicles", icon: <PlusCircle size={15} /> },
+  { key: "quick-add-expense", labelKey: "vehicleDetail.expenses", icon: <Receipt size={15} /> },
+  { key: "quick-add-document", labelKey: "vehicleDetail.documents", icon: <FileText size={15} /> },
+  { key: "quick-add-inspection", labelKey: "vehicleDetail.inspection", icon: <ClipboardCheck size={15} /> },
+  { key: "quick-add-sale", labelKey: "dashboard.sellVehicle", icon: <ShoppingCart size={15} /> },
+];
 
 export interface NavigateParams {
   vehicleId?: string;
@@ -48,29 +83,39 @@ interface LayoutProps {
   alertCount?: number;
 }
 
-const navItems: { key: PageKey; label: string; icon: ReactNode }[] = [
-  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-  { key: "add-vehicle", label: "Add Vehicle", icon: <PlusCircle size={18} /> },
-  { key: "inventory", label: "Inventory", icon: <Bike size={18} /> },
-  { key: "finance", label: "Reports", icon: <FileBarChart size={18} /> },
-  { key: "parties", label: "Parties", icon: <UserCircle size={18} /> },
-  { key: "partners", label: "Partners", icon: <Users size={18} /> },
-  { key: "alerts", label: "Alerts", icon: <Bell size={18} /> },
-  { key: "history", label: "History", icon: <History size={18} /> },
-  { key: "policies", label: "Policies", icon: <ShieldCheck size={18} /> },
-  { key: "team", label: "Team", icon: <UserCog size={18} /> },
+const navItems: { key: PageKey; labelKey: string; icon: ReactNode }[] = [
+  { key: "dashboard", labelKey: "nav.dashboard", icon: <LayoutDashboard size={18} /> },
+  { key: "inventory", labelKey: "nav.inventory", icon: <Bike size={18} /> },
+  { key: "finance", labelKey: "nav.reports", icon: <FileBarChart size={18} /> },
+  { key: "parties", labelKey: "nav.parties", icon: <UserCircle size={18} /> },
+  { key: "partners", labelKey: "nav.partners", icon: <Users size={18} /> },
+  { key: "alerts", labelKey: "nav.alerts", icon: <Bell size={18} /> },
+  { key: "history", labelKey: "nav.history", icon: <History size={18} /> },
+  { key: "policies", labelKey: "nav.policies", icon: <ShieldCheck size={18} /> },
+  { key: "team", labelKey: "nav.team", icon: <UserCog size={18} /> },
+  { key: "audit", labelKey: "nav.audit", icon: <ScrollText size={18} /> },
+  { key: "billing", labelKey: "nav.billing", icon: <CreditCard size={18} /> },
 ];
 
-const navSections: { key: PageKey }[][] = [
-  [{ key: "dashboard" }, { key: "add-vehicle" }, { key: "inventory" }, { key: "finance" }],
+/** "vehicles" is the collapsible group above, not a page. */
+type NavEntry = { key: PageKey } | { group: "vehicles" };
+
+const navSections: NavEntry[][] = [
+  [{ key: "dashboard" }, { group: "vehicles" }, { key: "inventory" }, { key: "finance" }],
   [{ key: "parties" }, { key: "partners" }],
-  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }],
+  [{ key: "alerts" }, { key: "history" }, { key: "policies" }, { key: "team" }, { key: "audit" }, { key: "billing" }],
 ];
+
+const isGroup = (e: NavEntry): e is { group: "vehicles" } => "group" in e;
 
 export function Layout({ current, onNavigate, children, alertCount = 0 }: LayoutProps) {
+  const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isOnVehicleGroup = VEHICLE_GROUP.some((a) => a.key === current);
+  const [vehiclesOpen, setVehiclesOpen] = useState(isOnVehicleGroup);
   const { canAccessPage } = usePermissions();
   const { orgName } = useAuth();
+  const { entitlements } = useEntitlements();
 
   const isActive = (key: PageKey) => {
     if (key === "inventory" && (current === "vehicle" || current === "parties")) return true;
@@ -82,8 +127,16 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
     setMobileOpen(false);
   };
 
+  const visibleVehicleGroup = VEHICLE_GROUP.filter(({ key }) => canAccessPage(key));
+
   const visibleNavSections = navSections
-    .map((section) => section.filter(({ key }) => canAccessPage(key)))
+    .map((section) =>
+      section.filter((entry) =>
+        isGroup(entry)
+          ? visibleVehicleGroup.length > 0
+          : canAccessPage(entry.key) && isFeatureAvailable(entitlements, entry.key as never),
+      ),
+    )
     .filter((section) => section.length > 0);
 
   const sidebar = (
@@ -93,8 +146,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
           <Bike size={20} />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white leading-tight truncate">{orgName ?? "VahanExchange Dealer"}</p>
-          <p className="text-[11px] text-slate-400 leading-tight">Dealer Operating System</p>
+          <p className="text-sm font-semibold text-white leading-tight truncate">{orgName ?? t("app.brand")}</p>
+          <p className="text-[11px] text-slate-400 leading-tight">{t("app.tagline")}</p>
         </div>
       </div>
 
@@ -104,31 +157,71 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
             key={sectionIndex}
             className={`space-y-0.5 ${sectionIndex > 0 ? "mt-4 pt-4 border-t border-slate-800" : ""}`}
           >
-            {section.map(({ key }) => {
-              const item = navItems.find((n) => n.key === key)!;
+            {section.map((entry) => {
+              // The Vehicles group is a header only: clicking it expands or collapses its
+              // children, it never navigates anywhere itself.
+              if (isGroup(entry)) {
+                return (
+                  <div key="vehicles-group">
+                    <button
+                      onClick={() => setVehiclesOpen((o) => !o)}
+                      aria-expanded={vehiclesOpen}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                        isOnVehicleGroup && !vehiclesOpen
+                          ? "bg-slate-800 text-white"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      <Bike size={18} />
+                      <span className="flex-1 text-left">{t("nav.vehicles")}</span>
+                      <ChevronDown size={14} className={`transition-transform ${vehiclesOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {vehiclesOpen && (
+                      <div className="mt-0.5 ml-4 space-y-0.5 border-l border-slate-800 pl-3">
+                        {visibleVehicleGroup.map((action) => (
+                          <button
+                            key={action.key}
+                            onClick={() => handleNav(action.key)}
+                            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors ${
+                              current === action.key ? "bg-brand-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                            }`}
+                          >
+                            {action.icon}
+                            <span className="flex-1 text-left">{t(action.labelKey)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const item = navItems.find((n) => n.key === entry.key)!;
               const active = isActive(item.key);
               return (
-                <button
-                  key={item.key}
-                  onClick={() => handleNav(item.key)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    active ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  {item.icon}
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.key === "alerts" && alertCount > 0 && (
-                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                      {alertCount}
-                    </span>
-                  )}
-                </button>
+                <div key={item.key}>
+                  <button
+                    onClick={() => handleNav(item.key)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      active ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="flex-1 text-left">{t(item.labelKey)}</span>
+                    {item.key === "alerts" && alertCount > 0 && (
+                      <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        {alertCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
               );
             })}
           </div>
         ))}
       </nav>
 
+      {/* Language lives on the Dashboard only — see LanguageSwitcher. */}
       <div className="px-3 py-4 border-t border-slate-800">
         <UserMenu />
       </div>
@@ -137,10 +230,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 shrink-0">{sidebar}</aside>
 
-      {/* Mobile sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/60" onClick={() => setMobileOpen(false)} />
@@ -148,16 +239,14 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         </div>
       )}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile top bar */}
         <div className="lg:hidden flex items-center justify-between h-14 px-4 bg-white border-b border-slate-200">
           <button onClick={() => setMobileOpen(true)} className="btn-ghost btn-sm" aria-label="Open menu">
             <Menu size={20} />
           </button>
           <div className="flex items-center gap-2 min-w-0">
             <Bike size={18} className="text-brand-600 shrink-0" />
-            <span className="text-sm font-semibold truncate">{orgName ?? "VahanExchange Dealer"}</span>
+            <span className="text-sm font-semibold truncate">{orgName ?? t("app.brand")}</span>
           </div>
           <div className="w-8" />
         </div>
@@ -165,7 +254,6 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
         <main className="flex-1 overflow-y-auto bg-slate-50">{children}</main>
       </div>
 
-      {/* Mobile close overlay handler */}
       {mobileOpen && (
         <button
           className="fixed top-2 right-2 z-50 lg:hidden text-white p-1"
@@ -180,6 +268,7 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
 }
 
 function UserMenu() {
+  const { t } = useTranslation();
   const { user, role, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const email = user?.email ?? "";
@@ -194,8 +283,8 @@ function UserMenu() {
           {email.charAt(0).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-xs font-medium text-white truncate">{email || "User"}</p>
-          <p className="text-[10px] text-slate-400 truncate">{role ? ROLE_LABELS[role] : "Signed in"}</p>
+          <p className="text-xs font-medium text-white truncate">{email || t("auth.user")}</p>
+          <p className="text-[10px] text-slate-400 truncate">{role ? t("roles." + role, { defaultValue: ROLE_LABELS[role] }) : t("auth.signedIn")}</p>
         </div>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -211,7 +300,7 @@ function UserMenu() {
               className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <LogOut size={14} />
-              Sign Out
+              {t("auth.signOut")}
             </button>
           </div>
         </>

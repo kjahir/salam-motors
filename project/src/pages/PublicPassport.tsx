@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bike,
   ShieldCheck,
@@ -29,6 +30,7 @@ interface PublicPassportProps {
 export function PublicPassport({ slug }: PublicPassportProps) {
   const [passport, setPassport] = useState<PublicPassportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +60,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Passport not found" description="This link may be expired or the listing is no longer public." /></Card>
+          <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("passportPage.notFound")} description="This link may be expired or the listing is no longer public." /></Card>
         </div>
       </div>
     );
@@ -71,7 +73,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center gap-2">
           <Bike size={18} className="text-brand-600" />
-          <span className="text-sm font-semibold text-slate-900">Vehicle Passport</span>
+          <span className="text-sm font-semibold text-slate-900"> {t("passportPage.vehiclePassport")}</span>
         </div>
       </div>
 
@@ -81,11 +83,11 @@ export function PublicPassport({ slug }: PublicPassportProps) {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 text-brand-100 text-sm mb-1">
-                  <ShieldCheck size={16} /> Digital Vehicle Passport
+                  <ShieldCheck size={16} /> {t("passportPage.digitalPassport")}
                 </div>
                 <h1 className="text-2xl font-bold">{passport.manufacturer} {passport.model}</h1>
                 <p className="text-brand-100 text-sm mt-1">
-                  {passport.variant} · {passport.manufacture_year} · {passport.registration_number ?? "Unregistered"}
+                  {passport.variant} · {passport.manufacture_year} · {passport.registration_number ?? t("passportPage.unregistered")}
                 </p>
                 <p className="text-brand-100 text-lg font-semibold mt-2">{formatINR(passport.asking_price)}</p>
               </div>
@@ -97,14 +99,14 @@ export function PublicPassport({ slug }: PublicPassportProps) {
 
           <div className="p-5">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Spec icon={<Calendar size={16} />} label="Year" value={String(passport.manufacture_year ?? "—")} />
-              <Spec icon={<Gauge size={16} />} label="Odometer" value={passport.odometer ? `${passport.odometer.toLocaleString("en-IN")} km` : "—"} />
-              <Spec icon={<Users size={16} />} label="Owners" value={String(passport.owner_count)} />
-              <Spec icon={<Fuel size={16} />} label="Fuel" value={passport.fuel_type} />
-              <Spec icon={<Palette size={16} />} label="Colour" value={passport.colour ?? "—"} />
-              <Spec icon={<MapPin size={16} />} label="Registered" value={`${passport.registration_city ?? "—"}, ${passport.registration_state ?? "—"}`} />
-              <Spec icon={<Bike size={16} />} label="Category" value={passport.category} />
-              <Spec icon={<FileCheck size={16} />} label="Docs Verified" value={`${verifiedDocs.length}/${passport.documents.length}`} />
+              <Spec icon={<Calendar size={16} />} label={t("passportPage.year")} value={String(passport.manufacture_year ?? "—")} />
+              <Spec icon={<Gauge size={16} />} label={t("passportPage.odometer")} value={passport.odometer ? `${passport.odometer.toLocaleString("en-IN")} km` : "—"} />
+              <Spec icon={<Users size={16} />} label={t("passportPage.owners")} value={String(passport.owner_count)} />
+              <Spec icon={<Fuel size={16} />} label={t("passportPage.fuel")} value={passport.fuel_type} />
+              <Spec icon={<Palette size={16} />} label={t("passportPage.colour")} value={passport.colour ?? "—"} />
+              <Spec icon={<MapPin size={16} />} label={t("passportPage.registered")} value={`${passport.registration_city ?? "—"}, ${passport.registration_state ?? "—"}`} />
+              <Spec icon={<Bike size={16} />} label={t("passportPage.category")} value={passport.category} />
+              <Spec icon={<FileCheck size={16} />} label={t("passportPage.docsVerified")} value={`${verifiedDocs.length}/${passport.documents.length}`} />
             </div>
             {passport.description && <p className="text-sm text-slate-600 mt-4 pt-4 border-t border-slate-100">{passport.description}</p>}
           </div>
@@ -112,9 +114,9 @@ export function PublicPassport({ slug }: PublicPassportProps) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <Card className="p-5 lg:col-span-2">
-            <h2 className="font-semibold text-slate-900 mb-4">Inspection & Condition</h2>
+            <h2 className="font-semibold text-slate-900 mb-4"> {t("passportPage.inspection")}</h2>
             <div className="flex flex-col sm:flex-row items-center gap-5 mb-5">
-              <ScoreRing score={overallScore} label="Overall score" />
+              <ScoreRing score={overallScore} label={t("passportPage.overallScore")} />
               <div className="flex-1 w-full">
                 {passport.inspection_date ? (
                   <>
@@ -125,17 +127,17 @@ export function PublicPassport({ slug }: PublicPassportProps) {
                       <span className="text-xs text-slate-500">{passport.inspection_type}</span>
                     </div>
                     {passport.summary && <p className="text-sm text-slate-600">{passport.summary}</p>}
-                    <p className="text-xs text-slate-400 mt-2">Inspected by {passport.inspector_name} on {formatDate(passport.inspection_date, { withTime: true })}</p>
+                    <p className="text-xs text-slate-400 mt-2">{t("passportPage.inspectedBy", { name: passport.inspector_name, date: formatDate(passport.inspection_date, { withTime: true }) })}</p>
                   </>
                 ) : (
-                  <p className="text-sm text-slate-500">No inspection data available.</p>
+                  <p className="text-sm text-slate-500"> {t("passportPage.noInspection")}</p>
                 )}
               </div>
             </div>
 
             {items.length > 0 && (
               <div className="space-y-2.5">
-                <h3 className="text-sm font-medium text-slate-700 mb-2">Component Breakdown</h3>
+                <h3 className="text-sm font-medium text-slate-700 mb-2"> {t("passportPage.componentBreakdown")}</h3>
                 {items.map((item) => (
                   <div key={item.category} className="flex items-center gap-3">
                     <span className="text-sm text-slate-700 w-40 shrink-0">{item.category}</span>
@@ -168,7 +170,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
 
           <div className="space-y-5">
             <Card className="p-5">
-              <h2 className="font-semibold text-slate-900 mb-4">Document Status</h2>
+              <h2 className="font-semibold text-slate-900 mb-4"> {t("passportPage.documentStatus")}</h2>
               {passport.documents.length > 0 ? (
                 <div className="space-y-2">
                   {passport.documents.map((d) => (
@@ -179,7 +181,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">No documents listed.</p>
+                <p className="text-sm text-slate-500"> {t("passportPage.noDocuments")}</p>
               )}
             </Card>
 
@@ -187,9 +189,9 @@ export function PublicPassport({ slug }: PublicPassportProps) {
               <div className="flex items-start gap-3">
                 <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-900">Verified by {passport.organization_name ?? "the dealer"}</p>
+                  <p className="text-sm font-medium text-emerald-900">{t("passportPage.verifiedBy", { org: passport.organization_name ?? "the dealer" })}</p>
                   <p className="text-xs text-emerald-700 mt-1">
-                    This passport is generated from the dealer's verified inspection records. Financial details are excluded for buyer privacy.
+                    {t("passportPage.verifiedDescription")}
                   </p>
                 </div>
               </div>
@@ -200,7 +202,7 @@ export function PublicPassport({ slug }: PublicPassportProps) {
         <div className="mt-6 text-center">
           <p className="text-xs text-slate-400">{passport.stock_number}</p>
           <p className="text-xs text-slate-400 mt-1">
-            This passport is advisory. Buyers should conduct independent verification before purchase.
+            {t("passportPage.advisory")}
           </p>
         </div>
       </div>

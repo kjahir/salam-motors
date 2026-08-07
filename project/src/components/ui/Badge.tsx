@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { COMPLIANCE_BANDS } from "@/lib/constants";
 
 type Color = "brand" | "emerald" | "green" | "blue" | "amber" | "orange" | "red" | "slate" | "purple";
@@ -25,6 +26,7 @@ export function Badge({ color = "slate", children, className = "" }: BadgeProps)
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const map: Record<string, Color> = {
     DRAFT: "slate",
     PURCHASE_PENDING: "amber",
@@ -41,18 +43,19 @@ export function StatusBadge({ status }: { status: string }) {
     RETURNED: "red",
     WRITTEN_OFF: "red",
   };
-  return <Badge color={map[status] ?? "slate"}>{status.replace(/_/g, " ")}</Badge>;
+  return <Badge color={map[status] ?? "slate"}>{t(`status.${status}`, { defaultValue: status.replace(/_/g, " ") })}</Badge>;
 }
 
 export function ScoreBadge({ score }: { score: number | null | undefined }) {
+  const { t } = useTranslation();
   if (score === null || score === undefined) return <span className="text-slate-400 text-sm">—</span>;
   let color: Color = "red";
-  let label = "High Risk";
-  if (score >= 90) { color = "emerald"; label = "Excellent"; }
-  else if (score >= 80) { color = "green"; label = "Very Good"; }
-  else if (score >= 70) { color = "blue"; label = "Good"; }
-  else if (score >= 60) { color = "amber"; label = "Fair"; }
-  else if (score >= 40) { color = "orange"; label = "Poor"; }
+  let label = t("badge.highRisk");
+  if (score >= 90) { color = "emerald"; label = t("badge.excellent"); }
+  else if (score >= 80) { color = "green"; label = t("badge.veryGood"); }
+  else if (score >= 70) { color = "blue"; label = t("badge.good"); }
+  else if (score >= 60) { color = "amber"; label = t("badge.fair"); }
+  else if (score >= 40) { color = "orange"; label = t("badge.poor"); }
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className={`badge ring-1 ring-inset ${colorMap[color]} font-mono font-semibold`}>{score}</span>
@@ -62,11 +65,12 @@ export function ScoreBadge({ score }: { score: number | null | undefined }) {
 }
 
 export function AgeingBadge({ days }: { days: number }) {
+  const { t } = useTranslation();
   let color: Color = "emerald";
-  let label = "Normal";
-  if (days >= 60) { color = "red"; label = "Breach"; }
-  else if (days >= 45) { color = "orange"; label = "High priority"; }
-  else if (days >= 30) { color = "amber"; label = "Attention"; }
+  let label = t("badge.normal");
+  if (days >= 60) { color = "red"; label = t("badge.breach"); }
+  else if (days >= 45) { color = "orange"; label = t("badge.highPriority"); }
+  else if (days >= 30) { color = "amber"; label = t("badge.attention"); }
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className={`badge ring-1 ring-inset ${colorMap[color]}`}>{days}d</span>
@@ -76,12 +80,14 @@ export function AgeingBadge({ days }: { days: number }) {
 }
 
 export function ComplianceBadge({ violationCount, maxSeverityRank }: { violationCount: number; maxSeverityRank: number }) {
-  if (violationCount === 0) return <Badge color="emerald">Compliant</Badge>;
+  const { t } = useTranslation();
+  if (violationCount === 0) return <Badge color="emerald">{t("badge.compliant")}</Badge>;
   const band = COMPLIANCE_BANDS.find((b) => maxSeverityRank >= b.minRank) ?? COMPLIANCE_BANDS[COMPLIANCE_BANDS.length - 1];
-  return <Badge color={band.color as Color}>{band.label} ({violationCount})</Badge>;
+  return <Badge color={band.color as Color}>{t(`status.${band.label}`, { defaultValue: band.label })} ({violationCount})</Badge>;
 }
 
 export function VerificationBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const map: Record<string, Color> = {
     "Not uploaded": "slate",
     Uploaded: "blue",
@@ -91,5 +97,5 @@ export function VerificationBadge({ status }: { status: string }) {
     Expired: "red",
     "Not applicable": "slate",
   };
-  return <Badge color={map[status] ?? "slate"}>{status}</Badge>;
+  return <Badge color={map[status] ?? "slate"}>{t(`status.${status}`, { defaultValue: status })}</Badge>;
 }

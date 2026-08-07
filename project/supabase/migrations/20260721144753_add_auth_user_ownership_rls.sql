@@ -64,7 +64,12 @@ session, and the INSERT policy's `WITH CHECK (auth.uid() = user_id)` passes.
 2. All frontend inserts continue to omit `user_id` — the DEFAULT fills it.
 3. Email confirmation remains OFF (per Supabase default for this project).
 */
-
+-- ============================================================
+-- Step 0: Seed a new auth user for the existing seed data to own
+-- ============================================================
+DO $$
+INSERT INTO "auth"."users" ("instance_id", "id", "aud", "role", "email", "encrypted_password", "email_confirmed_at", "invited_at", "confirmation_token", "confirmation_sent_at", "recovery_token", "recovery_sent_at", "email_change_token_new", "email_change", "email_change_sent_at", "last_sign_in_at", "raw_app_meta_data", "raw_user_meta_data", "is_super_admin", "created_at", "updated_at", "phone", "phone_confirmed_at", "phone_change", "phone_change_token", "phone_change_sent_at", "confirmed_at", "email_change_token_current", "email_change_confirm_status", "banned_until", "reauthentication_token", "reauthentication_sent_at", "is_sso_user", "deleted_at", "is_anonymous") VALUES ('00000000-0000-0000-0000-000000000000', '03c73ded-1ef7-4d98-9910-228dcbd95b8c', 'authenticated', 'authenticated', 'salam@gmail.com', '$2a$10$pVgxvzN/D/SeI6Tkz3LZG.2mhw1rTn4jWibdmzzbA3ea0SvfT1jYW', '2026-07-21 14:59:32.405134+00', null, '', null, '', null, '', '', null, '2026-07-28 03:04:39.282224+00', '{"provider": "email", "providers": ["email"]}', '{"email_verified": true}', null, '2026-07-21 14:59:32.386961+00', '2026-07-28 03:04:39.315546+00', null, null, '', '', null, default, '', 0, null, '', null, false, null, false);
+END $$;
 -- ============================================================
 -- Step 1: Add user_id column to all tables (nullable first)
 -- ============================================================
@@ -111,8 +116,9 @@ DECLARE
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
-    EXECUTE format('ALTER TABLE public.%I ALTER COLUMN user_id SET NOT NULL', t);
-    EXECUTE format('ALTER TABLE public.%I ALTER COLUMN user_id SET DEFAULT auth.uid()', t);
+	EXECUTE format('UPDATE public.%I SET user_id = %L WHERE user_id IS NULL', t, '03c73ded-1ef7-4d98-9910-228dcbd95b8c');    
+	EXECUTE format('ALTER TABLE public.%I ALTER COLUMN user_id SET NOT NULL', t);
+	EXECUTE format('ALTER TABLE public.%I ALTER COLUMN user_id SET DEFAULT auth.uid()', t);
   END LOOP;
 END $$;
 

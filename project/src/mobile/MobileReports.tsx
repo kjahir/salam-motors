@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, TrendingUp, ShoppingCart, Bike, ArrowUpDown } from "lucide-react";
-import { TopBar, Input, Spinner, Card, EmptyState, Tag, SegmentedTabs, Button } from "./ui/primitives";
-import { formatINR, formatDate, daysSince } from "@/lib/format";
+import { useTranslation } from "react-i18next";
+import { Search, TrendingUp, ShoppingCart, ArrowUpDown, Wallet, Receipt, Users } from "lucide-react";
+import { TopBar, Input, Card, EmptyState, SegmentedTabs, Button } from "./ui/primitives";
+import { formatINR, formatDate } from "@/lib/format";
 import {
   fetchAllPurchases,
   fetchAllSales,
-  fetchVehicles,
   fetchFinancialSummaries,
   fetchInvestments,
   fetchAllExpenses,
   fetchProfitDistributions,
 } from "@/lib/queries";
 import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
+import { vehicleRef } from "@/lib/vehicleLabel";
 import type {
   Purchase,
   Sale,
@@ -23,33 +24,40 @@ import type {
   ProfitDistribution,
   Partner,
 } from "@/lib/types";
+import type { MobileNavigate } from "./MobileApp";
 
-type ReportTab = "purchases" | "inventory" | "sales";
+type ReportTab = "investments" | "purchases" | "expenses" | "sales" | "settlements";
 type SortDir = "desc" | "asc";
 
 const PAGE_SIZE = 10;
 
-export function MobileReports() {
-  const [tab, setTab] = useState<ReportTab>("inventory");
+export function MobileReports({ onNavigate, onBack, vehicleFilter }: {
+  onNavigate: MobileNavigate;
+  onBack?: () => void;
+  /** Bottom Bar V2's selected vehicle, if any — narrows every tab to just that vehicle's rows. */
+  vehicleFilter?: string | null;
+}) {
+  const [tab, setTab] = useState<ReportTab>("purchases");
   const [purchases, setPurchases] = useState<(Purchase & { vehicle: Vehicle | null; seller: Party | null })[]>([]);
   const [sales, setSales] = useState<(Sale & { vehicle: Vehicle | null; buyer: Party | null })[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
+  const [investments, setInvestments] = useState<(Investment & { vehicle?: Vehicle | null; partner?: Partner | null })[]>([]);
+  const [expenses, setExpenses] = useState<(Expense & { vehicle?: Vehicle | null; partner?: Partner | null })[]>([]);
+  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null; vehicle?: Vehicle | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRangeKey>("all");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const { t } = useTranslation();
+
+  const trDateRange = (value: DateRangeKey, label: string) => t("dateRange." + value, { defaultValue: label });
 
   useEffect(() => {
     (async () => {
-      const [p, s, v, sm, inv, exp, dist] = await Promise.all([
+      const [p, s, sm, inv, exp, dist] = await Promise.all([
         fetchAllPurchases(),
         fetchAllSales(),
-        fetchVehicles(),
         fetchFinancialSummaries(),
         fetchInvestments(),
         fetchAllExpenses(),
@@ -57,7 +65,6 @@ export function MobileReports() {
       ]);
       setPurchases(p);
       setSales(s);
-      setVehicles(v);
       setSummaries(sm);
       setInvestments(inv);
       setExpenses(exp);
@@ -72,25 +79,13 @@ export function MobileReports() {
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
 
-  const totals = useMemo(() => {
-    const totalInvested = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
-      .reduce((s, i) => s + i.amount, 0);
-    const totalExpenses = expenses.filter((e) => e.approval_status === "Approved").reduce((s, e) => s + e.amount, 0);
-    const totalPurchases = purchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
-    const totalPurchaseAndExpenses = totalPurchases + totalExpenses;
-    const completedSales = sales.filter((s) => s.status === "Completed");
-    const totalSales = completedSales.reduce((s, sale) => s + sale.sale_price, 0);
-    const totalProfit = distributions.reduce((s, d) => s + d.profit_share, 0);
-    const totalPayable = distributions.reduce((s, d) => s + d.balance_payable, 0);
-    return { totalInvested, totalExpenses, totalPurchases, totalPurchaseAndExpenses, totalSales, totalProfit, totalPayable };
-  }, [investments, expenses, purchases, sales, distributions]);
-
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (v: Vehicle | null | undefined) =>
-      !q || [v?.stock_number, v?.registration_number, v?.manufacturer, v?.model].filter(Boolean).join(" ").toLowerCase().includes(q);
-  }, [search]);
+    return (v: Vehicle | null | undefined) => {
+      if (vehicleFilter && v?.id !== vehicleFilter) return false;
+      return !q || [v?.stock_number, v?.registration_number, v?.manufacturer, v?.model].filter(Boolean).join(" ").toLowerCase().includes(q);
+    };
+  }, [search, vehicleFilter]);
 
   const dirFactor = sortDir === "desc" ? -1 : 1;
 
@@ -102,46 +97,48 @@ export function MobileReports() {
     () => sales.filter((s) => isWithinDateRange(s.sale_date, dateRange) && matches(s.vehicle)).sort((a, b) => dirFactor * (+new Date(a.sale_date) - +new Date(b.sale_date))),
     [sales, dateRange, matches, dirFactor],
   );
-  const inventoryRows = useMemo(
+  const investmentRows = useMemo(
     () =>
-      vehicles
-        .filter((v) => !["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status) && isWithinDateRange(v.onboarded_at, dateRange) && matches(v))
-        .sort((a, b) => dirFactor * (+new Date(a.onboarded_at) - +new Date(b.onboarded_at))),
-    [vehicles, dateRange, matches, dirFactor],
+      investments
+        .filter((i) => isWithinDateRange(i.investment_date, dateRange) && matches(i.vehicle))
+        .sort((a, b) => dirFactor * (+new Date(a.investment_date) - +new Date(b.investment_date))),
+    [investments, dateRange, matches, dirFactor],
+  );
+  const expenseRows = useMemo(
+    () =>
+      expenses
+        .filter((e) => isWithinDateRange(e.expense_date, dateRange) && matches(e.vehicle))
+        .sort((a, b) => dirFactor * (+new Date(a.expense_date) - +new Date(b.expense_date))),
+    [expenses, dateRange, matches, dirFactor],
+  );
+  const settlementRows = useMemo(
+    () => distributions.filter((d) => matches(d.vehicle)),
+    [distributions, matches],
   );
 
   if (loading) {
     return (
       <div>
-        <TopBar title="Reports" />
-        <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
+        <TopBar title={t("mobileReports.title")} onBack={onBack} />
       </div>
     );
   }
 
   return (
     <div>
-      <TopBar title="Reports" />
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <StatTile label="Total Invested" value={formatINR(totals.totalInvested)} />
-        <StatTile
-          label="Purchase & Expenses"
-          value={formatINR(totals.totalPurchaseAndExpenses)}
-          sub={`Purchases ${formatINR(totals.totalPurchases)} · Expenses ${formatINR(totals.totalExpenses)}`}
-        />
-        <StatTile label="Sales & Profit" value={formatINR(totals.totalSales)} sub={`Profit ${formatINR(totals.totalProfit)}`} />
-        <StatTile label="Payable to Partners" value={formatINR(totals.totalPayable)} />
-      </div>
+      <TopBar title={t("mobileReports.title")} onBack={onBack} />
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by make, model or reg. no." className="pl-10" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("financePage.searchPlaceholder")} className="pl-10" />
         </div>
         <SegmentedTabs
           tabs={[
-            { key: "purchases", label: "Purchases" },
-            { key: "inventory", label: "Inventory" },
-            { key: "sales", label: "Sales" },
+            { key: "investments", label: t("financePage.tabs.investments") },
+            { key: "purchases", label: t("mobileReports.tabs.purchases") },
+            { key: "expenses", label: t("financePage.tabs.expenses") },
+            { key: "sales", label: t("mobileReports.tabs.sales") },
+            { key: "settlements", label: t("financePage.tabs.settlements") },
           ]}
           active={tab}
           onChange={(k) => setTab(k as ReportTab)}
@@ -153,14 +150,14 @@ export function MobileReports() {
               onClick={() => setDateRange(opt.value)}
               className={`shrink-0 rounded-pill px-3 py-1 text-xs font-medium ${dateRange === opt.value ? "bg-mobile-navy text-white" : "bg-white text-mobile-text-secondary border border-mobile-border"}`}
             >
-              {opt.label}
+              {trDateRange(opt.value, opt.label)}
             </button>
           ))}
           <button
             onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
             className="shrink-0 ml-auto inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium bg-white text-mobile-text-secondary border border-mobile-border"
           >
-            <ArrowUpDown size={12} /> {sortDir === "desc" ? "Newest" : "Oldest"}
+            <ArrowUpDown size={12} /> {sortDir === "desc" ? t("mobileReports.newest") : t("mobileReports.oldest")}
           </button>
         </div>
       </div>
@@ -169,13 +166,16 @@ export function MobileReports() {
         {tab === "purchases" && (
           <>
             <ListSection
-              empty={{ icon: <ShoppingCart size={20} />, title: "No purchases found" }}
+              empty={{ icon: <ShoppingCart size={20} />, title: t("mobileReports.noPurchases") }}
               rows={purchaseRows.slice(0, limit)}
               total={purchaseRows.length}
               limit={limit}
               onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
               render={(p) => (
-                <Card key={p.id} className="p-3.5">
+                // Purchase is 1:1 with the vehicle (a single purchase record onboards it),
+                // so there's nothing to highlight on arrival — the purchase section of
+                // Update Vehicle is just the one form for that vehicle.
+                <Card key={p.id} className="p-3.5" onClick={() => onNavigate("update-vehicle", { vehicleId: p.vehicle_id })}>
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-mobile-text truncate">{p.vehicle?.manufacturer} {p.vehicle?.model}</p>
@@ -188,43 +188,8 @@ export function MobileReports() {
             />
             {purchaseRows.length > 0 && (
               <TotalFooter
-                label={`Total (${purchaseRows.length})`}
+                label={t("mobileReports.totalWithCount", { count: purchaseRows.length })}
                 value={formatINR(purchaseRows.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0))}
-              />
-            )}
-          </>
-        )}
-        {tab === "inventory" && (
-          <>
-            <ListSection
-              empty={{ icon: <Bike size={20} />, title: "No vehicles in stock" }}
-              rows={inventoryRows.slice(0, limit)}
-              total={inventoryRows.length}
-              limit={limit}
-              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
-              render={(v) => {
-                const s = summaryMap.get(v.id);
-                const days = daysSince(v.onboarded_at);
-                return (
-                  <Card key={v.id} className="p-3.5">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-mobile-text truncate">{v.manufacturer} {v.model}</p>
-                        <p className="text-xs text-mobile-text-muted font-mono">{v.stock_number}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-semibold text-mobile-text">{formatINR(s?.total_vehicle_cost ?? 0)}</p>
-                        <Tag color={days >= 60 ? "error" : days >= 30 ? "warning" : "neutral"}>{days}d</Tag>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              }}
-            />
-            {inventoryRows.length > 0 && (
-              <TotalFooter
-                label={`Total (${inventoryRows.length})`}
-                value={formatINR(inventoryRows.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0))}
               />
             )}
           </>
@@ -232,7 +197,7 @@ export function MobileReports() {
         {tab === "sales" && (
           <>
             <ListSection
-              empty={{ icon: <TrendingUp size={20} />, title: "No sales found" }}
+              empty={{ icon: <TrendingUp size={20} />, title: t("mobileReports.noSales") }}
               rows={saleRows.slice(0, limit)}
               total={saleRows.length}
               limit={limit}
@@ -241,7 +206,11 @@ export function MobileReports() {
                 const s = sale.vehicle_id ? summaryMap.get(sale.vehicle_id) : undefined;
                 const profit = s?.gross_profit ?? null;
                 return (
-                  <Card key={sale.id} className="p-3.5">
+                  <Card
+                    key={sale.id}
+                    className="p-3.5"
+                    onClick={() => sale.vehicle_id && onNavigate("vehicle", { vehicleId: sale.vehicle_id, tab: "sale" })}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-mobile-text truncate">{sale.vehicle?.manufacturer} {sale.vehicle?.model}</p>
@@ -258,9 +227,112 @@ export function MobileReports() {
             />
             {saleRows.length > 0 && (
               <TotalFooter
-                label={`Total (${saleRows.length})`}
+                label={t("mobileReports.totalWithCount", { count: saleRows.length })}
                 value={formatINR(saleRows.reduce((s, sale) => s + sale.sale_price, 0))}
-                sub={`Profit ${formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0))}`}
+                sub={t("financePage.profitHint", { profit: formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0)) })}
+              />
+            )}
+          </>
+        )}
+        {tab === "investments" && (
+          <>
+            <ListSection
+              empty={{ icon: <Wallet size={20} />, title: t("financePage.empty.investments") }}
+              rows={investmentRows.slice(0, limit)}
+              total={investmentRows.length}
+              limit={limit}
+              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+              render={(i) => (
+                <Card key={i.id} className="p-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-mobile-text truncate">{i.partner?.name ?? "—"}</p>
+                      <p className="text-xs text-mobile-text-muted truncate">
+                        {i.vehicle ? vehicleRef(i.vehicle) : t("financePage.generalCapital")} · {formatDate(i.investment_date)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-mobile-text shrink-0">{formatINR(i.amount)}</span>
+                  </div>
+                </Card>
+              )}
+            />
+            {investmentRows.length > 0 && (
+              <TotalFooter
+                label={t("mobileReports.totalWithCount", { count: investmentRows.length })}
+                value={formatINR(investmentRows.reduce((sum, i) => sum + i.amount, 0))}
+              />
+            )}
+          </>
+        )}
+        {tab === "expenses" && (
+          <>
+            <ListSection
+              empty={{ icon: <Receipt size={20} />, title: t("financePage.empty.expenses") }}
+              rows={expenseRows.slice(0, limit)}
+              total={expenseRows.length}
+              limit={limit}
+              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+              render={(e) => (
+                <Card
+                  key={e.id}
+                  className="p-3.5"
+                  onClick={() => e.vehicle_id && onNavigate("add-expense", { vehicleId: e.vehicle_id, highlightRecordId: e.id })}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-mobile-text truncate">{e.category}</p>
+                      <p className="text-xs text-mobile-text-muted truncate">
+                        {vehicleRef(e.vehicle)} · {formatDate(e.expense_date)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-mobile-text">{formatINR(e.amount)}</p>
+                      <p className="text-xs text-mobile-text-muted">{e.partner?.name ?? t("financePage.business")}</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            />
+            {expenseRows.length > 0 && (
+              <TotalFooter
+                label={t("mobileReports.totalWithCount", { count: expenseRows.length })}
+                value={formatINR(expenseRows.reduce((sum, e) => sum + e.amount, 0))}
+              />
+            )}
+          </>
+        )}
+        {tab === "settlements" && (
+          <>
+            <ListSection
+              empty={{ icon: <Users size={20} />, title: t("financePage.empty.settlements") }}
+              rows={settlementRows.slice(0, limit)}
+              total={settlementRows.length}
+              limit={limit}
+              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+              render={(d) => (
+                <Card key={d.id} className="p-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-mobile-text truncate">{d.partner?.name ?? "—"}</p>
+                      <p className="text-xs text-mobile-text-muted truncate">
+                        {d.vehicle ? vehicleRef(d.vehicle) : "—"} · {t("financePage.columns.profit")} {formatINR(d.profit_share)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-mobile-text">{formatINR(d.total_entitlement)}</p>
+                      <p className={`text-xs font-medium ${d.balance_payable > 0 ? "text-mobile-warning" : "text-mobile-success"}`}>
+                        {formatINR(d.balance_payable)}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            />
+            {settlementRows.length > 0 && (
+              <TotalFooter
+                label={t("mobileReports.totalWithCount", { count: settlementRows.length })}
+                value={formatINR(settlementRows.reduce((sum, d) => sum + d.total_entitlement, 0))}
+                sub={t("financePage.payableToPartners") + ": " + formatINR(settlementRows.reduce((sum, d) => sum + d.balance_payable, 0))}
               />
             )}
           </>
@@ -278,6 +350,8 @@ function ListSection<T>({ rows, total, limit, onLoadMore, render, empty }: {
   render: (row: T) => React.ReactNode;
   empty: { icon: React.ReactNode; title: string };
 }) {
+  const { t } = useTranslation();
+
   if (total === 0) {
     return <Card className="p-5"><EmptyState icon={empty.icon} title={empty.title} /></Card>;
   }
@@ -286,7 +360,7 @@ function ListSection<T>({ rows, total, limit, onLoadMore, render, empty }: {
       {rows.map(render)}
       {limit < total && (
         <Button variant="secondary" className="w-full" onClick={onLoadMore}>
-          Load more ({total - limit} remaining)
+          {t("mobileReports.loadMore", { count: total - limit })}
         </Button>
       )}
     </>
@@ -303,16 +377,6 @@ function TotalFooter({ label, value, sub }: { label: string; value: string; sub?
           {sub && <p className="text-xs text-mobile-text-muted mt-0.5">{sub}</p>}
         </div>
       </div>
-    </Card>
-  );
-}
-
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-mobile-text-muted">{label}</p>
-      <p className="font-poppins text-[20px] font-bold text-mobile-text mt-1.5 truncate">{value}</p>
-      {sub && <p className="text-[12px] text-mobile-text-secondary mt-0.5 truncate">{sub}</p>}
     </Card>
   );
 }

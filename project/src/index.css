@@ -36,6 +36,10 @@
   max-width: 100vw;
   overflow-x: hidden;
 }
+/* Hide the desktop PageHeader when a desktop page is hosted inside the mobile shell. */
+.mobile-shell .mobile-page-header {
+  display: none;
+}
 .mobile-shell h1,
 .mobile-shell h2,
 .mobile-shell h3,
@@ -89,11 +93,25 @@
   .btn-ghost {
     @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900;
   }
+  .btn-sell {
+    @apply btn bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-sm hover:from-accent-600 hover:to-accent-700 active:from-accent-700 active:to-accent-800;
+  }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700;
   }
+  /* A solid, unmissable call-to-action for "you must act before you can continue" —
+     acknowledging a blocking compliance issue, for example. Distinct from btn-secondary's
+     neutral outline so it doesn't read as just another optional action. */
+  .btn-warning {
+    @apply btn bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 shadow-sm;
+  }
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
+  }
+  /* Icon-only variant: drops the text padding to near-square while keeping .btn's height,
+     so it lines up with an .input beside it. Always pair with an aria-label and title. */
+  .btn-icon {
+    @apply px-2.5 shrink-0;
   }
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;

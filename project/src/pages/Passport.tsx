@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bike,
   ShieldCheck,
@@ -14,6 +15,7 @@ import {
   ChevronLeft,
   Wrench,
   Share2,
+  BadgeCheck,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
@@ -21,12 +23,23 @@ import { Badge, VerificationBadge } from "@/components/ui/Badge";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
+import { proteanLookup } from "@/lib/proteanApi";
 import { formatDate } from "@/lib/format";
 import { computeOverallScore } from "@/lib/calc";
 import { fetchVehicleFull } from "@/lib/queries";
 import { useAuth } from "@/lib/useAuth";
 import type { VehicleWithRelations, InspectionItem } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
+
+const PROTEAN_LOOKUP_ROLES = ["owner", "manager", "sales_executive", "accountant"] as const;
+
+type ProteanLookupType = "vehicle" | "insurance" | "challan";
+
+interface ProteanLookupState {
+  loading: ProteanLookupType | null;
+  results: Partial<Record<ProteanLookupType, { cached: boolean; payload: Record<string, unknown> }>>;
+  errors: Partial<Record<ProteanLookupType, string>>;
+}
 
 interface PassportProps {
   vehicleId: string;
@@ -38,8 +51,10 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
   const [vehicle, setVehicle] = useState<VehicleWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
+  const [proteanState, setProteanState] = useState<ProteanLookupState>({ loading: null, results: {}, errors: {} });
   const { toast } = useToast();
-  const { orgName } = useAuth();
+  const { t } = useTranslation();
+  const { orgName, orgId, role } = useAuth();
 
   const reload = async () => {
     try {
@@ -79,7 +94,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
   if (!vehicle) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Passport not found" /></Card>
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("passportPage.notFound")} /></Card>
       </div>
     );
   }
@@ -96,12 +111,47 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
     try {
       const { error } = await supabase.from("listings").update({ status: nextStatus }).eq("id", listing.id);
       if (error) throw error;
-      toast(nextStatus === "Active" ? "Passport published — the link is now public" : "Passport unpublished", "success");
+      toast(nextStatus === "Active" ? t("passportPage.published") : t("passportPage.unpublished"), "success");
+      if (nextStatus === "Active") {
+        // Best-effort: the DB trigger already queued vehicle_ad_posts rows
+        // regardless of this call succeeding, so a lost network call here
+        // just means the ad stays queued until manually retried later.
+        supabase.functions.invoke("post-vehicle-ad", { body: { vehicle_id: vehicleId } }).catch(() => {});
+      }
       await reload();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update listing", "error");
+      toast(e instanceof Error ? e.message : t("passportPage.updateFailed"), "error");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  // Protean lookups, surfaced here as a light "Verify Vehicle" panel. These now go to the
+  // Protean service (services/protean-api/) rather than a Supabase function, because
+  // Protean whitelists the calling IP — see src/lib/proteanApi.ts. Failures are surfaced
+  // inline rather than as an opaque error, since "not connected yet" is a normal state
+  // until the service is deployed with real credentials.
+  const runProteanLookup = async (lookupType: ProteanLookupType) => {
+    if (!orgId || !vehicle.registration_number) return;
+    setProteanState((s) => ({ ...s, loading: lookupType, errors: { ...s.errors, [lookupType]: undefined } }));
+    try {
+      const data = await proteanLookup<{ cached?: boolean; result?: { response_payload?: Record<string, unknown> } }>({
+        org_id: orgId,
+        vehicle_id: vehicle.id,
+        lookup_type: lookupType,
+        registration_number: vehicle.registration_number,
+      });
+      setProteanState((s) => ({
+        ...s,
+        loading: null,
+        results: { ...s.results, [lookupType]: { cached: !!data.cached, payload: data.result?.response_payload ?? {} } },
+      }));
+    } catch (e) {
+      setProteanState((s) => ({
+        ...s,
+        loading: null,
+        errors: { ...s.errors, [lookupType]: e instanceof Error ? e.message : "Lookup failed" },
+      }));
     }
   };
 
@@ -110,10 +160,10 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
       {/* Top bar (passport mode) */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <button onClick={onBack} className="btn-ghost btn-sm"><ChevronLeft size={16} /> Back</button>
+          <button onClick={onBack} className="btn-ghost btn-sm"><ChevronLeft size={16} /> {t("passportPage.back")}</button>
           <div className="flex items-center gap-2">
             <Bike size={18} className="text-brand-600" />
-            <span className="text-sm font-semibold text-slate-900">Vehicle Passport</span>
+            <span className="text-sm font-semibold text-slate-900"> {t("passportPage.vehiclePassport")}</span>
           </div>
           <button
             onClick={() => onNavigate("vehicle", { vehicleId: vehicle.id })}
@@ -131,11 +181,11 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 text-brand-100 text-sm mb-1">
-                  <ShieldCheck size={16} /> Digital Vehicle Passport
+                  <ShieldCheck size={16} /> {t("passportPage.digitalPassport")}
                 </div>
                 <h1 className="text-2xl font-bold">{vehicle.manufacturer} {vehicle.model}</h1>
                 <p className="text-brand-100 text-sm mt-1">
-                  {vehicle.variant} · {vehicle.manufacture_year} · {vehicle.registration_number ?? "Unregistered"}
+                  {vehicle.variant} · {vehicle.manufacture_year} · {vehicle.registration_number ?? t("passportPage.unregistered")}
                 </p>
               </div>
               <div className="hidden sm:block">
@@ -146,14 +196,14 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
 
           <div className="p-5">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Spec icon={<Calendar size={16} />} label="Year" value={String(vehicle.manufacture_year ?? "—")} />
-              <Spec icon={<Gauge size={16} />} label="Odometer" value={vehicle.odometer ? `${vehicle.odometer.toLocaleString("en-IN")} km` : "—"} />
-              <Spec icon={<Users size={16} />} label="Owners" value={String(vehicle.owner_count)} />
-              <Spec icon={<Fuel size={16} />} label="Fuel" value={vehicle.fuel_type} />
-              <Spec icon={<Palette size={16} />} label="Colour" value={vehicle.colour ?? "—"} />
-              <Spec icon={<MapPin size={16} />} label="Registered" value={`${vehicle.registration_city ?? "—"}, ${vehicle.registration_state ?? "—"}`} />
-              <Spec icon={<Bike size={16} />} label="Category" value={vehicle.category} />
-              <Spec icon={<FileCheck size={16} />} label="Docs Verified" value={`${verifiedDocs.length}/${vehicle.documents?.length ?? 0}`} />
+              <Spec icon={<Calendar size={16} />} label={t("passportPage.year")} value={String(vehicle.manufacture_year ?? "—")} />
+              <Spec icon={<Gauge size={16} />} label={t("passportPage.odometer")} value={vehicle.odometer ? `${vehicle.odometer.toLocaleString("en-IN")} km` : "—"} />
+              <Spec icon={<Users size={16} />} label={t("passportPage.owners")} value={String(vehicle.owner_count)} />
+              <Spec icon={<Fuel size={16} />} label={t("passportPage.fuel")} value={vehicle.fuel_type} />
+              <Spec icon={<Palette size={16} />} label={t("passportPage.colour")} value={vehicle.colour ?? "—"} />
+              <Spec icon={<MapPin size={16} />} label={t("passportPage.registered")} value={`${vehicle.registration_city ?? "—"}, ${vehicle.registration_state ?? "—"}`} />
+              <Spec icon={<Bike size={16} />} label={t("passportPage.category")} value={vehicle.category} />
+              <Spec icon={<FileCheck size={16} />} label={t("passportPage.docsVerified")} value={`${verifiedDocs.length}/${vehicle.documents?.length ?? 0}`} />
             </div>
           </div>
         </Card>
@@ -161,9 +211,9 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Score & inspection */}
           <Card className="p-5 lg:col-span-2">
-            <h2 className="font-semibold text-slate-900 mb-4">Inspection & Condition</h2>
+            <h2 className="font-semibold text-slate-900 mb-4"> {t("passportPage.inspection")}</h2>
             <div className="flex flex-col sm:flex-row items-center gap-5 mb-5">
-              <ScoreRing score={overallScore} label="Overall score" />
+              <ScoreRing score={overallScore} label={t("passportPage.overallScore")} />
               <div className="flex-1 w-full">
                 {insp ? (
                   <>
@@ -174,17 +224,17 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
                       <span className="text-xs text-slate-500">{insp.inspection_type}</span>
                     </div>
                     {insp.summary && <p className="text-sm text-slate-600">{insp.summary}</p>}
-                    <p className="text-xs text-slate-400 mt-2">Inspected by {insp.inspector_name} on {formatDate(insp.inspection_date, { withTime: true })}</p>
+                    <p className="text-xs text-slate-400 mt-2">{t("passportPage.inspectedBy", { name: insp.inspector_name, date: formatDate(insp.inspection_date, { withTime: true }) })}</p>
                   </>
                 ) : (
-                  <p className="text-sm text-slate-500">No inspection data available.</p>
+                  <p className="text-sm text-slate-500"> {t("passportPage.noInspection")}</p>
                 )}
               </div>
             </div>
 
             {items.length > 0 && (
               <div className="space-y-2.5">
-                <h3 className="text-sm font-medium text-slate-700 mb-2">Component Breakdown</h3>
+                <h3 className="text-sm font-medium text-slate-700 mb-2"> {t("passportPage.componentBreakdown")}</h3>
                 {items.map((item: InspectionItem) => (
                   <div key={item.category} className="flex items-center gap-3">
                     <span className="text-sm text-slate-700 w-40 shrink-0">{item.category}</span>
@@ -218,7 +268,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
           {/* Documents + share */}
           <div className="space-y-5">
             <Card className="p-5">
-              <h2 className="font-semibold text-slate-900 mb-4">Document Status</h2>
+              <h2 className="font-semibold text-slate-900 mb-4"> {t("passportPage.documentStatus")}</h2>
               {vehicle.documents && vehicle.documents.length > 0 ? (
                 <div className="space-y-2">
                   {vehicle.documents.map((d) => (
@@ -229,13 +279,53 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">No documents listed.</p>
+                <p className="text-sm text-slate-500"> {t("passportPage.noDocuments")}</p>
               )}
             </Card>
 
+            {role && PROTEAN_LOOKUP_ROLES.includes(role as (typeof PROTEAN_LOOKUP_ROLES)[number]) && vehicle.registration_number && (
+              <Card className="p-5">
+                <h2 className="font-semibold text-slate-900 mb-1 flex items-center gap-2"><BadgeCheck size={16} /> Verify Vehicle</h2>
+                <p className="text-xs text-slate-500 mb-3">
+                  Cross-check this vehicle's registration against government records via Protean eGov.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(["vehicle", "insurance", "challan"] as ProteanLookupType[]).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => runProteanLookup(type)}
+                      disabled={proteanState.loading !== null}
+                      className="btn-secondary btn-sm"
+                    >
+                      {proteanState.loading === type ? <Spinner size={14} /> : null}
+                      {type === "vehicle" ? "RC Check" : type === "insurance" ? "Insurance" : "Challans"}
+                    </button>
+                  ))}
+                </div>
+                {(["vehicle", "insurance", "challan"] as ProteanLookupType[]).map((type) => {
+                  const result = proteanState.results[type];
+                  const errorMessage = proteanState.errors[type];
+                  if (!result && !errorMessage) return null;
+                  return (
+                    <div key={type} className="text-xs mt-2 p-2 rounded-md bg-slate-50 border border-slate-200">
+                      <span className="font-medium text-slate-700">{type}: </span>
+                      {errorMessage
+                        ? <span className="text-red-600">{errorMessage}</span>
+                        : (
+                          <span className="text-slate-600">
+                            {result?.cached ? "(cached) " : ""}
+                            {JSON.stringify(result?.payload ?? {})}
+                          </span>
+                        )}
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
+
             <Card className="p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold text-slate-900 flex items-center gap-2"><Share2 size={16} /> Share Passport</h2>
+                <h2 className="font-semibold text-slate-900 flex items-center gap-2"><Share2 size={16} /> {t("passportPage.sharePassport")}</h2>
                 {listing && (
                   <Badge color={listing.status === "Active" ? "emerald" : listing.status === "Sold" ? "blue" : "amber"}>{listing.status}</Badge>
                 )}
@@ -253,7 +343,7 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(passportUrl);
-                          toast("Link copied", "success");
+                          toast(t("passportPage.linkCopied"), "success");
                         }}
                         className="btn-secondary btn-sm flex-1"
                       >
@@ -261,16 +351,16 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
                       </button>
                     )}
                     {soldOut ? (
-                      <p className="text-xs text-slate-500 flex-1 text-center self-center">This vehicle is {vehicle.current_status.toLowerCase()} and can no longer be published.</p>
+                      <p className="text-xs text-slate-500 flex-1 text-center self-center">{t("passportPage.soldOut", { status: t("status." + vehicle.current_status, { defaultValue: vehicle.current_status.toLowerCase() }) })}</p>
                     ) : (
                       <button onClick={togglePublish} disabled={publishing} className={listing.status === "Active" ? "btn-secondary btn-sm flex-1" : "btn-primary btn-sm flex-1"}>
-                        {publishing ? <Spinner size={14} /> : null} {listing.status === "Active" ? "Unpublish" : "Publish"}
+                        {publishing ? <Spinner size={14} /> : null} {listing.status === "Active" ? t("passportPage.unpublish") : t("passportPage.publish")}
                       </button>
                     )}
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-slate-500">No public listing available.</p>
+                <p className="text-sm text-slate-500"> {t("passportPage.noPublicListing")}</p>
               )}
             </Card>
 
@@ -278,9 +368,9 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
               <div className="flex items-start gap-3">
                 <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-900">Verified by {orgName ?? "the dealer"}</p>
+                  <p className="text-sm font-medium text-emerald-900">{t("passportPage.verifiedBy", { org: orgName ?? "the dealer" })}</p>
                   <p className="text-xs text-emerald-700 mt-1">
-                    This passport is generated from the dealer's verified inspection records. Financial details are excluded for buyer privacy.
+                    {t("passportPage.verifiedDescription")}
                   </p>
                 </div>
               </div>
@@ -291,10 +381,10 @@ export function Passport({ vehicleId, onNavigate, onBack }: PassportProps) {
         {/* Footer */}
         <div className="mt-6 text-center">
           <p className="text-xs text-slate-400">
-            Generated {formatDate(new Date().toISOString(), { withTime: true })} · {vehicle.stock_number}
+            {t("passportPage.generated", { date: formatDate(new Date().toISOString(), { withTime: true }), stock: vehicle.stock_number })}
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            This passport is advisory. Buyers should conduct independent verification before purchase.
+            {t("passportPage.advisory")}
           </p>
         </div>
       </div>

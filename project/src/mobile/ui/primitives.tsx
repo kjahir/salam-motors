@@ -137,9 +137,21 @@ interface SheetProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** Smaller heading and tighter header/body padding, for sheets that are mostly a single
+   *  control (like a search field) rather than a list of labelled rows. */
+  compact?: boolean;
+  /** Extra classes for the scrollable body wrapper — e.g. "flex flex-col min-h-[50vh]" to
+   *  give a body that lays out its own scrollable child (a list) real room to expand into,
+   *  instead of the sheet shrinking to hug that child's collapsed/empty state. */
+  bodyClassName?: string;
+  /** How far up from the true viewport bottom the sheet (and its backdrop) stop, as a
+   *  Tailwind `bottom-*` class. Default "bottom-0" — flush with the screen edge, the usual
+   *  case. Pass e.g. "bottom-20" for a sheet opened from a screen that has a fixed bottom
+   *  nav bar, so the sheet stops above the bar instead of covering it. */
+  bottomClass?: string;
 }
 
-export function Sheet({ open, onClose, title, description, children, footer }: SheetProps) {
+export function Sheet({ open, onClose, title, description, children, footer, compact, bodyClassName = "", bottomClass = "bottom-0" }: SheetProps) {
   useEffect(() => {
     if (!open) return;
     document.body.style.overflow = "hidden";
@@ -151,19 +163,19 @@ export function Sheet({ open, onClose, title, description, children, footer }: S
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className={`fixed inset-x-0 top-0 ${bottomClass} z-50 flex items-end justify-center`}>
       <div className="absolute inset-0 bg-mobile-navy/50" onClick={onClose} />
       <div className="relative w-full max-w-md bg-mobile-card rounded-t-3xl shadow-mobile-lg max-h-[88vh] flex flex-col animate-slide-up">
-        <div className="flex items-start justify-between gap-3 p-4 border-b border-mobile-border shrink-0">
+        <div className={`flex items-start justify-between gap-3 border-b border-mobile-border shrink-0 ${compact ? "px-4 py-2.5" : "p-4"}`}>
           <div className="min-w-0">
-            <h2 className="text-base font-poppins font-semibold text-mobile-text">{title}</h2>
+            <h2 className={`font-poppins font-semibold text-mobile-text ${compact ? "text-sm" : "text-base"}`}>{title}</h2>
             {description && <p className="text-xs text-mobile-text-muted mt-0.5">{description}</p>}
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-mobile-text-muted active:bg-mobile-bg shrink-0" aria-label="Close">
             <X size={18} />
           </button>
         </div>
-        <div className="p-4 overflow-y-auto flex-1">{children}</div>
+        <div className={`overflow-y-auto flex-1 ${compact ? "px-4 pt-2 pb-3" : "p-4"} ${bodyClassName}`}>{children}</div>
         {footer && <div className="flex items-center gap-3 p-4 border-t border-mobile-border shrink-0">{footer}</div>}
       </div>
     </div>
@@ -189,5 +201,25 @@ export function SegmentedTabs({ tabs, active, onChange }: { tabs: { key: string;
         );
       })}
     </div>
+  );
+}
+
+/** Compact icon-only nav button for "More" grids — no background tile, just a colored icon, so a growing feature list stays scannable. */
+export function MoreButton({ icon, label, color, onClick, disabled }: {
+  icon: ReactNode;
+  label: string;
+  color: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-1.5 py-2 active:opacity-60 disabled:opacity-30 disabled:pointer-events-none"
+    >
+      <span className={color}>{icon}</span>
+      <span className="text-[10px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
+    </button>
   );
 }

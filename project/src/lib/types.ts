@@ -271,7 +271,6 @@ export interface PublicPassport {
   inspector_name: string | null;
   inspection_items: PublicPassportItem[];
   documents: PublicPassportDocument[];
-  org_id: string;
   organization_name: string | null;
 }
 
@@ -316,6 +315,7 @@ export interface SalePayment {
   reference: string | null;
   paid_at: string;
   notes: string | null;
+  proof_urls: string[] | null;
 }
 
 export interface ProfitShareAllocation {
@@ -401,9 +401,37 @@ export interface VehicleComplianceStatus {
 export interface AppSettings {
   estimated_profit_margin_low_pct: number;
   estimated_profit_margin_high_pct: number;
+  /** The company's own language: the first non-English entry of `preferred_languages`. */
+  preferred_language: string | null;
+  /** Every language offered in the switcher. Always contains "en". */
+  preferred_languages: string[] | null;
+  instagram_handle: string | null;
+  twitter_handle: string | null;
+  whatsapp_business_number: string | null;
+  website_url: string | null;
+  google_business_handle: string | null;
   updated_at: string;
   updated_by: string | null;
 }
+
+export type AdPlatform = "google_business_shared" | "google_business_dealer";
+export type AdPostStatus = "queued" | "posted" | "failed" | "skipped";
+
+export interface VehicleAdPost {
+  id: string;
+  vehicle_id: string;
+  listing_id: string | null;
+  platform: AdPlatform;
+  status: AdPostStatus;
+  creative: Record<string, unknown> | null;
+  external_post_id: string | null;
+  error_message: string | null;
+  posted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AuditLogSource = "app" | "trigger" | "assistant" | "system";
 
 export interface AuditLog {
   id: string;
@@ -415,6 +443,65 @@ export interface AuditLog {
   performed_by: string | null;
   performed_at: string;
   reason: string | null;
+  source: AuditLogSource;
+  changed_fields: string[] | null;
+  db_txid: number | null;
+}
+
+export interface AssistantAuditTurn {
+  run_id: string;
+  conversation_id: string;
+  conversation_title: string | null;
+  requested_by_user_id: string;
+  requested_by_email: string | null;
+  status: string;
+  model: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  user_message_text: string | null;
+  assistant_message_text: string | null;
+  tool_call_count: number;
+  proposal_action_type: string | null;
+  proposal_status: string | null;
+  proposal_risk_level: string | null;
+  created_at: string;
+}
+
+export interface ToolEntitySummary {
+  type: string;
+  id: string;
+  label: string;
+}
+
+export interface AssistantTraceEvent {
+  id: number;
+  run_id: string;
+  /** Which of the 8 Ask Salam workflow steps produced this event. See lib/assistantWorkflow.ts.
+   *  Null only for rows written before the column existed — `stepOf()` falls back to event_key. */
+  workflow_step: number | null;
+  category: "request" | "context" | "model" | "tool" | "validation" | "persistence" | "response" | "error";
+  event_key: string;
+  status: "started" | "completed" | "failed" | "skipped" | "info" | "flagged";
+  summary: string;
+  details_redacted: Record<string, unknown>;
+  duration_ms: number | null;
+  occurred_at: string;
+}
+
+export interface AssistantAuditToolCall {
+  id: string;
+  tool_name: string;
+  status: string;
+  risk_level: string;
+  arguments_redacted: Record<string, unknown> | null;
+  result_redacted: Record<string, unknown> | null;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
 }
 
 export interface VehicleStatusHistory {
@@ -469,7 +556,7 @@ export interface VehicleWithRelations extends Vehicle {
   investments?: (Investment & { partner?: Partner | null })[];
   purchase?: (Purchase & { seller?: Party | null; payments?: PurchasePayment[] }) | null;
   sale?: (Sale & { buyer?: Party | null; payments?: SalePayment[] }) | null;
-  profit_distributions?: (ProfitDistribution & { partner?: Partner | null })[];
+  profit_distributions?: (ProfitDistribution & { partner?: Partner | null; payments?: ProfitSettlementPayment[] })[];
   profit_share_allocations?: (ProfitShareAllocation & { partner?: Partner | null })[];
   status_history?: VehicleStatusHistory[];
   alerts?: Alert[];

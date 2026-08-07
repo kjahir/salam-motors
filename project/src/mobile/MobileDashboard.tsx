@@ -1,82 +1,104 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardList, PlusCircle, LogOut, ShieldAlert } from "lucide-react";
-import { Spinner, Card, EmptyState } from "./ui/primitives";
-import { formatINR, daysSince } from "@/lib/format";
-import { fetchVehicles, fetchFinancialSummaries, fetchAlerts, fetchComplianceStatuses, fetchCompliancePolicies } from "@/lib/queries";
-import { syncAllVehiclesCompliance, resolveAlertDestination } from "@/lib/compliance";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  BarChart3, Bell, Bike, ClipboardCheck, FileText, HandCoins,
+  History, LogOut, Minus, Pencil, Plus, PlusCircle,
+  Receipt, ScrollText, ShieldCheck, UserCircle, UserCog,
+  Users, Wallet, Warehouse,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Spinner, Card, Sheet, MoreButton } from "./ui/primitives";
+import { formatINR, formatINRRange } from "@/lib/format";
+import { computeEstimatedProfitRange } from "@/lib/calc";
+import { fetchVehicles, fetchFinancialSummaries, fetchInvestments, fetchProfitDistributions, fetchAppSettings } from "@/lib/queries";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import { useAuth } from "@/lib/useAuth";
-import type { Vehicle, VehicleFinancialSummary, Alert, VehicleComplianceStatus, CompliancePolicy } from "@/lib/types";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import type { Vehicle, VehicleFinancialSummary, Investment, ProfitDistribution, Partner, AppSettings } from "@/lib/types";
 import type { MobileNavigate } from "./MobileApp";
 
 const SOLD_STATUSES = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
 
-export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) {
+export function MobileDashboard({ onNavigate, selectedVehicleId }: {
+  onNavigate: MobileNavigate;
+  selectedVehicleId?: string | null;
+}) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
-  const [alerts, setAlerts] = useState<(Alert & { vehicle?: Vehicle | null })[]>([]);
-  const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
-  const [policies, setPolicies] = useState<CompliancePolicy[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [distributions, setDistributions] = useState<(ProfitDistribution & { partner: Partner | null })[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [panel, setPanel] = useState<"overview" | null>(null);
   const { signOut } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await syncAllVehiclesCompliance().catch(() => {});
-        const [v, s, a, c, p] = await Promise.all([fetchVehicles(), fetchFinancialSummaries(), fetchAlerts(), fetchComplianceStatuses(), fetchCompliancePolicies()]);
+        const [v, s, inv, dist, st] = await Promise.all([
+          fetchVehicles(),
+          fetchFinancialSummaries(),
+          fetchInvestments(),
+          fetchProfitDistributions(),
+          fetchAppSettings(),
+        ]);
         if (cancelled) return;
         setVehicles(v);
         setSummaries(s);
-        setAlerts(a);
-        setComplianceStatuses(c);
-        setPolicies(p);
+        setInvestments(inv);
+        setDistributions(dist);
+        setSettings(st);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  const policyMap = useMemo(() => new Map(policies.map((p) => [p.id, p])), [policies]);
-
-  const navigateToAlert = (a: Alert) => {
-    const policy = a.policy_id ? policyMap.get(a.policy_id) : undefined;
-    const destination = resolveAlertDestination(policy);
-    if (destination.openEditVehicle) {
-      onNavigate("edit-vehicle", { vehicleId: a.vehicle_id });
-    } else {
-      onNavigate("vehicle", { vehicleId: a.vehicle_id, tab: destination.tab, highlightPolicyId: policy?.id });
-    }
-  };
+  const selectedVehicle = useMemo(
+    () => (selectedVehicleId ? vehicles.find((v) => v.id === selectedVehicleId) ?? null : null),
+    [vehicles, selectedVehicleId],
+  );
+  const selectedSummary = useMemo(
+    () => (selectedVehicleId ? summaries.find((s) => s.vehicle_id === selectedVehicleId) ?? null : null),
+    [summaries, selectedVehicleId],
+  );
 
   const stats = useMemo(() => {
     const summaryMap = new Map(summaries.map((s) => [s.vehicle_id, s]));
     const inStock = vehicles.filter((v) => !SOLD_STATUSES.includes(v.current_status));
     const sold = vehicles.filter((v) => v.current_status === "SOLD" || v.current_status === "DELIVERED");
-    const purchasedValue = vehicles.reduce((s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0), 0);
     const soldValue = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.sale_price ?? 0), 0);
     const inStockValue = inStock.reduce((s, v) => s + (summaryMap.get(v.id)?.total_vehicle_cost ?? 0), 0);
-    const totalExpenses = vehicles.reduce((s, v) => s + (summaryMap.get(v.id)?.total_expense ?? 0), 0);
     const overallProfit = sold.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0);
-    const openAlerts = alerts.filter((a) => a.status === "Open").sort((a, b) => (b.days_in_inventory ?? 0) - (a.days_in_inventory ?? 0));
-    const complianceIssues = complianceStatuses.filter((c) => c.violation_count > 0).length;
-    return {
-      purchasedCount: vehicles.length,
-      purchasedValue,
-      soldCount: sold.length,
-      soldValue,
-      inStockCount: inStock.length,
-      inStockValue,
-      totalExpenses,
-      overallProfit,
-      openAlerts: openAlerts.slice(0, 5),
-      openAlertCount: openAlerts.length,
-      complianceIssues,
+    const purchaseAndExpenses = vehicles.reduce(
+      (s, v) => s + (summaryMap.get(v.id)?.purchase_cost ?? 0) + (summaryMap.get(v.id)?.total_expense ?? 0),
+      0,
+    );
+    const totalInvested = investments
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
+      .reduce((s, i) => s + i.amount, 0);
+    const paidToPartners = distributions.reduce((s, d) => s + d.amount_paid, 0);
+    const now = new Date();
+    const inThisMonth = (iso: string | null | undefined) => {
+      if (!iso) return false;
+      const d = new Date(iso);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     };
-  }, [vehicles, summaries, alerts, complianceStatuses]);
+    const soldThisMonthList = sold.filter((v) => inThisMonth(v.sold_at));
+    return {
+      totalInvested,
+      paidToPartners,
+      purchaseAndExpenses,
+      soldValue,
+      inStockValue,
+      overallProfit,
+      soldThisMonth: soldThisMonthList.length,
+      boughtThisMonth: vehicles.filter((v) => inThisMonth(v.onboarded_at)).length,
+      profitThisMonth: soldThisMonthList.reduce((s, v) => s + (summaryMap.get(v.id)?.gross_profit ?? 0), 0),
+    };
+  }, [vehicles, summaries, investments, distributions]);
 
   if (loading) {
     return (
@@ -87,104 +109,249 @@ export function MobileDashboard({ onNavigate }: { onNavigate: MobileNavigate }) 
   }
 
   const plPositive = stats.overallProfit >= 0;
+  const remaining = stats.totalInvested - stats.purchaseAndExpenses;
+  const remainingPositive = remaining >= 0;
 
   return (
     <div>
+      {/* Header */}
       <div className="bg-mobile-navy text-white px-5 pt-6 pb-8 flex items-start justify-between">
         <div>
           <p className="font-poppins text-[13px] font-medium uppercase tracking-wide text-white/70">Salam</p>
-          <h1 className="font-poppins text-2xl font-bold mt-1">Dashboard</h1>
+          <h1 className="font-poppins text-2xl font-bold mt-1">{t("mobileDashboard.dashboard")}</h1>
         </div>
-        <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label="Sign out">
-          <LogOut size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher variant="mobile" />
+          <button onClick={() => signOut()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20" aria-label={t("auth.signOut")}>
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
 
+      {/* Tappable summary tile — vehicle-specific once Bottom Bar V2 has a vehicle selected,
+          otherwise opens the combined This Month + Financial Overview sheet */}
       <div className="px-4 -mt-4">
-        <Card className="p-5">
-          <p className="text-[13px] font-medium text-mobile-text-secondary">Overall Profit / Loss</p>
-          <p className={`font-poppins text-[32px] font-bold mt-1 ${plPositive ? "text-mobile-success" : "text-mobile-error"}`}>
-            {plPositive ? "+" : ""}
-            {formatINR(stats.overallProfit)}
+        {selectedVehicle ? (
+          <SelectedVehicleCard
+            vehicle={selectedVehicle}
+            summary={selectedSummary}
+            marginLow={settings?.estimated_profit_margin_low_pct ?? 10}
+            marginHigh={settings?.estimated_profit_margin_high_pct ?? 30}
+            onClick={() => onNavigate("vehicle", { vehicleId: selectedVehicle.id })}
+          />
+        ) : (
+          <Card
+            className="relative overflow-hidden border-transparent bg-gradient-to-br from-mobile-purple via-mobile-primary to-mobile-secondary p-5 shadow-mobile-md active:opacity-90 cursor-pointer"
+            onClick={() => setPanel("overview")}
+          >
+            {/* Decorative glow blobs — purely cosmetic, keeps the gradient from reading flat. */}
+            <div className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
+            <div className="pointer-events-none absolute -left-10 -bottom-14 h-32 w-32 rounded-full bg-black/10 blur-2xl" />
+            <div className="relative flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[13px] font-medium text-white/75">{t("mobileDashboard.totalAmountInvested")}</p>
+                  <p className="text-[13px] font-semibold text-white shrink-0">{formatINR(stats.totalInvested)}</p>
+                </div>
+                <p className="flex items-center gap-0.5 font-poppins text-[32px] font-bold mt-1 text-white">
+                  {remainingPositive ? <Plus size={26} strokeWidth={3} /> : <Minus size={26} strokeWidth={3} />}
+                  {formatINR(Math.abs(remaining))}
+                </p>
+                <div className="flex items-baseline justify-between gap-2 mt-1">
+                  <p className="text-xs text-white/70">{t("financePage.totalPurchaseExpenses")}</p>
+                  <p className="text-xs font-semibold text-white/90 shrink-0">{formatINR(stats.purchaseAndExpenses)}</p>
+                </div>
+              </div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 shrink-0">
+                <Wallet size={17} className="text-white" />
+              </span>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* Quick Actions ── Vehicle */}
+      <div className="px-4 pt-5">
+        <Card className="p-4">
+          <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
+            {t("mobileDashboard.sectionVehicle")}
           </p>
-          <p className="text-xs text-mobile-text-muted mt-1">
-            Across {stats.soldCount} bike{stats.soldCount !== 1 ? "s" : ""} sold to date
-          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <QuickAction icon={<PlusCircle size={22} />} tone="primary" label={t("mobileDashboard.addVehicle")} onClick={() => onNavigate("add-vehicle")} disabled={!!selectedVehicleId} />
+            <QuickAction icon={<HandCoins size={22} />} tone="success" label={t("dashboard.sellVehicle")} onClick={() => onNavigate("add-sale", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<Receipt size={22} />} tone="secondary" label={t("mobileDashboard.addExpenses")} onClick={() => onNavigate("add-expense", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<FileText size={22} />} tone="navy" label={t("mobileDashboard.addDocuments")} onClick={() => onNavigate("add-document", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<ClipboardCheck size={22} />} tone="success-soft" label={t("mobileDashboard.addInspections")} onClick={() => onNavigate("add-inspection", selectedVehicleId ? { vehicleId: selectedVehicleId } : undefined)} />
+            <QuickAction icon={<Pencil size={22} />} tone="warning-soft" label={t("mobileDashboard.manageVehicle")} onClick={() => onNavigate("manage-vehicles")} />
+          </div>
         </Card>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        <StatTile label="Purchased" value={`${stats.purchasedCount} bike${stats.purchasedCount !== 1 ? "s" : ""}`} sub={formatINR(stats.purchasedValue)} />
-        <StatTile label="Sold" value={`${stats.soldCount} bike${stats.soldCount !== 1 ? "s" : ""}`} sub={formatINR(stats.soldValue)} />
-        <StatTile
-          label="In Stock"
-          value={`${stats.inStockCount} bike${stats.inStockCount !== 1 ? "s" : ""}`}
-          sub={formatINR(stats.inStockValue)}
-          onClick={() => onNavigate("inventory")}
-        />
-        <StatTile label="Total Expenses" value={formatINR(stats.totalExpenses)} sub="Service, repairs & more" />
-        <StatTile
-          label="Compliance Issues"
-          value={String(stats.complianceIssues)}
-          sub={stats.complianceIssues > 0 ? "Vehicles need attention" : "All vehicles compliant"}
-          onClick={() => onNavigate("inventory")}
-        />
+      {/* Quick Actions ── Status */}
+      <div className="px-4 pt-4">
+        <Card className="p-4">
+          <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
+            {t("mobileDashboard.sectionStatus")}
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <QuickAction icon={<Warehouse size={22} />} tone="navy" label={t("nav.inventory")} onClick={() => onNavigate("inventory")} />
+            <QuickAction icon={<BarChart3 size={22} />} tone="navy-70" label={t("nav.reports")} onClick={() => onNavigate("reports")} />
+            <QuickAction icon={<Bell size={22} />} tone="navy-40" label={t("nav.alerts")} onClick={() => onNavigate("alerts")} />
+          </div>
+        </Card>
       </div>
 
-      <div className="px-4 pt-5">
-        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">Quick Actions</p>
-        <div className="grid grid-cols-2 gap-3">
-          <QuickAction icon={<PlusCircle size={18} />} label="Add Vehicle" onClick={() => onNavigate("add-vehicle")} />
-          <QuickAction icon={<ClipboardList size={18} />} label="View Reports" onClick={() => onNavigate("reports")} />
+      {/* Quick Actions ── More: smaller icon-only buttons in 4-column grid, no background */}
+      <div className="px-4 pt-4 pb-8">
+        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">
+          {t("mobileDashboard.sectionMore")}
+        </p>
+        <div className="grid grid-cols-4 gap-2">
+          <MoreButton icon={<UserCircle size={22} />} color="text-mobile-primary" label={t("nav.parties")} onClick={() => onNavigate("parties")} disabled={!!selectedVehicleId} />
+          <MoreButton icon={<Users size={22} />} color="text-mobile-success" label={t("nav.partners")} onClick={() => onNavigate("partners")} disabled={!!selectedVehicleId} />
+          <MoreButton icon={<UserCog size={22} />} color="text-mobile-navy" label={t("nav.team")} onClick={() => onNavigate("team")} disabled={!!selectedVehicleId} />
+          <MoreButton icon={<ShieldCheck size={22} />} color="text-mobile-warning" label={t("nav.policies")} onClick={() => onNavigate("policies")} />
+          <MoreButton icon={<History size={22} />} color="text-mobile-purple" label={t("nav.history")} onClick={() => onNavigate("history")} />
+          <MoreButton icon={<ScrollText size={22} />} color="text-mobile-text-secondary" label={t("nav.audit")} onClick={() => onNavigate("audit")} />
         </div>
       </div>
 
-      <div className="px-4 pt-5 pb-4">
-        <p className="text-xs font-semibold text-mobile-text-secondary uppercase tracking-wide mb-2">Needs Attention</p>
-        {stats.openAlerts.length === 0 ? (
-          <Card className="p-5">
-            <EmptyState icon={<CheckCircle2 size={20} />} title="All clear" description="No open alerts right now." />
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {stats.openAlerts.map((a) => (
-              <Card key={a.id} className="p-3.5" onClick={() => a.vehicle_id && navigateToAlert(a)}>
-                <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mobile-warning-bg text-mobile-warning">
-                    {a.alert_type === "Compliance" ? <ShieldAlert size={15} /> : <AlertTriangle size={15} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-mobile-text truncate">{a.title}</p>
-                    <p className="text-xs text-mobile-text-muted truncate">
-                      {a.vehicle?.stock_number} · {a.vehicle?.manufacturer} {a.vehicle?.model}
-                      {a.vehicle && ` · ${daysSince(a.vehicle.onboarded_at)}d in stock`}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Combined overview sheet — This Month first, Financial Overview second */}
+      <Sheet open={panel === "overview"} onClose={() => setPanel(null)} title={t("mobileDashboard.overview")}>
+        <p className="text-[11px] font-semibold text-mobile-text-secondary uppercase tracking-wide pb-1">
+          {t("dashboard.thisMonth")}
+        </p>
+        <SheetRow label={t("dashboard.boughtThisMonth")} value={String(stats.boughtThisMonth)} />
+        <SheetRow label={t("dashboard.soldThisMonth")} value={String(stats.soldThisMonth)} />
+        <SheetRow
+          label={t("dashboard.realisedProfitMonth")}
+          value={formatINR(stats.profitThisMonth)}
+          valueClass={stats.profitThisMonth >= 0 ? "text-mobile-success" : "text-mobile-error"}
+        />
+        <p className="text-[11px] font-semibold text-mobile-text-secondary uppercase tracking-wide pt-4 pb-1">
+          {t("dashboard.financialOverview")}
+        </p>
+        <SheetRow label={t("dashboard.totalInvested")} value={formatINR(stats.totalInvested)} />
+        <SheetRow
+          label={t("dashboard.totalProfit")}
+          value={formatINR(stats.overallProfit)}
+          valueClass={plPositive ? "text-mobile-success" : "text-mobile-error"}
+        />
+        <SheetRow label={t("mobileDashboard.paidToPartners")} value={formatINR(stats.paidToPartners)} />
+        <SheetRow label={t("mobileReports.purchaseExpenses")} value={formatINR(stats.purchaseAndExpenses)} />
+        <SheetRow label={t("mobileDashboard.totalSold")} value={formatINR(stats.soldValue)} />
+        <SheetRow label={t("mobileDashboard.inStock")} value={formatINR(stats.inStockValue)} />
+      </Sheet>
     </div>
   );
 }
 
-function StatTile({ label, value, sub, onClick }: { label: string; value: string; sub: string; onClick?: () => void }) {
+function QuickAction({ icon, label, tone, onClick, disabled }: {
+  icon: ReactNode;
+  label: string;
+  tone: "primary" | "success" | "secondary" | "navy" | "success-soft" | "warning-soft"
+    | "navy-70" | "navy-40"
+    | "purple" | "purple-80" | "purple-60" | "purple-40" | "purple-25" | "purple-15"
+    | "none";
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  const tones = {
+    primary:      "bg-mobile-primary text-white shadow-mobile-sm",
+    success:      "bg-mobile-success text-white shadow-mobile-sm",
+    secondary:    "bg-mobile-secondary text-mobile-navy shadow-mobile-sm",
+    navy:         "bg-mobile-navy text-white shadow-mobile-sm",
+    "success-soft": "bg-mobile-success-bg text-mobile-success",
+    "warning-soft": "bg-mobile-warning-bg text-mobile-warning",
+    // navy gradient (Status section: dark → mid → light)
+    "navy-70":    "bg-mobile-navy/70 text-white shadow-mobile-sm",
+    "navy-40":    "bg-mobile-navy/40 text-mobile-navy",
+    // purple gradient (More section: solid → fades to tint)
+    purple:       "bg-mobile-purple text-white shadow-mobile-sm",
+    "purple-80":  "bg-mobile-purple/80 text-white shadow-mobile-sm",
+    "purple-60":  "bg-mobile-purple/60 text-white shadow-mobile-sm",
+    "purple-40":  "bg-mobile-purple/40 text-mobile-purple",
+    "purple-25":  "bg-mobile-purple/25 text-mobile-purple",
+    "purple-15":  "bg-mobile-purple/15 text-mobile-purple",
+    none:         "border border-mobile-border bg-mobile-card text-mobile-text-secondary",
+  };
   return (
-    <Card className="p-4" onClick={onClick}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-mobile-text-muted">{label}</p>
-      <p className="font-poppins text-[22px] font-bold text-mobile-text mt-1.5">{value}</p>
-      <p className="text-[13px] text-mobile-text-secondary mt-0.5">{sub}</p>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-2 py-2 active:opacity-60 disabled:opacity-30 disabled:pointer-events-none"
+    >
+      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tones[tone]}`}>{icon}</span>
+      <span className="text-[11px] font-medium text-mobile-text-secondary text-center leading-tight">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * Replaces the aggregate financial tile once Bottom Bar V2 has a vehicle selected — the
+ * dealer asked for the whole dashboard to "become specific to that vehicle" rather than
+ * just preselecting it inside each quick action.
+ */
+function SelectedVehicleCard({ vehicle, summary, marginLow, marginHigh, onClick }: {
+  vehicle: Vehicle;
+  summary: VehicleFinancialSummary | null;
+  marginLow: number;
+  marginHigh: number;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const isSold = SOLD_STATUSES.includes(vehicle.current_status);
+  const estRange = computeEstimatedProfitRange(summary?.total_vehicle_cost ?? 0, marginLow, marginHigh);
+
+  return (
+    <Card
+      className="relative overflow-hidden border-transparent bg-gradient-to-br from-mobile-navy via-mobile-purple to-mobile-primary p-5 shadow-mobile-md active:opacity-90 cursor-pointer"
+      onClick={onClick}
+    >
+      {/* Same decorative glow treatment as the aggregate tile, so the two read as one family. */}
+      <div className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
+      <div className="pointer-events-none absolute -left-10 -bottom-14 h-32 w-32 rounded-full bg-black/10 blur-2xl" />
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-white/75">{t("mobileDashboard.selectedVehicle")}</p>
+          <p className="font-poppins text-xl font-bold text-white mt-1 truncate">
+            {[vehicle.manufacturer, vehicle.model].filter(Boolean).join(" ") || vehicle.stock_number}
+          </p>
+          <p className="text-xs text-white/70 font-mono mt-0.5">
+            {vehicle.registration_number ?? vehicle.stock_number}
+          </p>
+          <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-white/20">
+            <div>
+              <p className="text-[10px] text-white/60 uppercase">{t("mobileInventory.totalCost")}</p>
+              <p className="text-sm font-medium text-white">{formatINR(summary?.total_vehicle_cost ?? 0)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-white/60 uppercase">{isSold ? t("mobileInventory.profit") : t("mobileInventory.estProfit")}</p>
+              {isSold ? (
+                <p className="text-sm font-semibold text-white">
+                  {formatINR(summary?.gross_profit)}
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-white whitespace-nowrap">
+                  {formatINRRange(estRange.low, estRange.high, { compact: true })}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 shrink-0">
+          <Bike size={17} className="text-white" />
+        </span>
+      </div>
     </Card>
   );
 }
 
-function QuickAction({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function SheetRow({ label, value, valueClass = "text-mobile-text" }: { label: string; value: string; valueClass?: string }) {
   return (
-    <button onClick={onClick} className="flex items-center gap-2.5 rounded-2xl border border-mobile-border bg-white p-3.5 active:bg-mobile-bg">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-mobile-primary/10 text-mobile-primary shrink-0">{icon}</div>
-      <span className="text-sm font-medium text-mobile-text">{label}</span>
-    </button>
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-mobile-border last:border-0">
+      <p className="text-sm text-mobile-text-secondary">{label}</p>
+      <p className={`text-sm font-semibold ${valueClass}`}>{value}</p>
+    </div>
   );
 }

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Wallet, IndianRupee, Receipt, TrendingUp, Download, AlertTriangle, ShoppingCart, Banknote, Search, ChevronUp, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PageHeader, Tabs, Spinner } from "@/components/ui/Primitives";
 import { Card, StatCard, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -9,6 +10,7 @@ import { useProofLightbox } from "@/hooks/useProofLightbox";
 import { formatINR, formatDate, formatPercent } from "@/lib/format";
 import { downloadCSV, isApproved } from "@/lib/calc";
 import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
+import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import {
   fetchInvestments,
   fetchAllExpenses,
@@ -17,6 +19,7 @@ import {
   fetchAllSales,
   fetchFinancialSummaries,
 } from "@/lib/queries";
+import { vehicleLabel, vehicleRef } from "@/lib/vehicleLabel";
 import type { Investment, Expense, ProfitDistribution, ProfitSettlementPayment, Purchase, Sale, Vehicle, Partner, Party, VehicleFinancialSummary } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
@@ -59,6 +62,10 @@ export function Finance({ onNavigate }: FinanceProps) {
   const [dateRange, setDateRange] = useState<DateRangeKey>("all");
   const [sort, setSort] = useState<SortState | null>(null);
   const proofLightbox = useProofLightbox("finance-proofs");
+  const { t } = useTranslation();
+
+  const trStatus = (value: string) => t("status." + value, { defaultValue: value });
+  const trDateRange = (value: DateRangeKey, label: string) => t("dateRange." + value, { defaultValue: label });
 
   useEffect(() => {
     setSort(null);
@@ -78,7 +85,7 @@ export function Finance({ onNavigate }: FinanceProps) {
     setSort((s) => (s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   };
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [i, e, d, p, s, f] = await Promise.all([
         fetchInvestments(),
@@ -95,15 +102,15 @@ export function Finance({ onNavigate }: FinanceProps) {
       setSales(s);
       setSummaries(f);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : t("financePage.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
 
@@ -111,7 +118,7 @@ export function Finance({ onNavigate }: FinanceProps) {
 
   const totals = useMemo(() => {
     const totalInvested = investments
-      .filter((i) => i.status === "Received" || i.status === "Partially used" || i.status === "Fully used")
+      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
       .reduce((s, i) => s + i.amount, 0);
     const totalExpenses = expenses.filter(isApproved).reduce((s, e) => s + e.amount, 0);
     const pendingExpenses = expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft");
@@ -155,12 +162,12 @@ export function Finance({ onNavigate }: FinanceProps) {
       vehicle: (e) => e.vehicle ? `${e.vehicle.manufacturer} ${e.vehicle.model}` : "",
       category: (e) => e.category,
       amount: (e) => e.amount,
-      paidBy: (e) => e.partner?.name ?? "Business",
+      paidBy: (e) => e.partner?.name ?? t("financePage.business"),
       date: (e) => +new Date(e.expense_date),
       bill: (e) => (e.bill_available ? 1 : 0),
       status: (e) => e.approval_status,
     });
-  }, [expenses, dateRange, matches, sort]);
+  }, [expenses, dateRange, matches, sort, t]);
 
   const saleRows = useMemo(() => {
     const filtered = soldSales.filter((s) => isWithinDateRange(s.sale_date, dateRange) && matches(s.vehicle));
@@ -199,7 +206,7 @@ export function Finance({ onNavigate }: FinanceProps) {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Finance" />
+        <PageHeader title={t("financePage.financeTitle")} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -208,33 +215,33 @@ export function Finance({ onNavigate }: FinanceProps) {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Finance" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={t("financePage.financeTitle")} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("financePage.failedToLoad")} description={error} /></Card>
       </div>
     );
   }
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <PageHeader title="Finance" description="Investments, expenses, and profit settlements" icon={<Wallet size={20} />} />
+      <PageHeader title={t("financePage.financeTitle")} description={t("financePage.financeDescription")} icon={<Wallet size={20} />} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Invested" value={formatINR(totals.totalInvested, { compact: true })} icon={<IndianRupee size={18} />} color="brand" />
+        <StatCard label={t("financePage.totalInvested")} value={formatINR(totals.totalInvested, { compact: true })} icon={<IndianRupee size={18} />} color="brand" />
         <StatCard
-          label="Total Purchase and Expenses"
+          label={t("financePage.totalPurchaseExpenses")}
           value={formatINR(totals.totalPurchaseAndExpenses, { compact: true })}
-          hint={`Purchases ${formatINR(totals.totalPurchases, { compact: true })} · Expenses ${formatINR(totals.totalExpenses, { compact: true })}`}
+          hint={t("financePage.purchasesExpensesShort", { purchases: formatINR(totals.totalPurchases, { compact: true }), expenses: formatINR(totals.totalExpenses, { compact: true }) })}
           icon={<Receipt size={18} />}
           color="slate"
         />
         <StatCard
-          label="Total Sales and Profit"
+          label={t("financePage.totalSalesProfit")}
           value={formatINR(totals.totalSales, { compact: true })}
-          hint={`Profit ${formatINR(totals.totalProfit, { compact: true })}`}
+          hint={t("financePage.profitHint", { profit: formatINR(totals.totalProfit, { compact: true }) })}
           icon={<TrendingUp size={18} />}
           color="emerald"
         />
-        <StatCard label="Payable to Partners" value={formatINR(totals.totalPayable, { compact: true })} icon={<Wallet size={18} />} color="amber" />
+        <StatCard label={t("financePage.payableToPartners")} value={formatINR(totals.totalPayable, { compact: true })} icon={<Wallet size={18} />} color="amber" />
       </div>
 
       <Card className="p-4 mb-5">
@@ -244,7 +251,7 @@ export function Finance({ onNavigate }: FinanceProps) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by make, model or reg. no."
+              placeholder={t("financePage.searchPlaceholder")}
               className="input pl-9"
             />
           </div>
@@ -255,7 +262,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                 onClick={() => setDateRange(opt.value)}
                 className={`rounded-pill px-3 py-1.5 text-xs font-medium ${dateRange === opt.value ? "bg-brand-600 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
               >
-                {opt.label}
+                {trDateRange(opt.value, opt.label)}
               </button>
             ))}
           </div>
@@ -264,11 +271,11 @@ export function Finance({ onNavigate }: FinanceProps) {
 
       <Tabs
         tabs={[
-          { key: "investments", label: "Investments", badge: <Badge color="slate">{investmentRows.length}</Badge> },
-          { key: "purchases", label: "Purchase", badge: <Badge color="slate">{purchaseRows.length}</Badge> },
-          { key: "expenses", label: "Expenses", badge: <Badge color="slate">{expenseRows.length}</Badge> },
-          { key: "saleprofit", label: "Sale and Profit", badge: <Badge color="slate">{saleRows.length}</Badge> },
-          { key: "settlements", label: "Settlements", badge: <Badge color="slate">{settlementRows.length}</Badge> },
+          { key: "investments", label: t("financePage.tabs.investments"), badge: <Badge color="slate">{investmentRows.length}</Badge> },
+          { key: "purchases", label: t("financePage.tabs.purchases"), badge: <Badge color="slate">{purchaseRows.length}</Badge> },
+          { key: "expenses", label: t("financePage.tabs.expenses"), badge: <Badge color="slate">{expenseRows.length}</Badge> },
+          { key: "saleprofit", label: t("financePage.tabs.saleProfit"), badge: <Badge color="slate">{saleRows.length}</Badge> },
+          { key: "settlements", label: t("financePage.tabs.settlements"), badge: <Badge color="slate">{settlementRows.length}</Badge> },
         ]}
         active={tab}
         onChange={setTab}
@@ -278,7 +285,7 @@ export function Finance({ onNavigate }: FinanceProps) {
         {tab === "investments" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">All Investments</h3>
+              <h3 className="font-semibold text-slate-900"> {t("financePage.allInvestments")}</h3>
               <button
                 onClick={() => downloadCSV("investments.csv", investmentRows.map((i) => ({
                   Partner: i.partner?.name ?? "",
@@ -291,37 +298,37 @@ export function Finance({ onNavigate }: FinanceProps) {
                 })))}
                 className="btn-ghost btn-sm"
               >
-                <Download size={14} /> Export
+                <Download size={14} /> {t("financePage.export")}
               </button>
             </div>
             {investmentRows.length === 0 ? (
-              <EmptyState icon={<IndianRupee size={20} />} title="No investments" />
+              <EmptyState icon={<IndianRupee size={20} />} title={t("financePage.empty.investments")} />
             ) : (
               <TableWrapper>
                 <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                  <SortableTh sortKey="partner" sort={sort} onSort={toggleSort}>Partner</SortableTh>
-                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}>Vehicle</SortableTh>
-                  <SortableTh sortKey="amount" sort={sort} onSort={toggleSort} className="text-right">Amount</SortableTh>
-                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}>Date</SortableTh>
-                  <SortableTh sortKey="purpose" sort={sort} onSort={toggleSort}>Purpose</SortableTh>
-                  <SortableTh sortKey="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
+                  <SortableTh sortKey="partner" sort={sort} onSort={toggleSort}> {t("financePage.columns.partner")}</SortableTh>
+                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}> {t("financePage.columns.vehicle")}</SortableTh>
+                  <SortableTh sortKey="amount" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.amount")}</SortableTh>
+                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}> {t("financePage.columns.date")}</SortableTh>
+                  <SortableTh sortKey="purpose" sort={sort} onSort={toggleSort}> {t("financePage.columns.purpose")}</SortableTh>
+                  <SortableTh sortKey="status" sort={sort} onSort={toggleSort}> {t("financePage.columns.status")}</SortableTh>
                   <Th></Th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {investmentRows.map((inv) => (
                     <tr key={inv.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium text-slate-900 cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.partner?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.vehicle ? `${inv.vehicle.stock_number} · ${inv.vehicle.manufacturer} ${inv.vehicle.model}` : "General capital"}</td>
+                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => inv.vehicle_id && onNavigate("vehicle", { vehicleId: inv.vehicle_id })}>{inv.vehicle ? vehicleLabel(inv.vehicle) : t("financePage.generalCapital")}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(inv.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(inv.investment_date, { withTime: true })}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{inv.purpose ?? "—"}</td>
-                      <td className="px-4 py-3"><Badge color={inv.status === "Fully used" ? "emerald" : inv.status === "Received" ? "blue" : "amber"}>{inv.status}</Badge></td>
+                      <td className="px-4 py-3"><Badge color={inv.status === "Fully used" ? "emerald" : inv.status === "Received" ? "blue" : "amber"}>{trStatus(inv.status)}</Badge></td>
                       <td className="px-4 py-3 text-right">
                         {(() => {
                           const paths = inv.proof_urls?.length ? inv.proof_urls : inv.proof_url ? [inv.proof_url] : [];
                           return paths.length > 0 ? (
                             <button onClick={() => proofLightbox.open(paths)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">
-                              Proof{paths.length > 1 ? ` (${paths.length})` : ""}
+                              {paths.length > 1 ? t("financePage.proofWithCount", { count: paths.length }) : t("financePage.proof")}
                             </button>
                           ) : null;
                         })()}
@@ -331,7 +338,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
-                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3" colSpan={2}> {t("financePage.columns.total")}</td>
                     <td className="px-4 py-3 text-right">{formatINR(investmentRows.reduce((s, i) => s + i.amount, 0))}</td>
                     <td className="px-4 py-3" colSpan={4}></td>
                   </tr>
@@ -344,7 +351,7 @@ export function Finance({ onNavigate }: FinanceProps) {
         {tab === "purchases" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">All Purchases</h3>
+              <h3 className="font-semibold text-slate-900"> {t("financePage.allPurchases")}</h3>
               <button
                 onClick={() => downloadCSV("purchases.csv", purchaseRows.map((p) => ({
                   Vehicle: p.vehicle ? `${p.vehicle.manufacturer} ${p.vehicle.model}` : "",
@@ -359,38 +366,38 @@ export function Finance({ onNavigate }: FinanceProps) {
                 })))}
                 className="btn-ghost btn-sm"
               >
-                <Download size={14} /> Export
+                <Download size={14} /> {t("financePage.export")}
               </button>
             </div>
             {purchaseRows.length === 0 ? (
-              <EmptyState icon={<ShoppingCart size={20} />} title="No purchases" />
+              <EmptyState icon={<ShoppingCart size={20} />} title={t("financePage.empty.purchases")} />
             ) : (
               <TableWrapper>
                 <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}>Vehicle</SortableTh>
-                  <SortableTh sortKey="seller" sort={sort} onSort={toggleSort}>Seller</SortableTh>
-                  <SortableTh sortKey="agreedPrice" sort={sort} onSort={toggleSort} className="text-right">Agreed Price</SortableTh>
-                  <SortableTh sortKey="fees" sort={sort} onSort={toggleSort} className="text-right">Fees</SortableTh>
-                  <SortableTh sortKey="total" sort={sort} onSort={toggleSort} className="text-right">Total</SortableTh>
-                  <SortableTh sortKey="payment" sort={sort} onSort={toggleSort}>Payment</SortableTh>
-                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}>Date</SortableTh>
+                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}> {t("financePage.columns.vehicle")}</SortableTh>
+                  <SortableTh sortKey="seller" sort={sort} onSort={toggleSort}> {t("financePage.columns.seller")}</SortableTh>
+                  <SortableTh sortKey="agreedPrice" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.agreedPrice")}</SortableTh>
+                  <SortableTh sortKey="fees" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.fees")}</SortableTh>
+                  <SortableTh sortKey="total" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.total")}</SortableTh>
+                  <SortableTh sortKey="payment" sort={sort} onSort={toggleSort}> {t("financePage.columns.payment")}</SortableTh>
+                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}> {t("financePage.columns.date")}</SortableTh>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {purchaseRows.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: p.vehicle_id })}>
-                      <td className="px-4 py-3 text-sm">{p.vehicle?.stock_number} · {p.vehicle?.manufacturer} {p.vehicle?.model}</td>
+                      <td className="px-4 py-3 text-sm">{vehicleLabel(p.vehicle)}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">{p.seller?.full_name ?? "—"}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(p.agreed_price)}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{formatINR(p.broker_commission + p.other_fee)}</td>
                       <td className="px-4 py-3 text-right font-bold">{formatINR(p.agreed_price + p.broker_commission + p.other_fee)}</td>
-                      <td className="px-4 py-3"><Badge color={p.payment_status === "Paid" ? "emerald" : p.payment_status === "Partially paid" ? "amber" : "slate"}>{p.payment_status}</Badge></td>
+                      <td className="px-4 py-3"><Badge color={p.payment_status === "Paid" ? "emerald" : p.payment_status === "Partially paid" ? "amber" : "slate"}>{trStatus(p.payment_status)}</Badge></td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(p.purchase_date, { withTime: true })}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
-                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3" colSpan={2}> {t("financePage.columns.total")}</td>
                     <td className="px-4 py-3 text-right">{formatINR(purchaseRows.reduce((s, p) => s + p.agreed_price, 0))}</td>
                     <td className="px-4 py-3 text-right">{formatINR(purchaseRows.reduce((s, p) => s + p.broker_commission + p.other_fee, 0))}</td>
                     <td className="px-4 py-3 text-right">{formatINR(purchaseRows.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0))}</td>
@@ -405,53 +412,53 @@ export function Finance({ onNavigate }: FinanceProps) {
         {tab === "expenses" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">All Expenses {totals.pendingExpenses.length > 0 && <Badge color="amber" className="ml-2">{totals.pendingExpenses.length} pending</Badge>}</h3>
+              <h3 className="font-semibold text-slate-900">{t("financePage.allExpenses")} {totals.pendingExpenses.length > 0 && <Badge color="amber" className="ml-2">{t("financePage.pending", { count: totals.pendingExpenses.length })}</Badge>}</h3>
               <button
                 onClick={() => downloadCSV("expenses.csv", expenseRows.map((e) => ({
                   Vehicle: e.vehicle ? `${e.vehicle.manufacturer} ${e.vehicle.model}` : "",
                   "Stock #": e.vehicle?.stock_number ?? "",
                   Category: e.category,
                   Amount: e.amount,
-                  "Paid By": e.partner?.name ?? "Business",
+                  "Paid By": e.partner?.name ?? t("financePage.business"),
                   Vendor: e.vendor ?? "",
                   Date: formatDate(e.expense_date),
-                  Bill: e.bill_available ? "Yes" : "No",
+                  Bill: e.bill_available ? t("financePage.yes") : t("financePage.no"),
                   Status: e.approval_status,
                 })))}
                 className="btn-ghost btn-sm"
               >
-                <Download size={14} /> Export
+                <Download size={14} /> {t("financePage.export")}
               </button>
             </div>
             {expenseRows.length === 0 ? (
-              <EmptyState icon={<Receipt size={20} />} title="No expenses" />
+              <EmptyState icon={<Receipt size={20} />} title={t("financePage.empty.expenses")} />
             ) : (
               <TableWrapper>
                 <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}>Vehicle</SortableTh>
-                  <SortableTh sortKey="category" sort={sort} onSort={toggleSort}>Category</SortableTh>
-                  <SortableTh sortKey="amount" sort={sort} onSort={toggleSort} className="text-right">Amount</SortableTh>
-                  <SortableTh sortKey="paidBy" sort={sort} onSort={toggleSort}>Paid By</SortableTh>
-                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}>Date</SortableTh>
-                  <SortableTh sortKey="bill" sort={sort} onSort={toggleSort}>Bill</SortableTh>
-                  <SortableTh sortKey="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
+                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}> {t("financePage.columns.vehicle")}</SortableTh>
+                  <SortableTh sortKey="category" sort={sort} onSort={toggleSort}> {t("financePage.columns.category")}</SortableTh>
+                  <SortableTh sortKey="amount" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.amount")}</SortableTh>
+                  <SortableTh sortKey="paidBy" sort={sort} onSort={toggleSort}> {t("financePage.columns.paidBy")}</SortableTh>
+                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}> {t("financePage.columns.date")}</SortableTh>
+                  <SortableTh sortKey="bill" sort={sort} onSort={toggleSort}> {t("financePage.columns.bill")}</SortableTh>
+                  <SortableTh sortKey="status" sort={sort} onSort={toggleSort}> {t("financePage.columns.status")}</SortableTh>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {expenseRows.map((e) => (
                     <tr key={e.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: e.vehicle_id })}>
-                      <td className="px-4 py-3 text-sm">{e.vehicle?.stock_number} · {e.vehicle?.manufacturer} {e.vehicle?.model}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{e.category}</td>
+                      <td className="px-4 py-3 text-sm">{vehicleLabel(e.vehicle)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{trStatus(e.category)}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatINR(e.amount)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{e.partner?.name ?? "Business"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{e.partner?.name ?? t("financePage.business")}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(e.expense_date)}</td>
-                      <td className="px-4 py-3">{e.bill_available ? <Badge color="emerald">Yes</Badge> : <Badge color="slate">No</Badge>}</td>
-                      <td className="px-4 py-3"><Badge color={e.approval_status === "Approved" ? "emerald" : e.approval_status === "Submitted" ? "amber" : e.approval_status === "Rejected" ? "red" : "slate"}>{e.approval_status}</Badge></td>
+                      <td className="px-4 py-3">{e.bill_available ? <Badge color="emerald">{t("financePage.yes")}</Badge> : <Badge color="slate">{t("financePage.no")}</Badge>}</td>
+                      <td className="px-4 py-3"><Badge color={e.approval_status === "Approved" ? "emerald" : e.approval_status === "Submitted" ? "amber" : e.approval_status === "Rejected" ? "red" : "slate"}>{trStatus(e.approval_status)}</Badge></td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
-                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3" colSpan={2}> {t("financePage.columns.total")}</td>
                     <td className="px-4 py-3 text-right">{formatINR(expenseRows.reduce((s, e) => s + e.amount, 0))}</td>
                     <td className="px-4 py-3" colSpan={4}></td>
                   </tr>
@@ -464,7 +471,7 @@ export function Finance({ onNavigate }: FinanceProps) {
         {tab === "saleprofit" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">Sale and Profit</h3>
+              <h3 className="font-semibold text-slate-900"> {t("financePage.saleAndProfit")}</h3>
               <button
                 onClick={() => downloadCSV("sale-and-profit.csv", saleRows.map((s) => {
                   const summary = summaryMap.get(s.vehicle_id);
@@ -484,23 +491,23 @@ export function Finance({ onNavigate }: FinanceProps) {
                 }))}
                 className="btn-ghost btn-sm"
               >
-                <Download size={14} /> Export
+                <Download size={14} /> {t("financePage.export")}
               </button>
             </div>
             {saleRows.length === 0 ? (
-              <EmptyState icon={<Banknote size={20} />} title="No sales" description="Completed sales and their profit appear here." />
+              <EmptyState icon={<Banknote size={20} />} title={t("financePage.empty.sales")} description={t("financePage.empty.salesDescription")} />
             ) : (
               <TableWrapper>
                 <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}>Vehicle</SortableTh>
-                  <SortableTh sortKey="buyer" sort={sort} onSort={toggleSort}>Buyer</SortableTh>
-                  <SortableTh sortKey="salePrice" sort={sort} onSort={toggleSort} className="text-right">Sale Price</SortableTh>
-                  <SortableTh sortKey="totalCost" sort={sort} onSort={toggleSort} className="text-right">Total Cost</SortableTh>
-                  <SortableTh sortKey="grossProfit" sort={sort} onSort={toggleSort} className="text-right">Gross Profit</SortableTh>
-                  <SortableTh sortKey="margin" sort={sort} onSort={toggleSort} className="text-right">Margin</SortableTh>
-                  <SortableTh sortKey="payment" sort={sort} onSort={toggleSort}>Payment</SortableTh>
-                  <SortableTh sortKey="delivery" sort={sort} onSort={toggleSort}>Delivery</SortableTh>
-                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}>Date</SortableTh>
+                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}> {t("financePage.columns.vehicle")}</SortableTh>
+                  <SortableTh sortKey="buyer" sort={sort} onSort={toggleSort}> {t("financePage.columns.buyer")}</SortableTh>
+                  <SortableTh sortKey="salePrice" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.salePrice")}</SortableTh>
+                  <SortableTh sortKey="totalCost" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.totalCost")}</SortableTh>
+                  <SortableTh sortKey="grossProfit" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.grossProfit")}</SortableTh>
+                  <SortableTh sortKey="margin" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.margin")}</SortableTh>
+                  <SortableTh sortKey="payment" sort={sort} onSort={toggleSort}> {t("financePage.columns.payment")}</SortableTh>
+                  <SortableTh sortKey="delivery" sort={sort} onSort={toggleSort}> {t("financePage.columns.delivery")}</SortableTh>
+                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}> {t("financePage.columns.date")}</SortableTh>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {saleRows.map((s) => {
@@ -510,14 +517,14 @@ export function Finance({ onNavigate }: FinanceProps) {
                     const marginPct = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0;
                     return (
                       <tr key={s.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: s.vehicle_id })}>
-                        <td className="px-4 py-3 text-sm">{s.vehicle?.stock_number} · {s.vehicle?.manufacturer} {s.vehicle?.model}</td>
+                        <td className="px-4 py-3 text-sm">{vehicleLabel(s.vehicle)}</td>
                         <td className="px-4 py-3 font-medium text-slate-900">{s.buyer?.full_name ?? "—"}</td>
                         <td className="px-4 py-3 text-right font-medium">{formatINR(s.sale_price)}</td>
                         <td className="px-4 py-3 text-right">{formatINR(summary?.total_vehicle_cost ?? 0)}</td>
                         <td className={`px-4 py-3 text-right font-bold ${grossProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatINR(grossProfit)}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{formatPercent(marginPct)}</td>
-                        <td className="px-4 py-3"><Badge color={s.payment_status === "Paid" ? "emerald" : s.payment_status === "Partially paid" ? "amber" : "slate"}>{s.payment_status}</Badge></td>
-                        <td className="px-4 py-3"><Badge color={s.delivery_status === "Delivered" ? "emerald" : "amber"}>{s.delivery_status}</Badge></td>
+                        <td className="px-4 py-3"><Badge color={s.payment_status === "Paid" ? "emerald" : s.payment_status === "Partially paid" ? "amber" : "slate"}>{trStatus(s.payment_status)}</Badge></td>
+                        <td className="px-4 py-3"><Badge color={s.delivery_status === "Delivered" ? "emerald" : "amber"}>{trStatus(s.delivery_status)}</Badge></td>
                         <td className="px-4 py-3 text-xs text-slate-500">{formatDate(s.sale_date, { withTime: true })}</td>
                       </tr>
                     );
@@ -525,7 +532,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
-                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3" colSpan={2}> {t("financePage.columns.total")}</td>
                     <td className="px-4 py-3 text-right">{formatINR(saleRows.reduce((s, sale) => s + sale.sale_price, 0))}</td>
                     <td className="px-4 py-3 text-right">{formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.total_vehicle_cost ?? 0), 0))}</td>
                     <td className="px-4 py-3 text-right">{formatINR(saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0))}</td>
@@ -540,7 +547,7 @@ export function Finance({ onNavigate }: FinanceProps) {
         {tab === "settlements" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">Profit Settlements</h3>
+              <h3 className="font-semibold text-slate-900"> {t("financePage.profitSettlements")}</h3>
               <button
                 onClick={() => downloadCSV("settlements.csv", settlementRows.map((d) => ({
                   Partner: d.partner?.name ?? "",
@@ -556,38 +563,38 @@ export function Finance({ onNavigate }: FinanceProps) {
                 })))}
                 className="btn-ghost btn-sm"
               >
-                <Download size={14} /> Export
+                <Download size={14} /> {t("financePage.export")}
               </button>
             </div>
             {settlementRows.length === 0 ? (
-              <EmptyState icon={<TrendingUp size={20} />} title="No settlements" description="Profit distributions appear after a sale is completed." />
+              <EmptyState icon={<TrendingUp size={20} />} title={t("financePage.empty.settlements")} description={t("financePage.empty.settlementsDescription")} />
             ) : (
               <TableWrapper>
                 <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                  <SortableTh sortKey="partner" sort={sort} onSort={toggleSort}>Partner</SortableTh>
-                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}>Vehicle</SortableTh>
-                  <SortableTh sortKey="principal" sort={sort} onSort={toggleSort} className="text-right">Principal</SortableTh>
-                  <SortableTh sortKey="profit" sort={sort} onSort={toggleSort} className="text-right">Profit</SortableTh>
-                  <SortableTh sortKey="total" sort={sort} onSort={toggleSort} className="text-right">Total</SortableTh>
-                  <SortableTh sortKey="paid" sort={sort} onSort={toggleSort} className="text-right">Paid</SortableTh>
-                  <SortableTh sortKey="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
-                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}>Date</SortableTh>
+                  <SortableTh sortKey="partner" sort={sort} onSort={toggleSort}> {t("financePage.columns.partner")}</SortableTh>
+                  <SortableTh sortKey="vehicle" sort={sort} onSort={toggleSort}> {t("financePage.columns.vehicle")}</SortableTh>
+                  <SortableTh sortKey="principal" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.principal")}</SortableTh>
+                  <SortableTh sortKey="profit" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.profit")}</SortableTh>
+                  <SortableTh sortKey="total" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.total")}</SortableTh>
+                  <SortableTh sortKey="paid" sort={sort} onSort={toggleSort} className="text-right"> {t("financePage.columns.paid")}</SortableTh>
+                  <SortableTh sortKey="status" sort={sort} onSort={toggleSort}> {t("financePage.columns.status")}</SortableTh>
+                  <SortableTh sortKey="date" sort={sort} onSort={toggleSort}> {t("financePage.columns.date")}</SortableTh>
                   <Th></Th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {settlementRows.map((d) => (
                     <tr key={d.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium text-slate-900">{d.partner?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: d.vehicle_id })}>{d.vehicle?.stock_number}</td>
+                      <td className="px-4 py-3 text-sm cursor-pointer" onClick={() => onNavigate("vehicle", { vehicleId: d.vehicle_id })}>{vehicleRef(d.vehicle)}</td>
                       <td className="px-4 py-3 text-right">{formatINR(d.principal_return)}</td>
                       <td className="px-4 py-3 text-right text-emerald-600 font-medium">{formatINR(d.profit_share)}</td>
                       <td className="px-4 py-3 text-right font-bold">{formatINR(d.total_entitlement)}</td>
                       <td className="px-4 py-3 text-right">{formatINR(d.amount_paid)}</td>
-                      <td className="px-4 py-3"><Badge color={d.status === "Paid" ? "emerald" : d.status === "Calculated" ? "amber" : "slate"}>{d.status}</Badge></td>
+                      <td className="px-4 py-3"><Badge color={d.status === "Paid" ? "emerald" : d.status === "Calculated" ? "amber" : "slate"}>{trStatus(d.status)}</Badge></td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(d.created_at, { withTime: true })}</td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => setSettlingDistribution(d)} className="text-brand-600 hover:text-brand-700 text-xs font-medium">
-                          {d.status === "Paid" ? "View" : "Settle"}
+                          {d.status === "Paid" ? t("financePage.view") : t("financePage.settle")}
                         </button>
                       </td>
                     </tr>
@@ -595,7 +602,7 @@ export function Finance({ onNavigate }: FinanceProps) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
-                    <td className="px-4 py-3" colSpan={2}>Total</td>
+                    <td className="px-4 py-3" colSpan={2}> {t("financePage.columns.total")}</td>
                     <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.principal_return, 0))}</td>
                     <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.profit_share, 0))}</td>
                     <td className="px-4 py-3 text-right">{formatINR(settlementRows.reduce((s, d) => s + d.total_entitlement, 0))}</td>
@@ -653,3 +660,4 @@ function SortableTh({ children, sortKey, sort, onSort, className = "" }: {
     </th>
   );
 }
+

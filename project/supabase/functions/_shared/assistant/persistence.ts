@@ -1,0 +1,591 @@
+import { sha256Hex } from "./action-token.ts";
+import { AssistantHttpError } from "./http.ts";
+import type {
+  AssistantPrincipal,
+  AssistantRisk,
+  AssistantTurn,
+  ConversationHistoryItem,
+  StoredActionProposal,
+  SupabaseClientLike,
+  SupabaseErrorLike,
+  ToolResult,
+} from "./types.ts";
+import type { AssistantWorkflowStep } from "./workflow.ts";
+
+function isOptionalSchemaError(error: SupabaseErrorLike | null): boolean {
+  const code = error?.code ?? "";
+  const message = error?.message ?? "";
+  return ["PGRST204", "PGRST205", "42P01", "42703"].includes(code) ||
+    /does not exist|schema cache|could not find/i.test(message);
+}
+
+/*
+Keys whose values never reach the trace. Credentials and action tokens are absolute:
+possessing one is enough to replay a confirmed write. Hidden reasoning stays out because
+`reasoning.encrypted_content` is opaque to us anyway and storing it would only be storing
+noise we cannot read.
+
+Prompt and response *content* is no longer blocked. It used to be — `raw_prompt`,
+`raw_response` and `system_prompt` were on this list — which is why step 3 of the Audit
+page could show that a tool batch was planned but never what was asked or what came back.
+`assistant_trace_events` is gated to owner/manager by RLS, and that gate is what protects
+this content now.
+*/
+const TRACE_BLOCKED_KEY =
+  /(api[_-]?key|secret|password|authorization|bearer|confirmation[_-]?token|action[_-]?token|access[_-]?token|refresh[_-]?token|hidden[_-]?reasoning|chain[_-]?of[_-]?thought)/i;
+
+/**
+ * Room for a full system prompt (~4KB) and a full model answer, while still bounding what
+ * one runaway string can do to the row. Truncation is marked rather than silent: a prompt
+ * that was cut looks different from a prompt that ended.
+ */
+const TRACE_MAX_STRING = 20_000;
+
+export function sanitizeTraceDetails(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitize = (input: unknown, depth: number): unknown => {
+    // Tool argument values sit at depth 5 (request → input_items → item → arguments →
+    // value), so the old limit of 4 stubbed out exactly the thing the trace exists to show.
+    if (depth > 8) return "[depth-limited]";
+    if (
+      input === null || typeof input === "boolean" || typeof input === "number"
+    ) return input;
+    if (typeof input === "string") {
+      return input.length > TRACE_MAX_STRING
+        ? `${input.slice(0, TRACE_MAX_STRING)}…[truncated]`
+        : input;
+    }
+    if (Array.isArray(input)) {
+      return input.slice(0, 40).map((item) => sanitize(item, depth + 1));
+    }
+    if (typeof input !== "object") return String(input).slice(0, 500);
+    const output: Record<string, unknown> = {};
+    for (
+      const [key, item] of Object.entries(input as Record<string, unknown>)
+        .slice(0, 80)
+    ) {
+      output[key] = TRACE_BLOCKED_KEY.test(key)
+        ? "[redacted]"
+        : sanitize(item, depth + 1);
+    }
+    return output;
+  };
+  return sanitize(value, 0) as Record<string, unknown>;
+}
+
+function messageText(content: unknown): string | null {
+  if (typeof content === "string") return content;
+  if (
+    typeof content === "object" && content !== null &&
+    typeof (content as { text?: unknown }).text === "string"
+  ) {
+    return (content as { text: string }).text;
+  }
+  return null;
+}
+
+/*
+Per-tool allow-list of raw argument fields that are safe to keep in
+`assistant_tool_calls.arguments_redacted` in the clear (alongside the
+existing argument_hash). These are all filter/id/flag values, never free
+text a user typed (search query text, notes, addresses, etc.) - so this
+list intentionally excludes fields like `search_inventory.query` or the
+free-text fields inside the two proposal tools' vehicle/purchase/sale
+objects.
+*/
+const ARGUMENT_ALLOW_LIST: Readonly<Record<string, readonly string[]>> = {
+  search_inventory: [
+    "status",
+    "category",
+    "min_price",
+    "max_price",
+    "include_sold",
+  ],
+  get_vehicle_360: ["vehicle_id"],
+  get_dashboard_ageing: ["include_sold", "ageing_threshold_days"],
+  get_alerts_compliance: ["vehicle_id", "status", "severity", "alert_type"],
+  get_partner_portfolio: ["partner_id", "include_settled"],
+  acknowledge_alert: ["alert_id"],
+  propose_complete_vehicle_sale: ["vehicle_id"],
+};
+
+function redactedArguments(
+  toolName: string,
+  argumentsValue: Record<string, unknown>,
+): Record<string, unknown> {
+  const allowed = ARGUMENT_ALLOW_LIST[toolName] ?? [];
+  const safeFields: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(argumentsValue, key)) {
+      safeFields[key] = argumentsValue[key];
+    }
+  }
+  return safeFields;
+}
+
+export class AssistantPersistence {
+  readonly callerClient: SupabaseClientLike;
+  readonly serverClient: SupabaseClientLike | null;
+  readonly principal: AssistantPrincipal;
+  #conversationAvailable: boolean | undefined;
+
+  constructor(
+    callerClient: SupabaseClientLike,
+    serverClient: SupabaseClientLike | null,
+    principal: AssistantPrincipal,
+  ) {
+    this.callerClient = callerClient;
+    this.serverClient = serverClient;
+    this.principal = principal;
+  }
+
+  get persisted(): boolean {
+    return this.#conversationAvailable === true &&
+      this.serverClient !== null;
+  }
+
+  async ensureConversation(
+    requestedId: string | undefined,
+    locale: string,
+    titleSeed: string,
+  ): Promise<string> {
+    if (requestedId) {
+      const { data, error } = await this.callerClient
+        .from("assistant_conversations")
+        .select("id")
+        .eq("id", requestedId)
+        .eq("org_id", this.principal.orgId)
+        .eq("created_by_user_id", this.principal.userId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (error && isOptionalSchemaError(error)) {
+        this.#conversationAvailable = false;
+        return requestedId;
+      }
+      if (error || !data?.id) {
+        throw new AssistantHttpError(
+          404,
+          "CONVERSATION_NOT_FOUND",
+          "That assistant conversation is not available.",
+        );
+      }
+      this.#conversationAvailable = true;
+      return data.id as string;
+    }
+
+    const id = crypto.randomUUID();
+    const { error } = await this.callerClient
+      .from("assistant_conversations")
+      .insert({
+        id,
+        org_id: this.principal.orgId,
+        created_by_user_id: this.principal.userId,
+        partner_id: this.principal.partnerId,
+        title: titleSeed.trim().slice(0, 120) || "New conversation",
+        locale,
+        status: "active",
+        metadata: {},
+        last_message_at: new Date().toISOString(),
+      });
+    if (error && isOptionalSchemaError(error)) {
+      this.#conversationAvailable = false;
+      return id;
+    }
+    if (error) {
+      throw new AssistantHttpError(
+        500,
+        "CONVERSATION_CREATE_FAILED",
+        "The assistant conversation could not be created.",
+        true,
+      );
+    }
+    this.#conversationAvailable = true;
+    return id;
+  }
+
+  async loadHistory(
+    conversationId: string,
+    limit = 12,
+  ): Promise<ConversationHistoryItem[]> {
+    if (this.#conversationAvailable !== true) return [];
+    const { data, error } = await this.callerClient
+      .from("assistant_messages")
+      .select("role, content, created_at")
+      .eq("conversation_id", conversationId)
+      .eq("org_id", this.principal.orgId)
+      .in("role", ["user", "assistant"])
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return [];
+    return (Array.isArray(data) ? data : []).reverse().flatMap(
+      (row: { role?: unknown; content?: unknown }) => {
+        const text = messageText(row.content);
+        return text && (row.role === "user" || row.role === "assistant")
+          ? [{ role: row.role, content: text.slice(0, 4_000) }]
+          : [];
+      },
+    );
+  }
+
+  async saveUserMessage(
+    conversationId: string,
+    text: string,
+    locale: string,
+    metadata: Record<string, unknown>,
+  ): Promise<string | null> {
+    if (this.#conversationAvailable !== true) return null;
+    const id = crypto.randomUUID();
+    const { error } = await this.callerClient
+      .from("assistant_messages")
+      .insert({
+        id,
+        org_id: this.principal.orgId,
+        conversation_id: conversationId,
+        role: "user",
+        content: { text, ...metadata },
+        language: locale,
+        created_by_user_id: this.principal.userId,
+        safety_labels: {},
+      });
+    if (error) return null;
+    await this.touchConversation(conversationId);
+    return id;
+  }
+
+  async saveAssistantMessage(
+    conversationId: string,
+    turn: AssistantTurn,
+    model: string,
+  ): Promise<string | null> {
+    if (this.#conversationAvailable !== true || !this.serverClient) return null;
+    const id = crypto.randomUUID();
+    const { error } = await this.serverClient
+      .from("assistant_messages")
+      .insert({
+        id,
+        org_id: this.principal.orgId,
+        conversation_id: conversationId,
+        role: "assistant",
+        // Do not persist confirmation tokens or raw dynamic blocks.
+        content: {
+          text: turn.answer.text,
+          tone: turn.answer.tone ?? "neutral",
+          schema_version: turn.schemaVersion,
+          block_types: turn.blocks.map((block) => block.type),
+          source_count: turn.provenance.sources.length,
+        },
+        language: turn.locale,
+        created_by_user_id: this.principal.userId,
+        model,
+        safety_labels: {},
+      });
+    if (error) return null;
+    await this.touchConversation(conversationId);
+    return id;
+  }
+
+  async startRun(
+    conversationId: string,
+    model: string,
+    inputMessageId: string | null,
+    metadata: Record<string, unknown>,
+  ): Promise<string | null> {
+    if (this.#conversationAvailable !== true || !this.serverClient) return null;
+    const id = crypto.randomUUID();
+    const { error } = await this.serverClient.from("assistant_runs").insert({
+      id,
+      org_id: this.principal.orgId,
+      conversation_id: conversationId,
+      requested_by_user_id: this.principal.userId,
+      input_message_id: inputMessageId,
+      output_message_id: null,
+      status: "running",
+      model,
+      trace_id: crypto.randomUUID(),
+      idempotency_key: null,
+      started_at: new Date().toISOString(),
+      error_code: null,
+      error_message: null,
+      usage: {},
+      metadata,
+    });
+    return error ? null : id;
+  }
+
+  async finishRun(
+    runId: string | null,
+    input: {
+      status: "completed" | "failed";
+      inputTokens: number;
+      outputTokens: number;
+      latencyMs: number;
+      outputMessageId: string | null;
+      errorCode: string | null;
+      errorMessage: string | null;
+    },
+  ): Promise<void> {
+    if (!runId || !this.serverClient) return;
+    await this.serverClient
+      .from("assistant_runs")
+      .update({
+        status: input.status,
+        output_message_id: input.outputMessageId,
+        completed_at: new Date().toISOString(),
+        error_code: input.errorCode,
+        error_message: input.errorMessage?.slice(0, 500) ?? null,
+        usage: {
+          input_tokens: input.inputTokens,
+          output_tokens: input.outputTokens,
+          latency_ms: input.latencyMs,
+        },
+      })
+      .eq("id", runId)
+      .eq("org_id", this.principal.orgId)
+      .eq("requested_by_user_id", this.principal.userId);
+  }
+
+  /**
+   * The step of the most recent trace event, i.e. the step the run is currently in.
+   * Terminal failure events are raised from a catch block that has no idea where the
+   * failure came from, so they use this to attribute themselves to the step that was
+   * actually running rather than to whatever step the catch happens to sit in.
+   */
+  get currentWorkflowStep(): AssistantWorkflowStep | null {
+    return this.lastWorkflowStep;
+  }
+
+  private lastWorkflowStep: AssistantWorkflowStep | null = null;
+
+  async logTrace(
+    runId: string | null,
+    conversationId: string,
+    event: {
+      /**
+       * Which of the eight workflow steps this event belongs to. Required, so a
+       * new trace event cannot end up outside the timeline the Audit page draws.
+       */
+      workflowStep: AssistantWorkflowStep;
+      category:
+        | "request"
+        | "context"
+        | "model"
+        | "tool"
+        | "validation"
+        | "persistence"
+        | "response"
+        | "error";
+      eventKey: string;
+      status:
+        | "started"
+        | "completed"
+        | "failed"
+        | "skipped"
+        | "info"
+        | "flagged";
+      summary: string;
+      details?: Record<string, unknown>;
+      durationMs?: number;
+    },
+  ): Promise<void> {
+    // Tracked even when there is nothing to write to, so a failure attributes itself to
+    // the right step regardless of whether persistence is available.
+    this.lastWorkflowStep = event.workflowStep;
+    if (!runId || !this.serverClient) return;
+    const { error } = await this.serverClient
+      .from("assistant_trace_events")
+      .insert({
+        org_id: this.principal.orgId,
+        conversation_id: conversationId,
+        run_id: runId,
+        actor_user_id: this.principal.userId,
+        workflow_step: event.workflowStep,
+        category: event.category,
+        event_key: event.eventKey,
+        status: event.status,
+        summary: event.summary.slice(0, 300),
+        details_redacted: sanitizeTraceDetails(event.details ?? {}),
+        duration_ms: event.durationMs === undefined
+          ? null
+          : Math.max(0, Math.round(event.durationMs)),
+      });
+    if (error && !isOptionalSchemaError(error)) {
+      console.warn("assistant trace persistence failed", error.code);
+    }
+  }
+
+  async logToolCall(
+    runId: string | null,
+    conversationId: string,
+    toolName: string,
+    argumentsValue: Record<string, unknown>,
+    result: ToolResult,
+    latencyMs: number,
+    riskLevel: AssistantRisk = "low",
+  ): Promise<void> {
+    if (!runId || !this.serverClient) return;
+    const argumentHash = await sha256Hex(argumentsValue);
+    const id = crypto.randomUUID();
+    // Entities are already redaction-safe: each is a {type, id, label}
+    // triple built server-side from authorized rows (see tools.ts), never
+    // raw tool arguments or full record payloads.
+    const entities = (result.entities ?? []).slice(0, 100);
+    const { error } = await this.serverClient
+      .from("assistant_tool_calls")
+      .insert({
+        id,
+        org_id: this.principal.orgId,
+        conversation_id: conversationId,
+        run_id: runId,
+        requested_by_user_id: this.principal.userId,
+        tool_name: toolName,
+        status: result.ok ? "completed" : "failed",
+        risk_level: riskLevel,
+        arguments_redacted: {
+          argument_hash: argumentHash,
+          safe_fields: redactedArguments(toolName, argumentsValue),
+        },
+        result_redacted: {
+          ok: result.ok,
+          error_code: result.error?.code ?? null,
+          entity_count: entities.length,
+          truncated: result.truncated === true,
+          entities,
+        },
+        authorization_decision: {
+          allowed: true,
+          principal_kind: this.principal.kind,
+          role: this.principal.role,
+        },
+        idempotency_key: null,
+        started_at: new Date(Date.now() - latencyMs).toISOString(),
+        completed_at: new Date().toISOString(),
+        error_code: result.error?.code ?? null,
+        error_message: result.error?.message.slice(0, 300) ?? null,
+      });
+    if (error) {
+      console.warn("assistant tool-call persistence failed", error.code);
+    }
+
+    // Best-effort: a complete per-turn security record for every tool
+    // call (not just confirmed writes), independent of whether the
+    // assistant_tool_calls insert above succeeded.
+    const primaryEntity = entities[0];
+    const { error: auditError } = await this.serverClient.rpc(
+      "assistant_write_security_audit",
+      {
+        p_org_id: this.principal.orgId,
+        p_event_type: "tool_call",
+        p_action: toolName,
+        p_outcome: result.ok ? "completed" : "failed",
+        p_context: {
+          actor_user_id: this.principal.userId,
+          conversation_id: conversationId,
+          run_id: runId,
+          tool_call_id: id,
+          target_type: primaryEntity?.type ?? null,
+          target_id: primaryEntity?.id ?? null,
+          decision_reason: result.error?.code ?? null,
+          details_redacted: {
+            risk_level: riskLevel,
+            entity_count: entities.length,
+            latency_ms: latencyMs,
+          },
+        },
+      },
+    );
+    if (auditError) {
+      console.warn(
+        "assistant tool-call security audit failed",
+        auditError.code,
+      );
+    }
+  }
+
+  /**
+   * Best-effort observability signal for a final answer whose script does
+   * not conform to the requested locale. Log-only for now (see the
+   * language-support task decision): no corrective re-prompt round, just a
+   * flagged security-audit event plus the console.warn already emitted by
+   * the caller.
+   */
+  async logLanguageMismatch(
+    runId: string | null,
+    conversationId: string,
+    locale: string,
+    scriptMatchRatio: number,
+  ): Promise<void> {
+    if (!this.serverClient) return;
+    const { error } = await this.serverClient.rpc(
+      "assistant_write_security_audit",
+      {
+        p_org_id: this.principal.orgId,
+        p_event_type: "language_mismatch",
+        p_action: "final_answer_language_check",
+        p_outcome: "flagged",
+        p_context: {
+          actor_user_id: this.principal.userId,
+          conversation_id: conversationId,
+          run_id: runId,
+          decision_reason: "script_conformance_below_threshold",
+          details_redacted: {
+            locale,
+            script_match_ratio: Number(scriptMatchRatio.toFixed(3)),
+          },
+        },
+      },
+    );
+    if (error) {
+      console.warn("assistant language-mismatch audit failed", error.code);
+    }
+  }
+
+  async loadActionProposal(
+    proposalId: string,
+  ): Promise<StoredActionProposal> {
+    const { data, error } = await this.callerClient
+      .from("assistant_action_proposals")
+      .select(
+        "id, org_id, conversation_id, requested_by_user_id, action_type, target_type, target_id, arguments, argument_hash, idempotency_key, risk_level, status, expires_at, outcome",
+      )
+      .eq("id", proposalId)
+      .eq("org_id", this.principal.orgId)
+      .eq("requested_by_user_id", this.principal.userId)
+      .maybeSingle();
+    if (error || !data) {
+      throw new AssistantHttpError(
+        404,
+        "ACTION_NOT_FOUND",
+        "That proposed action is no longer available.",
+      );
+    }
+    return {
+      id: data.id,
+      orgId: data.org_id,
+      conversationId: data.conversation_id,
+      requestedByUserId: data.requested_by_user_id,
+      actionType: data.action_type,
+      targetType: data.target_type,
+      targetId: data.target_id,
+      arguments: data.arguments,
+      argumentHash: data.argument_hash,
+      idempotencyKey: data.idempotency_key,
+      riskLevel: data.risk_level,
+      status: data.status,
+      expiresAt: data.expires_at,
+      outcome: data.outcome,
+    } as StoredActionProposal;
+  }
+
+  private async touchConversation(conversationId: string): Promise<void> {
+    await this.callerClient
+      .from("assistant_conversations")
+      .update({
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId)
+      .eq("org_id", this.principal.orgId)
+      .eq("created_by_user_id", this.principal.userId);
+  }
+}

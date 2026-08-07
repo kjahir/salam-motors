@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ShieldCheck, Plus, Trash2, Pencil, AlertTriangle, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PageHeader, Field, Select, Spinner } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -8,6 +9,7 @@ import { useToast } from "@/components/ui/useToast";
 import { useAuth } from "@/lib/useAuth";
 import { fetchCompliancePolicies } from "@/lib/queries";
 import { syncAllVehiclesCompliance } from "@/lib/compliance";
+import { translateCompliancePolicyDescription, translateCompliancePolicyTitle } from "@/lib/i18nText";
 import { supabase } from "@/lib/supabase";
 import {
   DOCUMENT_TYPES,
@@ -75,22 +77,30 @@ export function Policies() {
   const [submitting, setSubmitting] = useState(false);
   const [loadingDefaults, setLoadingDefaults] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, orgName } = useAuth();
+  const { t } = useTranslation();
+  const pageTitle = orgName ? t("policiesPage.titleWithDealer", { dealer: orgName }) : t("policiesPage.title");
 
-  const reload = async () => {
+  const translateStatic = useCallback((value: string) => t("status." + value, { defaultValue: value }), [t]);
+  const translateCategory = useCallback((category: string) => t("status." + COMPLIANCE_CATEGORY_LABELS[category], { defaultValue: COMPLIANCE_CATEGORY_LABELS[category] }), [t]);
+  const translateRuleType = useCallback((ruleType: string) => t("status." + COMPLIANCE_RULE_TYPE_LABELS[ruleType], { defaultValue: COMPLIANCE_RULE_TYPE_LABELS[ruleType] }), [t]);
+  const translateEntity = useCallback((entity: string) => t("status." + COMPLIANCE_EVIDENCE_ENTITY_LABELS[entity], { defaultValue: COMPLIANCE_EVIDENCE_ENTITY_LABELS[entity] }), [t]);
+  const translateResolutionMode = useCallback((mode: string) => t("status." + COMPLIANCE_RESOLUTION_MODE_LABELS[mode], { defaultValue: COMPLIANCE_RESOLUTION_MODE_LABELS[mode] }), [t]);
+
+  const reload = useCallback(async () => {
     try {
       const p = await fetchCompliancePolicies();
       setPolicies(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load policies");
+      setError(e instanceof Error ? e.message : t("policiesPage.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
   const grouped = useMemo(() => {
     const byCategory = new Map<string, CompliancePolicy[]>();
@@ -128,7 +138,7 @@ export function Policies() {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      toast("Enter a policy name", "error");
+      toast(t("policiesPage.enterName"), "error");
       return;
     }
     setSubmitting(true);
@@ -146,23 +156,24 @@ export function Policies() {
       if (editingPolicy) {
         const { error } = await supabase.from("compliance_policies").update(payload).eq("id", editingPolicy.id);
         if (error) throw error;
-        toast("Policy updated", "success");
+        toast(t("policiesPage.policyUpdated"), "success");
       } else {
         const { error } = await supabase.from("compliance_policies").insert(payload);
         if (error) throw error;
-        toast("Policy added", "success");
+        toast(t("policiesPage.policyAdded"), "success");
       }
       resetForm();
       await afterMutation();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to save policy", "error");
+      toast(e instanceof Error ? e.message : t("policiesPage.saveFailed"), "error");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (p: CompliancePolicy) => {
-    if (!confirm(`Delete policy "${p.name}"? Any open alerts it created will be resolved.`)) return;
+    const policyName = translateCompliancePolicyTitle(t, p.name);
+    if (!confirm(t("policiesPage.deleteConfirm", { name: policyName }))) return;
     try {
       const { error } = await supabase
         .from("compliance_policies")
@@ -176,15 +187,15 @@ export function Policies() {
           entity_id: p.id,
           action: "deleted",
           performed_by: user?.email ?? "Unknown",
-          reason: `Deleted policy "${p.name}"`,
+          reason: t("policiesPage.deletedReason", { name: policyName }),
         })
         .then(({ error: auditErr }) => {
           if (auditErr) console.error("Failed to log policy deletion", auditErr);
         });
-      toast("Policy removed", "success");
+      toast(t("policiesPage.policyRemoved"), "success");
       await afterMutation();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to delete", "error");
+      toast(e instanceof Error ? e.message : t("policiesPage.deleteFailed"), "error");
     }
   };
 
@@ -194,7 +205,7 @@ export function Policies() {
       if (error) throw error;
       await afterMutation();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to update", "error");
+      toast(e instanceof Error ? e.message : t("policiesPage.updateFailed"), "error");
     }
   };
 
@@ -206,15 +217,15 @@ export function Policies() {
         (d) => !existingKeys.has(`${d.rule_type}:${JSON.stringify(d.params)}`),
       );
       if (toInsert.length === 0) {
-        toast("All recommended defaults are already present", "info");
+        toast(t("policiesPage.defaultsAlready"), "info");
         return;
       }
       const { error } = await supabase.from("compliance_policies").insert(toInsert);
       if (error) throw error;
-      toast(`${toInsert.length} default polic${toInsert.length === 1 ? "y" : "ies"} added`, "success");
+      toast(t("policiesPage.defaultsAdded", { count: toInsert.length }), "success");
       await afterMutation();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to load defaults", "error");
+      toast(e instanceof Error ? e.message : t("policiesPage.defaultsFailed"), "error");
     } finally {
       setLoadingDefaults(false);
     }
@@ -225,7 +236,7 @@ export function Policies() {
   if (loading) {
     return (
       <div className="p-6">
-        <PageHeader title="Compliance Policies" />
+        <PageHeader title={pageTitle} />
         <div className="flex items-center justify-center py-20"><Spinner size={32} /></div>
       </div>
     );
@@ -234,8 +245,8 @@ export function Policies() {
   if (error) {
     return (
       <div className="p-6">
-        <PageHeader title="Compliance Policies" />
-        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title="Failed to load" description={error} /></Card>
+        <PageHeader title={pageTitle} />
+        <Card className="p-6"><EmptyState icon={<AlertTriangle size={24} />} title={t("policiesPage.failedToLoadShort")} description={error} /></Card>
       </div>
     );
   }
@@ -243,15 +254,15 @@ export function Policies() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <PageHeader
-        title="Compliance Policies"
-        description="Document and financial-evidence rules enforced across every vehicle"
+        title={pageTitle}
+        description={t("policiesPage.description")}
         icon={<ShieldCheck size={20} />}
         actions={
           <>
             <button onClick={handleLoadDefaults} disabled={loadingDefaults} className="btn-secondary">
-              {loadingDefaults ? <Spinner size={14} /> : <Sparkles size={16} />} Load Recommended Defaults
+              {loadingDefaults ? <Spinner size={14} /> : <Sparkles size={16} />} {t("policiesPage.loadDefaults")}
             </button>
-            <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Policy</button>
+            <button onClick={openAdd} className="btn-primary"><Plus size={16} /> {t("policiesPage.addPolicy")}</button>
           </>
         }
       />
@@ -260,9 +271,9 @@ export function Policies() {
         <Card className="p-6">
           <EmptyState
             icon={<ShieldCheck size={24} />}
-            title="No policies yet"
-            description="Load the recommended defaults or add your own to start enforcing document and financial-evidence rules."
-            action={<button onClick={handleLoadDefaults} className="btn-primary"><Sparkles size={16} /> Load Recommended Defaults</button>}
+            title={t("policiesPage.noPolicies")}
+            description={t("policiesPage.emptyDescription")}
+            action={<button onClick={handleLoadDefaults} className="btn-primary"><Sparkles size={16} /> {t("policiesPage.loadDefaults")}</button>}
           />
         </Card>
       ) : (
@@ -272,22 +283,22 @@ export function Policies() {
             if (list.length === 0) return null;
             return (
               <Card key={cat} className="p-5">
-                <h3 className="font-semibold text-slate-900 mb-3">{COMPLIANCE_CATEGORY_LABELS[cat]}</h3>
+                <h3 className="font-semibold text-slate-900 mb-3">{translateCategory(cat)}</h3>
                 <div className="space-y-2">
                   {list.map((p) => (
                     <div key={p.id} className={`flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 ${p.is_active ? "" : "opacity-60"}`}>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-slate-900">{p.name}</span>
-                          <Badge color={severityColor(p.severity)}>{p.severity}</Badge>
-                          {p.resolution_mode === "auto_only" && <Badge color="purple">Requires action</Badge>}
-                          {!p.is_active && <Badge color="slate">Disabled</Badge>}
+                          <span className="text-sm font-medium text-slate-900">{translateCompliancePolicyTitle(t, p.name)}</span>
+                          <Badge color={severityColor(p.severity)}>{translateStatic(p.severity)}</Badge>
+                          {p.resolution_mode === "auto_only" && <Badge color="purple">{t("policiesPage.requiresAction")}</Badge>}
+                          {!p.is_active && <Badge color="slate">{t("policiesPage.disabled")}</Badge>}
                         </div>
-                        {p.description && <p className="text-xs text-slate-500 mt-0.5">{p.description}</p>}
+                        {p.description && <p className="text-xs text-slate-500 mt-0.5">{translateCompliancePolicyDescription(t, p.description, p.name)}</p>}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button onClick={() => handleToggleActive(p)} className="text-xs text-brand-600 hover:text-brand-700 font-medium px-2">
-                          {p.is_active ? "Disable" : "Enable"}
+                          {p.is_active ? t("policiesPage.disable") : t("policiesPage.enable")}
                         </button>
                         <button onClick={() => openEdit(p)} className="text-slate-400 hover:text-brand-600 p-1.5"><Pencil size={14} /></button>
                         <button onClick={() => handleDelete(p)} className="text-slate-400 hover:text-red-600 p-1.5"><Trash2 size={14} /></button>
@@ -304,43 +315,43 @@ export function Policies() {
       <Modal
         open={showAdd}
         onClose={resetForm}
-        title={editingPolicy ? "Edit Policy" : "Add Policy"}
+        title={editingPolicy ? t("policiesPage.editPolicy") : t("policiesPage.addTitle")}
         size="lg"
         footer={<>
-          <button onClick={resetForm} className="btn-secondary">Cancel</button>
-          <button onClick={handleSave} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} Save</button>
+          <button onClick={resetForm} className="btn-secondary">{t("policiesPage.cancel")}</button>
+          <button onClick={handleSave} disabled={submitting} className="btn-primary">{submitting ? <Spinner size={14} /> : null} {t("policiesPage.save")}</button>
         </>}
       >
         <div className="space-y-4">
-          <Field label="Name" required>
-            <input className="input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="RC book required" />
+          <Field label={t("policiesPage.name")} required>
+            <input className="input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder={t("policiesPage.namePlaceholder")} />
           </Field>
-          <Field label="Description">
-            <input className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Optional context for other staff" />
+          <Field label={t("policiesPage.descriptionLabel")}>
+            <input className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t("policiesPage.descriptionPlaceholder")} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Category" required>
+            <Field label={t("policiesPage.category")} required>
               <Select
                 value={form.category}
                 onChange={(v) => setForm((f) => ({ ...f, category: v as typeof f.category }))}
-                options={COMPLIANCE_CATEGORIES.map((c) => ({ value: c, label: COMPLIANCE_CATEGORY_LABELS[c] }))}
+                options={COMPLIANCE_CATEGORIES.map((c) => ({ value: c, label: translateCategory(c) }))}
               />
             </Field>
-            <Field label="Rule Type" required>
+            <Field label={t("policiesPage.ruleType")} required>
               <Select
                 value={form.rule_type}
                 onChange={(v) => setForm((f) => ({ ...f, rule_type: v as typeof f.rule_type }))}
-                options={COMPLIANCE_RULE_TYPES.map((r) => ({ value: r, label: COMPLIANCE_RULE_TYPE_LABELS[r] }))}
+                options={COMPLIANCE_RULE_TYPES.map((r) => ({ value: r, label: translateRuleType(r) }))}
               />
             </Field>
           </div>
 
           {form.rule_type === "document_required" && (
             <>
-              <Field label="Document Type" required>
-                <Select value={form.document_type} onChange={(v) => setForm((f) => ({ ...f, document_type: v }))} options={DOCUMENT_TYPES} />
+              <Field label={t("policiesPage.documentType")} required>
+                <Select value={form.document_type} onChange={(v) => setForm((f) => ({ ...f, document_type: v }))} options={DOCUMENT_TYPES.map((documentType) => ({ value: documentType, label: translateStatic(documentType) }))} />
               </Field>
-              <Field label="Accepted Statuses" hint="A document in one of these statuses satisfies the policy">
+              <Field label={t("policiesPage.acceptedStatuses")} hint={t("policiesPage.acceptedStatusesHint")}>
                 <div className="flex flex-wrap gap-2">
                   {DOCUMENT_VERIFICATION_STATUSES.map((s) => (
                     <label key={s} className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-slate-200 px-2.5 py-1.5">
@@ -355,7 +366,7 @@ export function Policies() {
                         }
                         className="rounded border-slate-300"
                       />
-                      {s}
+                      {translateStatic(s)}
                     </label>
                   ))}
                 </div>
@@ -364,38 +375,43 @@ export function Policies() {
           )}
 
           {form.rule_type === "evidence_required" && (
-            <Field label="Applies To" required>
+            <Field label={t("policiesPage.appliesTo")} required>
               <Select
                 value={form.entity}
                 onChange={(v) => setForm((f) => ({ ...f, entity: v }))}
-                options={COMPLIANCE_EVIDENCE_ENTITIES.map((e) => ({ value: e, label: COMPLIANCE_EVIDENCE_ENTITY_LABELS[e] }))}
+                options={COMPLIANCE_EVIDENCE_ENTITIES.map((e) => ({ value: e, label: translateEntity(e) }))}
               />
             </Field>
           )}
 
           {form.rule_type === "amount_reconciliation" && (
-            <Field label="Tolerance (₹)" hint="Purchase payments may differ from the agreed price by up to this much before it's flagged">
+            <Field label={t("policiesPage.tolerance")} hint={t("policiesPage.toleranceHint")}>
               <input className="input" type="number" step="0.01" value={form.tolerance} onChange={(e) => setForm((f) => ({ ...f, tolerance: e.target.value }))} />
             </Field>
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Severity">
-              <Select value={form.severity} onChange={(v) => setForm((f) => ({ ...f, severity: v }))} options={ALERT_SEVERITIES} />
+            <Field label={t("policiesPage.severity")}>
+              <Select value={form.severity} onChange={(v) => setForm((f) => ({ ...f, severity: v }))} options={ALERT_SEVERITIES.map((severity) => ({ value: severity, label: translateStatic(severity) }))} />
             </Field>
-            <Field label="Status">
+            <Field label={t("policiesPage.status")}>
               <label className="flex items-center gap-2 mt-2.5">
                 <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} className="rounded border-slate-300" />
-                <span className="text-sm">Active</span>
+                <span className="text-sm">{t("policiesPage.active")}</span>
               </label>
             </Field>
           </div>
-          <Field label="Resolution" hint="Controls whether staff can manually Acknowledge/Resolve its alerts, or must actually fix the issue">
+          <Field label={t("policiesPage.resolution")} hint={t("policiesPage.resolutionHint")}>
             <Select
               value={form.resolution_mode}
               onChange={(v) => setForm((f) => ({ ...f, resolution_mode: v as typeof f.resolution_mode }))}
-              options={COMPLIANCE_RESOLUTION_MODES.map((m) => ({ value: m, label: COMPLIANCE_RESOLUTION_MODE_LABELS[m] }))}
+              options={COMPLIANCE_RESOLUTION_MODES.map((m) => ({ value: m, label: translateResolutionMode(m) }))}
             />
+            {form.resolution_mode === "auto_only" && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-1.5 flex items-start gap-1.5">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {t("policiesPage.autoOnlyWarning")}
+              </p>
+            )}
           </Field>
         </div>
       </Modal>
