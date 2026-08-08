@@ -1122,8 +1122,7 @@
     "joinHint": "Expecting to join an existing dealership instead? Ask its Owner to send you an invite to <bold>{{email}}</bold>.",
     "signOut": "Sign Out",
     "preferredLanguage": "Preferred language",
-    "languageDefaultOption": "English (default)",
-    "languageHint": "English is used by default. Choose another language below if you'd prefer your dealership to start in a different one.",
+    "languageHint": "English is used by default. Choose another language below if you'd like your dealership to also work in that language, alongside English. You can change this anytime later from Team → Company.",
     "nameLength": "Dealership name must be between 2 and 120 characters"
   },
   "teamPage": {

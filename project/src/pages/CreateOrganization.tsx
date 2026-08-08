@@ -4,7 +4,6 @@ import { useTranslation, Trans } from "react-i18next";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/components/ui/useToast";
 import { supabase } from "@/lib/supabase";
-import { Select } from "@/components/ui/Primitives";
 import { getAppLanguage, languageOptions, type AppLanguage } from "@/i18n";
 
 type Step = "choice" | "join" | "create";
@@ -25,12 +24,17 @@ export function CreateOrganization() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const handleLanguageChange = (value: string) => {
-    const code = value as AppLanguage | "";
-    setPreferredLanguage(code);
+  // English is pinned on (see the checkbox render below); a dealer can add
+  // exactly one more, not a growing set - checking a second option here
+  // replaces whichever was checked before rather than adding to it. Adding
+  // more languages later is a Team > Company settings feature, not onboarding.
+  const handleLanguageToggle = (code: AppLanguage) => {
+    if (code === "en") return;
+    const next = preferredLanguage === code ? "" : code;
+    setPreferredLanguage(next);
     // Live preview: the whole screen (this one included) switches immediately,
     // since the person setting this up is also its first reader.
-    void i18n.changeLanguage(code || "en");
+    void i18n.changeLanguage(next || "en");
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -78,14 +82,29 @@ export function CreateOrganization() {
               English needs this before they can even understand the choice below. */}
           <div className="mb-6">
             <label className="block text-xs font-medium text-slate-600 mb-1.5"> {t("organizationPage.preferredLanguage")}</label>
-            <Select
-              value={preferredLanguage}
-              onChange={handleLanguageChange}
-              placeholder={t("organizationPage.languageDefaultOption")}
-              options={languageOptions
-                .filter((option) => option.code !== "en")
-                .map((option) => ({ value: option.code, label: option.nativeName }))}
-            />
+            <div className="flex flex-wrap gap-2">
+              {languageOptions.map((option) => {
+                const locked = option.code === "en";
+                const checked = locked || preferredLanguage === option.code;
+                return (
+                  <label
+                    key={option.code}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      checked ? "border-brand-300 bg-brand-50 text-brand-800" : "border-slate-200 text-slate-700"
+                    } ${locked ? "cursor-default opacity-70" : "cursor-pointer"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-600"
+                      checked={checked}
+                      disabled={locked}
+                      onChange={() => handleLanguageToggle(option.code)}
+                    />
+                    {option.nativeName}
+                  </label>
+                );
+              })}
+            </div>
             <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">{t("organizationPage.languageHint")}</p>
           </div>
 
