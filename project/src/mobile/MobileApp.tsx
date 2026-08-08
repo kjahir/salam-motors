@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutDashboard, Bike, FileBarChart, MoreHorizontal, X } from "lucide-react";
+import { LayoutDashboard, Bike, Sparkles, MoreHorizontal, X } from "lucide-react";
 import { MobileDashboard } from "./MobileDashboard";
 import { MobileInventory } from "./MobileInventory";
 import { MobileMore } from "./MobileMore";
@@ -26,6 +26,8 @@ import { MobileUpdateVehicle } from "./MobileUpdateVehicle";
 import { MobileViewVehicle } from "./MobileViewVehicle";
 import { usePermissions } from "@/lib/usePermissions";
 import { useAssistant } from "@/assistant/AssistantProvider";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { isFeatureAvailable } from "@/lib/entitlements";
 import { MobileBillingBanner } from "./MobileBillingBanner";
 
 export type MobileScreen =
@@ -104,8 +106,10 @@ function assistantScreen(page: string, hasVehicle: boolean): MobileScreen | null
 
 export function MobileApp() {
   const { t } = useTranslation();
-  const { registerNavigation, setAppContext } = useAssistant();
+  const { registerNavigation, setAppContext, toggle: toggleAssistant, isOpen: assistantOpen } = useAssistant();
   const { canAccessMobileTab } = usePermissions();
+  const { entitlements } = useEntitlements();
+  const showAssistantTab = isFeatureAvailable(entitlements, "ai_assistant");
   const [screen, setScreen] = useState<MobileScreen>("dashboard");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [vehicleTab, setVehicleTab] = useState<string | undefined>(undefined);
@@ -172,8 +176,9 @@ export function MobileApp() {
 
   // Inventory and the per-vehicle screens no longer sit under any tab (the vehicle list is
   // reached from Reports' Inventory tab and from a vehicle's own Back), so on those screens
-  // no tab lights up rather than one claiming them.
-  const isTabActive = (key: "dashboard" | "reports" | "more") => {
+  // no tab lights up rather than one claiming them. Reports moved into More once the AI
+  // assistant took its bottom-bar slot, so it no longer lights up a tab of its own either.
+  const isTabActive = (key: "dashboard" | "more") => {
     if (key === "more") return screen === "more" || MORE_SCREENS.includes(screen);
     return screen === key;
   };
@@ -371,13 +376,23 @@ export function MobileApp() {
                 </span>
                 <span className="text-[10px] font-medium leading-none text-mobile-primary">{t("nav.vehicle")}</span>
               </button>
-              {canAccessMobileTab("reports") && (
-                <NavButton
-                  active={isTabActive("reports")}
-                  icon={<FileBarChart size={20} />}
-                  label={t("nav.reports")}
-                  onClick={() => navigate("reports")}
-                />
+              {showAssistantTab && (
+                <button
+                  onClick={toggleAssistant}
+                  className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
+                  aria-label={t("assistant.launcher.label")}
+                >
+                  <span
+                    className={`ai-assistant-icon-shape flex h-[30px] w-[30px] items-center justify-center bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-mobile-sm ${
+                      assistantOpen ? "is-open" : ""
+                    }`}
+                  >
+                    <Sparkles size={16} />
+                  </span>
+                  <span className="text-[10px] font-medium leading-none text-mobile-primary">
+                    {t("assistant.launcher.label")}
+                  </span>
+                </button>
               )}
               <NavButton
                 active={isTabActive("more")}

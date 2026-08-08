@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Bell, History as HistoryIcon, ScrollText, ShieldCheck, UserCog, Users, Wallet } from "lucide-react";
+import { Bell, FileBarChart, History as HistoryIcon, ScrollText, ShieldCheck, UserCog, Users, Wallet } from "lucide-react";
 import { MoreButton } from "./ui/primitives";
 import { usePermissions } from "@/lib/usePermissions";
 import type { PageKey } from "@/components/Layout";
@@ -23,6 +23,8 @@ import type { MobileNavigate, MobileScreen } from "./MobileApp";
  * Dashboard's own More row.
  */
 const MORE_ITEMS: { screen: MobileScreen; page: PageKey; labelKey: string; icon: ReactNode; color: string; vehicleScoped?: false }[] = [
+  // Reports moved here once the AI assistant took its bottom-bar slot.
+  { screen: "reports", page: "finance", labelKey: "nav.reports", icon: <FileBarChart size={22} />, color: "text-mobile-primary" },
   { screen: "alerts", page: "alerts", labelKey: "nav.alerts", icon: <Bell size={22} />, color: "text-mobile-error" },
   { screen: "parties", page: "parties", labelKey: "nav.parties", icon: <Users size={22} />, color: "text-mobile-primary", vehicleScoped: false },
   { screen: "partners", page: "partners", labelKey: "nav.partners", icon: <Wallet size={22} />, color: "text-mobile-success", vehicleScoped: false },

@@ -66,25 +66,26 @@ describe("WIP feature gate (isFeatureAvailable)", () => {
   it("blocks WIP features in production (env flag absent)", () => {
     vi.stubEnv("VITE_ENABLE_WIP_FEATURES", "");
     const growth = entitlements({ limits: { ai_assistant: true, vehicle_passport: true, social_media_ads: true, esign_estamp: true } });
-    expect(isFeatureAvailable(growth, "ai_assistant")).toBe(false);
     expect(isFeatureAvailable(growth, "vehicle_passport")).toBe(false);
     expect(isFeatureAvailable(growth, "social_media_ads")).toBe(false);
     expect(isFeatureAvailable(growth, "esign_estamp")).toBe(false);
+    // ai_assistant shipped to production, so it is no longer WIP-gated.
+    expect(isFeatureAvailable(growth, "ai_assistant")).toBe(true);
     vi.unstubAllEnvs();
   });
 
   it("allows WIP features in staging when env flag is true and plan includes them", () => {
     vi.stubEnv("VITE_ENABLE_WIP_FEATURES", "true");
-    const growth = entitlements({ limits: { ai_assistant: true, vehicle_passport: true } });
-    expect(isFeatureAvailable(growth, "ai_assistant")).toBe(true);
+    const growth = entitlements({ limits: { billing: true, vehicle_passport: true } });
+    expect(isFeatureAvailable(growth, "billing")).toBe(true);
     expect(isFeatureAvailable(growth, "vehicle_passport")).toBe(true);
     vi.unstubAllEnvs();
   });
 
   it("still applies the plan gate even when the WIP flag is on", () => {
     vi.stubEnv("VITE_ENABLE_WIP_FEATURES", "true");
-    const starter = entitlements({ plan_code: "starter", limits: { ai_assistant: false } });
-    expect(isFeatureAvailable(starter, "ai_assistant")).toBe(false);
+    const starter = entitlements({ plan_code: "starter", limits: { vehicle_passport: false } });
+    expect(isFeatureAvailable(starter, "vehicle_passport")).toBe(false);
     vi.unstubAllEnvs();
   });
 
@@ -98,7 +99,7 @@ describe("WIP feature gate (isFeatureAvailable)", () => {
 
   it("fails open when entitlements are unavailable (WIP flag on)", () => {
     vi.stubEnv("VITE_ENABLE_WIP_FEATURES", "true");
-    expect(isFeatureAvailable(null, "ai_assistant")).toBe(true);
+    expect(isFeatureAvailable(null, "vehicle_passport")).toBe(true);
     vi.unstubAllEnvs();
   });
 });

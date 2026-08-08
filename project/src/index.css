@@ -68,6 +68,30 @@
   width: 114.2857%;
 }
 
+/*
+ * The Ask Salam badge shape: an organic "blob", deliberately neither the
+ * rounded-square nor the circle every other icon badge in the app uses, so
+ * the AI entry point reads as its own thing at a glance in both the mobile
+ * bottom bar and the desktop sidebar. The slight rotation is what keeps it
+ * reading as a blob rather than a circle at small (~30px) sizes; the icon
+ * inside counter-rotates via .ai-assistant-icon-shape > svg so it stays
+ * upright.
+ */
+.ai-assistant-icon-shape {
+  border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  transform: rotate(-8deg);
+  transition: transform 150ms ease;
+}
+.ai-assistant-icon-shape > svg {
+  transform: rotate(8deg);
+}
+/* Active/open state: composed here rather than via a Tailwind scale-* utility,
+   since a utility class setting `transform` would just lose the cascade to the
+   plain `transform` above instead of combining with it. */
+.ai-assistant-icon-shape.is-open {
+  transform: rotate(-8deg) scale(1.1);
+}
+
 @layer components {
   .card {
     @apply bg-white rounded-xl border border-slate-200 shadow-card;

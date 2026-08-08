@@ -116,7 +116,6 @@ export function hasFeature(
  * Remove a feature from this set once it ships to production.
  */
 const WIP_FEATURES: ReadonlySet<PlanFeature> = new Set([
-  "ai_assistant",
   "vehicle_passport",
   "social_media_ads",
   "esign_estamp",

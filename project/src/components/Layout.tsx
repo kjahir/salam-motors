@@ -21,11 +21,13 @@ import {
   FileText,
   ClipboardCheck,
   ShoppingCart,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { usePermissions } from "@/lib/usePermissions";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { isFeatureAvailable } from "@/lib/entitlements";
+import { useAssistant } from "@/assistant/AssistantProvider";
 import { ROLE_LABELS } from "@/lib/constants";
 
 export type PageKey =
@@ -116,6 +118,8 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
   const { canAccessPage } = usePermissions();
   const { orgName } = useAuth();
   const { entitlements } = useEntitlements();
+  const { toggle: toggleAssistant, isOpen: assistantOpen } = useAssistant();
+  const showAssistant = isFeatureAvailable(entitlements, "ai_assistant");
 
   const isActive = (key: PageKey) => {
     if (key === "inventory" && (current === "vehicle" || current === "parties")) return true;
@@ -261,6 +265,21 @@ export function Layout({ current, onNavigate, children, alertCount = 0 }: Layout
           aria-label="Close menu"
         >
           <X size={20} />
+        </button>
+      )}
+
+      {showAssistant && (
+        <button
+          onClick={toggleAssistant}
+          aria-label={t("assistant.launcher.label")}
+          className={`fixed bottom-6 right-6 z-30 flex items-center gap-3 rounded-2xl border bg-white py-3 pl-3 pr-4 shadow-card-hover transition-colors ${
+            assistantOpen ? "border-brand-400" : "border-slate-200 hover:border-brand-300"
+          }`}
+        >
+          <span className="ai-assistant-icon-shape flex h-11 w-11 shrink-0 items-center justify-center bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-card">
+            <Sparkles size={22} />
+          </span>
+          <span className="text-sm font-semibold text-slate-800">{t("assistant.launcher.label")}</span>
         </button>
       )}
     </div>
