@@ -3,14 +3,14 @@ import { useTranslation } from "react-i18next";
 import { Search, Bike, PlusCircle, AlertTriangle, Download, X, Pencil, Trash2, Bell, Share2 } from "lucide-react";
 import { PageHeader, Spinner, Select } from "@/components/ui/Primitives";
 import { Card, EmptyState } from "@/components/ui/Card";
-import { StatusBadge, AgeingBadge, ComplianceBadge } from "@/components/ui/Badge";
+import { AgeingBadge } from "@/components/ui/Badge";
 import { formatINR, formatINRRange, formatDate, daysSince } from "@/lib/format";
 import { downloadCSV, computeEstimatedProfitRange } from "@/lib/calc";
-import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts, fetchComplianceStatuses, fetchAppSettings } from "@/lib/queries";
-import { VEHICLE_STATUSES, VEHICLE_CATEGORIES } from "@/lib/constants";
+import { fetchVehicles, fetchFinancialSummaries, fetchPartners, fetchAlerts, fetchAppSettings } from "@/lib/queries";
+import { VEHICLE_CATEGORIES } from "@/lib/constants";
 import { EditVehicleModal } from "@/components/EditVehicleModal";
 import { DeleteVehicleModal } from "@/components/DeleteVehicleModal";
-import type { Vehicle, VehicleFinancialSummary, Partner, VehicleComplianceStatus, AppSettings } from "@/lib/types";
+import type { Vehicle, VehicleFinancialSummary, Partner, AppSettings } from "@/lib/types";
 import type { PageKey, NavigateParams } from "@/components/Layout";
 
 interface InventoryProps {
@@ -24,34 +24,30 @@ export function Inventory({ onNavigate }: InventoryProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [summaries, setSummaries] = useState<VehicleFinancialSummary[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [complianceStatuses, setComplianceStatuses] = useState<VehicleComplianceStatus[]>([]);
   const [openAlertCounts, setOpenAlertCounts] = useState<Map<string, number>>(new Map());
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [filter, setFilter] = useState<"in-stock" | "sold">("in-stock");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [ageingFilter, setAgeingFilter] = useState<AgeingFilter>("all");
-  const [showSold, setShowSold] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const [v, s, p, a, c, st] = await Promise.all([
+      const [v, s, p, a, st] = await Promise.all([
         fetchVehicles(),
         fetchFinancialSummaries(),
         fetchPartners(),
         fetchAlerts(),
-        fetchComplianceStatuses(),
         fetchAppSettings(),
       ]);
       setVehicles(v);
       setSummaries(s);
       setPartners(p);
-      setComplianceStatuses(c);
       setSettings(st);
       const counts = new Map<string, number>();
       for (const alert of a) {
@@ -70,22 +66,18 @@ export function Inventory({ onNavigate }: InventoryProps) {
   }, [reload]);
 
   const summaryMap = useMemo(() => new Map(summaries.map((s) => [s.vehicle_id, s])), [summaries]);
-  const complianceMap = useMemo(() => new Map(complianceStatuses.map((c) => [c.vehicle_id, c])), [complianceStatuses]);
   const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
   const marginHigh = settings?.estimated_profit_margin_high_pct ?? 50;
 
   const filtered = useMemo(() => {
     const soldStatuses = ["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"];
     return vehicles
+      .filter((v) => (filter === "sold" ? soldStatuses.includes(v.current_status) : !soldStatuses.includes(v.current_status)))
       .filter((v) => {
-        if (!showSold && soldStatuses.includes(v.current_status)) return false;
-        if (showSold && !soldStatuses.includes(v.current_status)) return false;
-
-        if (statusFilter !== "all" && v.current_status !== statusFilter) return false;
         if (categoryFilter !== "all" && v.category !== categoryFilter) return false;
 
         const days = daysSince(v.onboarded_at);
-        if (ageingFilter !== "all" && !soldStatuses.includes(v.current_status)) {
+        if (ageingFilter !== "all" && filter !== "sold") {
           if (ageingFilter === "normal" && days >= 30) return false;
           if (ageingFilter === "attention" && (days < 30 || days >= 45)) return false;
           if (ageingFilter === "high" && (days < 45 || days >= 60)) return false;
@@ -113,11 +105,18 @@ export function Inventory({ onNavigate }: InventoryProps) {
         return true;
       })
       .sort((a, b) => daysSince(b.onboarded_at) - daysSince(a.onboarded_at));
-  }, [vehicles, showSold, statusFilter, categoryFilter, ageingFilter, search]);
+  }, [vehicles, filter, categoryFilter, ageingFilter, search]);
 
-  const activeFilterCount = [statusFilter !== "all", categoryFilter !== "all", ageingFilter !== "all", showSold].filter(
-    Boolean,
-  ).length;
+  const activeFilterCount = [categoryFilter !== "all", ageingFilter !== "all"].filter(Boolean).length;
+
+  const totalWorth = useMemo(
+    () =>
+      filtered.reduce((sum, v) => {
+        const s = summaryMap.get(v.id);
+        return sum + (filter === "sold" ? (s?.sale_price ?? 0) : (s?.total_vehicle_cost ?? 0));
+      }, 0),
+    [filtered, summaryMap, filter],
+  );
 
   const handleExport = () => {
     const rows = filtered.map((v) => {
@@ -166,7 +165,11 @@ export function Inventory({ onNavigate }: InventoryProps) {
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
         title={t("inventory.title")}
-        description={t("inventory.vehicleCount", { count: filtered.length })}
+        description={`${t("inventory.vehicleCount", { count: filtered.length })} · ${
+          filter === "sold"
+            ? t("inventory.totalSold", { amount: formatINR(totalWorth) })
+            : t("inventory.stockWorth", { amount: formatINR(totalWorth) })
+        }`}
         actions={
           <>
             <button onClick={handleExport} className="btn-secondary">
@@ -178,6 +181,22 @@ export function Inventory({ onNavigate }: InventoryProps) {
           </>
         }
       />
+
+      {/* In Stock / Sold */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setFilter("in-stock")}
+          className={`btn ${filter === "in-stock" ? "bg-red-600 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
+        >
+          {t("inventory.inStock")}
+        </button>
+        <button
+          onClick={() => setFilter("sold")}
+          className={`btn ${filter === "sold" ? "bg-red-600 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
+        >
+          {t("inventory.sold")}
+        </button>
+      </div>
 
       {/* Filters */}
       <Card className="p-4 mb-5">
@@ -192,12 +211,6 @@ export function Inventory({ onNavigate }: InventoryProps) {
             />
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Select
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[{ value: "all", label: t("inventory.allStatuses") }, ...VEHICLE_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))]}
-              className="w-auto min-w-[140px]"
-            />
             <Select
               value={categoryFilter}
               onChange={setCategoryFilter}
@@ -216,19 +229,11 @@ export function Inventory({ onNavigate }: InventoryProps) {
               ]}
               className="w-auto min-w-[140px]"
             />
-            <button
-              onClick={() => setShowSold(!showSold)}
-              className={`btn ${showSold ? "bg-brand-600 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
-            >
-              {showSold ? t("inventory.showingSold") : t("inventory.inStockOnly")}
-            </button>
             {activeFilterCount > 0 && (
               <button
                 onClick={() => {
-                  setStatusFilter("all");
                   setCategoryFilter("all");
                   setAgeingFilter("all");
-                  setShowSold(false);
                   setSearch("");
                 }}
                 className="btn-ghost btn-sm"
@@ -257,13 +262,9 @@ export function Inventory({ onNavigate }: InventoryProps) {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr className="text-left text-xs text-slate-600">
                   <th className="px-4 py-3 font-medium">{t("inventory.vehicle")}</th>
-                  <th className="px-4 py-3 font-medium">{t("inventory.status")}</th>
                   <th className="px-4 py-3 font-medium">{t("inventory.ageing")}</th>
-                  <th className="px-4 py-3 font-medium">{t("inventory.compliance")}</th>
                   <th className="px-4 py-3 font-medium text-right">{t("inventory.totalCost")}</th>
-                  <th className="px-4 py-3 font-medium text-right">{t("inventory.asking")}</th>
                   <th className="px-4 py-3 font-medium text-right">{t("inventory.estimatedProfit")}</th>
-                  <th className="px-4 py-3 font-medium text-right">{t("inventory.invested")}</th>
                   <th className="px-4 py-3 font-medium">{t("inventory.onboarded")}</th>
                   <th className="px-4 py-3 font-medium text-right">{t("inventory.view")}</th>
                   <th className="px-4 py-3 font-medium text-right">{t("inventory.actions")}</th>
@@ -284,7 +285,6 @@ export function Inventory({ onNavigate }: InventoryProps) {
                         <div className="font-medium text-slate-900">{v.manufacturer} {v.model}</div>
                         <div className="text-xs text-slate-500 font-mono">{v.stock_number} · {v.registration_number ?? t("inventory.noRegistration")}</div>
                       </td>
-                      <td className="px-4 py-3"><StatusBadge status={v.current_status} /></td>
                       <td className="px-4 py-3">
                         {["SOLD", "DELIVERED", "CANCELLED", "WRITTEN_OFF"].includes(v.current_status) ? (
                           <span className="text-xs text-slate-400">—</span>
@@ -292,16 +292,8 @@ export function Inventory({ onNavigate }: InventoryProps) {
                           <AgeingBadge days={days} />
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <ComplianceBadge
-                          violationCount={complianceMap.get(v.id)?.violation_count ?? 0}
-                          maxSeverityRank={complianceMap.get(v.id)?.max_severity_rank ?? 0}
-                        />
-                      </td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(s?.total_vehicle_cost ?? 0)}</td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-700">{formatINR(v.asking_price)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-600 whitespace-nowrap">{formatINRRange(estRange.low, estRange.high, { compact: false })}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{formatINR(s?.total_invested ?? 0)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(v.onboarded_at)}</td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">

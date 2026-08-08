@@ -60,9 +60,10 @@ export function MobileInventory({ onNavigate, manageMode, onBack, vehicleFilter 
   const marginLow = settings?.estimated_profit_margin_low_pct ?? 10;
   const marginHigh = settings?.estimated_profit_margin_high_pct ?? 30;
 
+  const activeFilter = manageMode ? "in-stock" : filter;
+
   const filtered = useMemo(() => {
     if (vehicleFilter) return vehicles.filter((v) => v.id === vehicleFilter);
-    const activeFilter = manageMode ? "in-stock" : filter;
     return vehicles
       .filter((v) => (activeFilter === "sold" ? SOLD_STATUSES.includes(v.current_status) : !SOLD_STATUSES.includes(v.current_status)))
       .filter((v) => {
@@ -75,13 +76,30 @@ export function MobileInventory({ onNavigate, manageMode, onBack, vehicleFilter 
           .includes(q);
       })
       .sort((a, b) => daysSince(b.onboarded_at) - daysSince(a.onboarded_at));
-  }, [vehicles, filter, manageMode, search, vehicleFilter]);
+  }, [vehicles, activeFilter, search, vehicleFilter]);
+
+  const totalWorth = useMemo(
+    () =>
+      filtered.reduce((sum, v) => {
+        const s = summaryMap.get(v.id);
+        return sum + (activeFilter === "sold" ? (s?.sale_price ?? 0) : (s?.total_vehicle_cost ?? 0));
+      }, 0),
+    [filtered, summaryMap, activeFilter],
+  );
 
   return (
     <div>
       <TopBar title={manageMode ? t("mobileDashboard.manageVehicle") : t("mobileInventory.title")} onBack={onBack} />
       {!vehicleFilter && (
         <div className="p-4 space-y-3">
+          {!loading && (
+            <p className="text-xs text-mobile-text-muted">
+              {t("mobileInventory.vehicleCount", { count: filtered.length })} ·{" "}
+              {activeFilter === "sold"
+                ? t("mobileInventory.totalSold", { amount: formatINR(totalWorth) })
+                : t("mobileInventory.stockWorth", { amount: formatINR(totalWorth) })}
+            </p>
+          )}
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("mobileInventory.searchPlaceholder")} className="pl-10" />

@@ -8,9 +8,8 @@ import { SettlementModal } from "@/components/SettlementModal";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { useProofLightbox } from "@/hooks/useProofLightbox";
 import { formatINR, formatDate, formatPercent } from "@/lib/format";
-import { downloadCSV, isApproved } from "@/lib/calc";
+import { downloadCSV } from "@/lib/calc";
 import { DATE_RANGE_OPTIONS, isWithinDateRange, type DateRangeKey } from "@/lib/dateRange";
-import { INVESTMENT_TOTAL_STATUSES } from "@/lib/constants";
 import {
   fetchInvestments,
   fetchAllExpenses,
@@ -27,10 +26,6 @@ type SortDir = "asc" | "desc";
 interface SortState {
   key: string;
   dir: SortDir;
-}
-
-function isVehicleSold(vehicle: Vehicle | null | undefined): boolean {
-  return vehicle?.current_status === "SOLD" || vehicle?.current_status === "DELIVERED";
 }
 
 function compareValues(a: string | number, b: string | number): number {
@@ -120,24 +115,10 @@ export function Finance({ onNavigate }: FinanceProps) {
 
   const soldSales = useMemo(() => sales.filter((s) => s.status === "Completed"), [sales]);
 
-  const totals = useMemo(() => {
-    const totalInvested = investments
-      .filter((i) => INVESTMENT_TOTAL_STATUSES.includes(i.status))
-      .reduce((s, i) => s + i.amount, 0);
-    const pendingExpenses = expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft");
-    // Total Purchase and Expenses tile tracks money still tied up in current stock,
-    // so purchases/expenses for already-sold vehicles are excluded.
-    const unsoldExpenses = expenses.filter((e) => !isVehicleSold(e.vehicle));
-    const unsoldPurchases = purchases.filter((p) => !isVehicleSold(p.vehicle));
-    const totalExpenses = unsoldExpenses.filter(isApproved).reduce((s, e) => s + e.amount, 0);
-    const totalPurchases = unsoldPurchases.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
-    const totalPurchaseAndExpenses = totalPurchases + totalExpenses;
-    const totalSales = soldSales.reduce((s, sale) => s + sale.sale_price, 0);
-    const totalProfit = distributions.reduce((s, d) => s + d.profit_share, 0);
-    const totalSettled = distributions.reduce((s, d) => s + d.amount_paid, 0);
-    const totalPayable = distributions.reduce((s, d) => s + d.balance_payable, 0);
-    return { totalInvested, totalExpenses, pendingExpenses, totalPurchases, totalPurchaseAndExpenses, totalSales, totalProfit, totalSettled, totalPayable };
-  }, [investments, expenses, distributions, purchases, soldSales]);
+  const pendingExpenses = useMemo(
+    () => expenses.filter((e) => e.approval_status === "Submitted" || e.approval_status === "Draft"),
+    [expenses],
+  );
 
   const investmentRows = useMemo(() => {
     const filtered = investments.filter((i) => isWithinDateRange(i.investment_date, dateRange) && matches(i.vehicle));
@@ -211,6 +192,17 @@ export function Finance({ onNavigate }: FinanceProps) {
     });
   }, [distributions, dateRange, matches, sort]);
 
+  const tileTotals = useMemo(() => {
+    const totalInvestments = investmentRows.reduce((s, i) => s + i.amount, 0);
+    const totalPurchase = purchaseRows.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
+    const totalExpenses = expenseRows.reduce((s, e) => s + e.amount, 0);
+    const totalSales = saleRows.reduce((s, sale) => s + sale.sale_price, 0);
+    const totalProfit = saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0);
+    const totalPrincipalSettlement = settlementRows.reduce((s, d) => s + d.principal_return, 0);
+    const totalProfitSettlement = settlementRows.reduce((s, d) => s + d.profit_share, 0);
+    return { totalInvestments, totalPurchase, totalExpenses, totalSales, totalProfit, totalPrincipalSettlement, totalProfitSettlement };
+  }, [investmentRows, purchaseRows, expenseRows, saleRows, settlementRows, summaryMap]);
+
   if (loading) {
     return (
       <div className="p-6">
@@ -233,23 +225,44 @@ export function Finance({ onNavigate }: FinanceProps) {
     <div className="p-6 max-w-6xl mx-auto">
       <PageHeader title={t("financePage.financeTitle")} description={t("financePage.financeDescription")} icon={<Wallet size={20} />} />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label={t("financePage.totalInvested")} value={formatINR(totals.totalInvested, { compact: false })} icon={<IndianRupee size={18} />} color="brand" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard
-          label={t("financePage.totalPurchaseExpenses")}
-          value={formatINR(totals.totalPurchaseAndExpenses, { compact: false })}
-          hint={t("financePage.purchasesExpensesShort", { purchases: formatINR(totals.totalPurchases, { compact: false }), expenses: formatINR(totals.totalExpenses, { compact: false }) })}
-          icon={<Receipt size={18} />}
+          compact
+          label={t("financePage.totalInvestments")}
+          value={formatINR(tileTotals.totalInvestments, { compact: false })}
+          icon={<IndianRupee size={16} />}
+          color="brand"
+        />
+        <StatCard
+          compact
+          label={t("financePage.totalPurchase")}
+          value={formatINR(tileTotals.totalPurchase, { compact: false })}
+          icon={<ShoppingCart size={16} />}
           color="slate"
         />
         <StatCard
-          label={t("financePage.totalSalesProfit")}
-          value={formatINR(totals.totalSales, { compact: false })}
-          hint={t("financePage.profitHint", { profit: formatINR(totals.totalProfit, { compact: false }) })}
-          icon={<TrendingUp size={18} />}
+          compact
+          label={t("financePage.totalExpenses")}
+          value={formatINR(tileTotals.totalExpenses, { compact: false })}
+          icon={<Receipt size={16} />}
+          color="amber"
+        />
+        <StatCard
+          compact
+          label={t("financePage.totalSales")}
+          value={formatINR(tileTotals.totalSales, { compact: false })}
+          hint={t("financePage.totalProfitHint", { amount: formatINR(tileTotals.totalProfit, { compact: false }) })}
+          icon={<TrendingUp size={16} />}
           color="emerald"
         />
-        <StatCard label={t("financePage.payableToPartners")} value={formatINR(totals.totalPayable, { compact: false })} icon={<Wallet size={18} />} color="amber" />
+        <StatCard
+          compact
+          label={t("financePage.totalPrincipalSettlement")}
+          value={formatINR(tileTotals.totalPrincipalSettlement, { compact: false })}
+          hint={t("financePage.totalProfitSettlementHint", { amount: formatINR(tileTotals.totalProfitSettlement, { compact: false }) })}
+          icon={<Wallet size={16} />}
+          color="amber"
+        />
       </div>
 
       <Card className="p-4 mb-5">
@@ -420,7 +433,7 @@ export function Finance({ onNavigate }: FinanceProps) {
         {tab === "expenses" && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">{t("financePage.allExpenses")} {totals.pendingExpenses.length > 0 && <Badge color="amber" className="ml-2">{t("financePage.pending", { count: totals.pendingExpenses.length })}</Badge>}</h3>
+              <h3 className="font-semibold text-slate-900">{t("financePage.allExpenses")} {pendingExpenses.length > 0 && <Badge color="amber" className="ml-2">{t("financePage.pending", { count: pendingExpenses.length })}</Badge>}</h3>
               <button
                 onClick={() => downloadCSV("expenses.csv", expenseRows.map((e) => ({
                   Vehicle: e.vehicle ? `${e.vehicle.manufacturer} ${e.vehicle.model}` : "",

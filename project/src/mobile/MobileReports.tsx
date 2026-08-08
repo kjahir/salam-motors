@@ -116,6 +116,17 @@ export function MobileReports({ onNavigate, onBack, vehicleFilter }: {
     [distributions, matches],
   );
 
+  const tileTotals = useMemo(() => {
+    const totalInvestments = investmentRows.reduce((s, i) => s + i.amount, 0);
+    const totalPurchase = purchaseRows.reduce((s, p) => s + p.agreed_price + p.broker_commission + p.other_fee, 0);
+    const totalExpenses = expenseRows.reduce((s, e) => s + e.amount, 0);
+    const totalSales = saleRows.reduce((s, sale) => s + sale.sale_price, 0);
+    const totalProfit = saleRows.reduce((s, sale) => s + (summaryMap.get(sale.vehicle_id)?.gross_profit ?? 0), 0);
+    const totalPrincipalSettlement = settlementRows.reduce((s, d) => s + d.principal_return, 0);
+    const totalProfitSettlement = settlementRows.reduce((s, d) => s + d.profit_share, 0);
+    return { totalInvestments, totalPurchase, totalExpenses, totalSales, totalProfit, totalPrincipalSettlement, totalProfitSettlement };
+  }, [investmentRows, purchaseRows, expenseRows, saleRows, settlementRows, summaryMap]);
+
   if (loading) {
     return (
       <div>
@@ -127,6 +138,21 @@ export function MobileReports({ onNavigate, onBack, vehicleFilter }: {
   return (
     <div>
       <TopBar title={t("mobileReports.title")} onBack={onBack} />
+      <div className="flex gap-2 overflow-x-auto no-scrollbar px-4 pt-3">
+        <MiniStat label={t("financePage.totalInvestments")} value={formatINR(tileTotals.totalInvestments, { compact: true })} />
+        <MiniStat label={t("financePage.totalPurchase")} value={formatINR(tileTotals.totalPurchase, { compact: true })} />
+        <MiniStat label={t("financePage.totalExpenses")} value={formatINR(tileTotals.totalExpenses, { compact: true })} />
+        <MiniStat
+          label={t("financePage.totalSales")}
+          value={formatINR(tileTotals.totalSales, { compact: true })}
+          sub={t("financePage.totalProfitHint", { amount: formatINR(tileTotals.totalProfit, { compact: true }) })}
+        />
+        <MiniStat
+          label={t("financePage.totalPrincipalSettlement")}
+          value={formatINR(tileTotals.totalPrincipalSettlement, { compact: true })}
+          sub={t("financePage.totalProfitSettlementHint", { amount: formatINR(tileTotals.totalProfitSettlement, { compact: true }) })}
+        />
+      </div>
       <div className="p-4 space-y-3">
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mobile-text-muted" />
@@ -364,6 +390,16 @@ function ListSection<T>({ rows, total, limit, onLoadMore, render, empty }: {
         </Button>
       )}
     </>
+  );
+}
+
+function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="shrink-0 min-w-[104px] rounded-xl bg-mobile-card border border-mobile-border px-2.5 py-1.5">
+      <p className="text-[9px] font-medium text-mobile-text-muted uppercase tracking-wide truncate">{label}</p>
+      <p className="text-xs font-bold text-mobile-text truncate">{value}</p>
+      {sub && <p className="text-[9px] text-mobile-text-muted truncate">{sub}</p>}
+    </div>
   );
 }
 
