@@ -74,6 +74,21 @@ export function CreateOrganization() {
             </p>
           </div>
 
+          {/* Visible on every step, not just the create form: a dealer who doesn't read
+              English needs this before they can even understand the choice below. */}
+          <div className="mb-6">
+            <label className="block text-xs font-medium text-slate-600 mb-1.5"> {t("organizationPage.preferredLanguage")}</label>
+            <Select
+              value={preferredLanguage}
+              onChange={handleLanguageChange}
+              placeholder={t("organizationPage.languageDefaultOption")}
+              options={languageOptions
+                .filter((option) => option.code !== "en")
+                .map((option) => ({ value: option.code, label: option.nativeName }))}
+            />
+            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">{t("organizationPage.languageHint")}</p>
+          </div>
+
           {step === "choice" && (
             <div>
               <p className="text-sm text-slate-600 text-center mb-4">{t("organizationPage.choiceQuestion")}</p>
@@ -149,18 +164,6 @@ export function CreateOrganization() {
                     maxLength={120}
                     autoFocus
                   />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5"> {t("organizationPage.preferredLanguage")}</label>
-                  <Select
-                    value={preferredLanguage}
-                    onChange={handleLanguageChange}
-                    placeholder={t("organizationPage.languageDefaultOption")}
-                    options={languageOptions
-                      .filter((option) => option.code !== "en")
-                      .map((option) => ({ value: option.code, label: option.nativeName }))}
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">{t("organizationPage.languageHint")}</p>
                 </div>
                 <button
                   type="submit"
